@@ -87,6 +87,8 @@ async function copiarEndereco(t) {
   try { await navigator.clipboard.writeText(t); toast("Endereço copiado. Cole no app do Uber ou no mapa."); }
   catch (e) { prompt("Copie o endereço:", t); }
 }
+// trecho de deslocamento dentro do quadro (hospedagem ou local de prova), atualizado quando o mapa responde
+const slotDesl = (x, uid, id) => trechosDeslocamento(x, uid).some(t => t.id === id) ? `<div class="desl-it" id="desl-${esc(uid)}-${id}">${htmlDeslocamentos(x, uid, id)}</div>` : "";
 const linkMapa = (h, end) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([h.nome, end].filter(Boolean).join(", "))}`;
 const botaoCopiar = t => t ? `<button type="button" class="copy-end" data-copiar="${esc(t)}" title="Copiar endereço" aria-label="Copiar endereço">${SVG_COPIAR}<span>Copiar endereço</span></button>` : "";
 function resumoLocal(l) {
@@ -119,10 +121,9 @@ function htmlResumoViagem(x, uid) {
   const v = (x.viagens || {})[uid] || {};
   const t = resumoTransporte(v.transporte), h = resumoHospedagem(v.hospedagem), l = resumoLocal(v.local);
   const mapa = v.hospedagem && enderecoHosp(v.hospedagem), mapaL = v.local && enderecoHosp(v.local);
-  return (l ? `<div class="viagem-res"><span class="vr-ic">${SVG_LOCAL}</span><div><p class="pre"><b>Local de prova:</b> ${esc(l)}</p><div class="end-acoes">${botaoCopiar(enderecoParaCopiar(v.local))}${v.local.arquivo ? `<a data-arqlocal="${esc(uid)}" target="_blank" rel="noopener">${esc(v.local.arquivo.nome)}</a>` : ""}${mapaL ? `<a href="${linkMapa(v.local, mapaL)}" target="_blank" rel="noopener">Abrir no mapa</a>` : ""}</div></div></div>` : "") +
+  return (l ? `<div class="viagem-res"><span class="vr-ic">${SVG_LOCAL}</span><div><p class="pre"><b>Local de prova:</b> ${esc(l)}</p><div class="end-acoes">${botaoCopiar(enderecoParaCopiar(v.local))}${v.local.arquivo ? `<a data-arqlocal="${esc(uid)}" target="_blank" rel="noopener">${esc(v.local.arquivo.nome)}</a>` : ""}${mapaL ? `<a href="${linkMapa(v.local, mapaL)}" target="_blank" rel="noopener">Abrir no mapa</a>` : ""}</div>${slotDesl(x, uid, "hospLocal")}</div></div>` : "") +
     (t ? `<div class="viagem-res"><span class="vr-ic">${v.transporte.tipo === "carro" ? SVG_CARRO : SVG_AVIAO}</span><p class="pre">${esc(t)}</p></div>` : "") +
-    (h ? `<div class="viagem-res"><span class="vr-ic">${SVG_HOTEL}</span><div><p class="pre">${esc(h)}</p><div class="end-acoes">${mapa ? botaoCopiar(enderecoParaCopiar(v.hospedagem)) + `<a href="${linkMapa(v.hospedagem, mapa)}" target="_blank" rel="noopener">Abrir no mapa</a>` : ""}</div></div></div>` : "") +
-    (trechosDeslocamento(x, uid).length ? `<div class="desl" id="desl-${esc(uid)}">${htmlDeslocamentos(x, uid)}</div>` : "");
+    (h ? `<div class="viagem-res"><span class="vr-ic">${SVG_HOTEL}</span><div><p class="pre">${esc(h)}</p><div class="end-acoes">${mapa ? botaoCopiar(enderecoParaCopiar(v.hospedagem)) + `<a href="${linkMapa(v.hospedagem, mapa)}" target="_blank" rel="noopener">Abrir no mapa</a>` : ""}</div>${slotDesl(x, uid, "aeroHosp")}</div></div>` : "");
 }
 
 // ---------- Deslocamentos (aeroporto → hospedagem → local de prova) ----------
@@ -140,20 +141,39 @@ function nominatim(params) {
   filaGeo = p.catch(() => {});
   return p;
 }
-const chaveEnd = h => [h.logradouro, h.numero, h.bairro, h.cidade, h.uf, h.cep].map(s => (s || "").trim().toLowerCase()).join("|");
-async function geoEndereco(h) {
+const chaveEnd = h => [h.logradouro, h.numero, h.bairro, h.cidade, h.uf, h.cep, h.lat, h.lon].map(s => String(s || "").trim().toLowerCase()).join("|");
+async function geoEndereco(h0) {
+  if (h0 && h0.lat && h0.lon) return { lat: +h0.lat, lon: +h0.lon, aprox: false };
+  const h = limparEndereco({ ...h0 });
+  if (h.bairro) h.bairro = h.bairro.replace(/\s*\(.*?\)\s*/g, " ").trim();
   const cid = h.cidade || "", uf = h.uf || "";
+  // [consulta, é aproximada?] — do mais preciso ao mais genérico
   const tentativas = [
-    h.logradouro && { street: [h.numero, h.logradouro].filter(Boolean).join(" "), city: cid, state: uf, country: "Brasil" },
-    h.logradouro && { street: h.logradouro, city: cid, state: uf, country: "Brasil" },
-    h.cep && { postalcode: h.cep, country: "Brasil" },
-    h.nome && { q: [h.nome, cid, uf].filter(Boolean).join(", ") }
+    h.logradouro && h.numero && [{ street: `${h.numero} ${h.logradouro}`, city: cid, country: "Brasil" }, false],
+    h.logradouro && h.numero && [{ q: [`${h.logradouro}, ${h.numero}`, h.bairro, cid, uf, "Brasil"].filter(Boolean).join(", ") }, false],
+    h.logradouro && [{ street: h.logradouro, city: cid, country: "Brasil" }, true],
+    h.cep && [{ postalcode: h.cep, country: "Brasil" }, true],
+    h.nome && [{ q: [h.nome, cid, uf].filter(Boolean).join(", ") }, true],
+    h.bairro && cid && [{ q: [h.bairro, cid, uf, "Brasil"].filter(Boolean).join(", ") }, true]
   ].filter(Boolean);
-  for (const t of tentativas) {
+  for (const [t, aprox] of tentativas) {
     const r = await nominatim(t);
-    if (r[0]) return { lat: +r[0].lat, lon: +r[0].lon, aprox: !h.numero || !t.street || !t.street.startsWith(h.numero) };
+    if (r[0]) return { lat: +r[0].lat, lon: +r[0].lon, aprox: aprox || !h.numero };
   }
   return null;
+}
+// tira rótulos que vêm grudados de prints ("Rua X Número:") e faixas de numeração do ViaCEP ("até 539/540")
+function limparEndereco(h) {
+  if (!h) return h;
+  if (h.logradouro) {
+    const m = h.logradouro.match(/\s*[,–-]?\s*(?:n[uú]mero|n[º°o]\.?)\s*:?\s*(\d{1,6})?\s*$/i);
+    if (m) { if (m[1] && !h.numero) h.numero = m[1]; h.logradouro = h.logradouro.slice(0, m.index).trim(); }
+    h.logradouro = h.logradouro.replace(/\s*[:,–-]+\s*$/, "").trim();
+  }
+  if (h.numero) h.numero = String(h.numero).replace(/[^\dA-Za-z\/-]/g, "");
+  if (h.complemento && /^(at[ée]|de \d|lado (par|[ií]mpar)|\d+\/\d+$|s\/n)/i.test(h.complemento.trim())) h.complemento = "";
+  if (h.sala) h.sala = h.sala.split(/\s*,\s*/).filter(it => { const v = it.split(" ").slice(1).join(" "); return /\d/.test(v) || /^[A-Z]{1,2}$/i.test(v); }).join(", ");
+  return h;
 }
 async function geoAeroporto(sigla) {
   const a = AEROPORTOS.find(([s]) => s === (sigla || "").toUpperCase());
@@ -189,8 +209,8 @@ function trechosDeslocamento(x, uid) {
 const fmtKm = km => km < 10 ? km.toFixed(1).replace(".", ",") : String(Math.round(km));
 const fmtTempo = m => m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
 function hhmmMenos(hhmm, min) { const [h, m] = hhmm.split(":").map(Number); const t = h * 60 + m - min; return t > 0 ? `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}` : ""; }
-function htmlDeslocamentos(x, uid) {
-  const tr = trechosDeslocamento(x, uid); if (!tr.length) return "";
+function htmlDeslocamentos(x, uid, so) {
+  const tr = trechosDeslocamento(x, uid).filter(t => !so || t.id === so); if (!tr.length) return "";
   const v = x.viagens[uid], rotas = v.rotas || {};
   return tr.map(t => {
     const r = rotas[t.id] && rotas[t.id].chave === t.chave ? rotas[t.id] : null;
@@ -211,7 +231,7 @@ function htmlDeslocamentos(x, uid) {
         if (dica) dica = `<div class="note">${dica}</div>`;
       }
     }
-    return `<div class="desl-it"><div class="desl-tit">${esc(t.de)} → ${esc(t.para)}</div>${num}${dica}${links}</div>`;
+    return `<div class="desl-tit">${esc(t.de)} → ${esc(t.para)}</div>${num}${dica}${links}`;
   }).join("");
 }
 async function atualizarDeslocamentos(x) {
@@ -230,13 +250,18 @@ async function atualizarDeslocamentos(x) {
       else if (!bb) r = { erro: t.id === "aeroHosp" ? "a hospedagem" : "o local de prova" };
       else { const rc = await rotaCarro(a, bb); r = rc ? { ...rc, a: { lat: +a.lat.toFixed(6), lon: +a.lon.toFixed(6) }, b: { lat: +bb.lat.toFixed(6), lon: +bb.lon.toFixed(6) }, aprox: !!(a.aprox || bb.aprox) } : null; }
       if (!r) continue;   // sem internet: tenta de novo na próxima abertura
+      if (r.erro) {   // endereço não encontrado: mostra o aviso, mas tenta de novo na próxima abertura
+        v.rotas[t.id] = { ...r, chave: t.chave };
+        const el = document.getElementById(`desl-${uid}-${t.id}`); if (el) el.innerHTML = htmlDeslocamentos(x, uid, t.id);
+        delete v.rotas[t.id]; continue;
+      }
       v.rotas[t.id] = { ...r, chave: t.chave };
       // a sincronização pode ter trocado o objeto do concurso enquanto o mapa respondia: grava no atual
       const cur = itens.find(i => i.id === x.id), cv = cur && cur !== x && (cur.viagens || {})[uid];
       if (cv) { cv.rotas = cv.rotas || {}; cv.rotas[t.id] = v.rotas[t.id]; }
       salvar();   // guarda no aparelho para não recalcular
-      const el = document.getElementById("desl-" + uid);
-      if (el && $("verConteudo").dataset.id === x.id) el.innerHTML = htmlDeslocamentos(x, uid);
+      const el = document.getElementById(`desl-${uid}-${t.id}`);
+      if (el && $("verConteudo").dataset.id === x.id) el.innerHTML = htmlDeslocamentos(x, uid, t.id);
     }
   }
 }
@@ -372,7 +397,7 @@ function definirViagem(k, val) {
   const { qual, v } = viagemAtual;
   const alvo = v[qual];
   const p = k.split(".");
-  if (p.length === 1) alvo[p[0]] = val;
+  if (p.length === 1) { alvo[p[0]] = val; if (/^(logradouro|numero|bairro|cidade|uf|cep)$/.test(p[0])) { delete alvo.lat; delete alvo.lon; } }
   else if (p.length === 2) alvo[p[0]][p[1]] = val;
   else alvo[p[0]].trechos[+p[1]][p[2]] = val;
 }
@@ -400,7 +425,6 @@ async function buscarCep(cep) {
     if (r.bairro) h.bairro = r.bairro;
     if (r.localidade) h.cidade = r.localidade;
     if (r.uf) h.uf = r.uf;
-    if (r.complemento && !h.complemento) h.complemento = r.complemento;
     desenharViagem();
     const s2 = $("vgCep"); if (s2) s2.textContent = "Endereço preenchido pelo CEP. Confira e informe o número.";
     const num = document.querySelector('#viagemConteudo [data-k="numero"]'); if (num && !h.numero) num.focus();
@@ -439,11 +463,61 @@ function lerReservaTexto(txt, anoBase) {
   if (m) { r.logradouro = m[1].trim(); if (m[2]) r.numero = m[2]; }
   m = t.match(/(?:c[oó]digo|n[uú]mero|n[º°o])\s*(?:da|de)?\s*(?:reserva|confirma[cç][aã]o)\s*[:#]?\s*([A-Z0-9][A-Z0-9.\-]{4,}[A-Z0-9])/i) || t.match(/(?:reserva|confirma[cç][aã]o)\s*(?:n[º°o.]*|#)\s*([A-Z0-9][A-Z0-9-]{4,})/i);
   if (m) r.codigo = m[1];
+  // Booking: quadro "ENTRADA / SAÍDA" com dias e meses em colunas
+  const cab = t.match(/ENTRADA\s+SA[ÍI]DA[^\n]*\n([\s\S]{0,400})/);
+  if (cab) {
+    const dias = cab[1].match(/(?:^|\n)[^\n]*?\b(\d{1,2})\s+(\d{1,2})(?:\s+\d+\s*\/\s*\d+)?\s*(?:\n|$)/);
+    const meses = cab[1].match(/\b(JANEIRO|FEVEREIRO|MAR[ÇC]O|ABRIL|MAIO|JUNHO|JULHO|AGOSTO|SETEMBRO|OUTUBRO|NOVEMBRO|DEZEMBRO)\s+(JANEIRO|FEVEREIRO|MAR[ÇC]O|ABRIL|MAIO|JUNHO|JULHO|AGOSTO|SETEMBRO|OUTUBRO|NOVEMBRO|DEZEMBRO)\b/i);
+    if (dias && meses) {
+      const mn = n => MESES_R[n.toLowerCase().slice(0, 3).replace("ç", "c")];
+      const a1 = mn(meses[1]), a2 = mn(meses[2]);
+      r.checkin_data = `${anoBase}-${String(a1).padStart(2, "0")}-${String(dias[1]).padStart(2, "0")}`;
+      r.checkout_data = `${a2 < a1 ? +anoBase + 1 : anoBase}-${String(a2).padStart(2, "0")}-${String(dias[2]).padStart(2, "0")}`;
+    }
+    const ate = cab[1].match(/at[ée]\s+(?:as|às)\s+(\d{1,2}[:h]\d{2})/i);
+    if (ate) r.checkout_hora = horaNoTexto(ate[1]);
+    const desde = cab[1].replace(/at[ée]\s+(?:as|às)\s+\d{1,2}[:h]\d{2}/ig, "").match(/a partir d[ae]s?[\s\S]{0,120}?\b(\d{1,2}:\d{2})\b/i);
+    if (desde) r.checkin_hora = horaNoTexto(desde[1]);
+  }
+  // endereço em várias linhas, misturado com as colunas do quadro: junta até "Telefone"/"Coordenadas"
+  const bloco = t.match(/endere[cç]o\s*:\s*([\s\S]{5,300}?)(?:\n\s*(?:telefone|tel\.|coordenadas|e-?mail)|\n\s*\n)/i);
+  if (bloco) {
+    const ruido = /^(\d{1,2}(\s+\d{1,2})*(\s+\d+\s*\/\s*\d+)?|[A-ZÇÃÉ]{4,}(\s+[A-ZÇÃÉ]{4,})*|((segunda|ter[cç]a|quarta|quinta|sexta)(-feira)?|s[aá]bado|domingo)(\s+((segunda|ter[cç]a|quarta|quinta|sexta)(-feira)?|s[aá]bado|domingo))*|a partir.*|at[eé] as.*|\d{1,2}:\d{2})$/i;
+    const end = bloco[1].split("\n").map(l => l.trim()).filter(l => l && !ruido.test(l)).join(" ").replace(/\s+/g, " ");
+    const partes = end.split(/\s*,\s*/).filter(p => !/^bras[il]l?$/i.test(p));
+    if (partes.length >= 2 && /^(rua|r\.|avenida|av\.?|travessa|alameda|rodovia|estrada|pra[cç]a)/i.test(partes[0])) {
+      r.logradouro = partes[0].replace(/^Rua\.\s*/i, "Rua ").replace(/^R\.\s*/i, "Rua ").replace(/^Av\.?\s+/i, "Avenida ");
+      const resto = partes.slice(1);
+      if (/^(\d{1,6}|s\/n)$/i.test(resto[0] || "")) r.numero = resto.shift();
+      const semCep = resto.filter(p => !/CEP|\d{5}-?\d{3}/i.test(p));
+      if (semCep[0]) r.bairro = semCep[0];
+      if (semCep[1]) r.cidade = semCep[1].replace(/\s*[-\/]\s*[A-Z]{2}$/, "");
+    }
+  }
+  // coordenadas GPS (Booking): "S 019° 56.348, W 43° 55.860" — localização exata para calcular as distâncias
+  const gps = t.match(/([NS])\s*0*(\d{1,2})°\s*([\d.]+)'?\s*,?\s*([EWLO])\s*0*(\d{1,3})°\s*([\d.]+)/);
+  if (gps) {
+    const lat = (+gps[2] + +gps[3] / 60) * (gps[1] === "S" ? -1 : 1), lon = (+gps[5] + +gps[6] / 60) * (/[WO]/.test(gps[4]) ? -1 : 1);
+    if (Math.abs(lat) < 35 && Math.abs(lon) < 75) { r.lat = +lat.toFixed(6); r.lon = +lon.toFixed(6); }
+  }
+  // nome do hotel: linhas logo antes de "Endereço:" (sem os números do quadro ao lado)
+  if (bloco) {
+    const ls = t.slice(0, t.search(/endere[cç]o\s*:/i)).split("\n").map(l => l.trim().replace(/(\s+\d{1,2}){1,3}(\s+\d+\s*\/\s*\d+)?$/, "")).filter(Boolean);
+    const nomeL = []; for (let i = ls.length - 1; i >= 0 && nomeL.length < 3; i--) { if (/ENTRADA|SA[ÍI]DA|CONFIRMA|PIN|N[ÚU]MERO/i.test(ls[i]) || ls[i] === ls[i].toUpperCase()) break; nomeL.unshift(ls[i]); }
+    if (nomeL.length) r.nome = nomeL.join(" ");
+  }
   m = t.match(/(?:reservad[ao] por|nome do h[oó]spede|h[oó]spede principal|titular(?: da reserva)?|respons[aá]vel(?: pela reserva)?|h[oó]spede)\s*[:\-]?\s*([A-ZÀ-Ú][A-Za-zÀ-ú'´ ]{3,50}?)(?=\s*(?:\n|$|\d|,|\(|e-?mail|cpf|telefone))/i);
-  if (m) r.responsavel = m[1].trim();
+  if (m) {
+    let nome = m[1].trim();
+    // texto da coluna ao lado grudado no nome ("FILLIPE FIRMO cancelamento gratuitamente…")
+    const pal = nome.split(" "); const k = pal.findIndex((w, i) => i >= 1 && w !== w.toUpperCase() && pal.slice(0, i).every(z => z === z.toUpperCase()));
+    if (k > 0) nome = pal.slice(0, k).join(" ");
+    r.responsavel = maiusculasParaTitulo(nome);
+  }
   m = t.match(/(?:sua reserva (?:em|no|na)|reserva confirmada (?:em|no|na)|hospedagem (?:em|no|na)|estadia (?:em|no|na)|você vai ficar (?:em|no|na))\s+([^\n.!]{3,60})/i);
-  if (m) r.nome = m[1].replace(/\s+(?:est[aá]|foi|para|de \d)(?=\s|$).*$/i, "").trim();
-  if (!r.nome) { const l = t.split("\n").map(s => s.trim()).find(s => /\b(hotel|pousada|hostel|flat|resid[eê]ncia|apartamento|apto|su[ií]te|inn|resort)\b/i.test(s) && s.length < 70 && !/check|reserva|pol[ií]tica/i.test(s)); if (l) r.nome = l; }
+  if (m && !r.nome) r.nome = m[1].replace(/\s+(?:est[aá]|foi|para|de \d)(?=\s|$).*$/i, "").trim();
+  if (!r.nome && !bloco) { const l = t.split("\n").map(s => s.trim()).find(s => /\b(hotel|pousada|hostel|flat|resid[eê]ncia|apartamento|apto|su[ií]te|inn|resort)\b/i.test(s) && s.length < 70 && !/check|reserva|pol[ií]tica/i.test(s)); if (l) r.nome = l; }
+  if (r.nome && /^(brasil|brazil|[A-Za-zÀ-ú ]{2,25}\s*[-\/]\s*[A-Z]{2})$/i.test(r.nome.trim())) delete r.nome;
   for (const k in r) if (!r[k]) delete r[k];
   return r;
 }
@@ -455,7 +529,7 @@ function maiusculasParaTitulo(t) {
 // cartão de confirmação / edital de locais: "Local de prova: ESCOLA X", "Endereço: RUA Y, 123 - BAIRRO", "Sala: 05"
 function lerLocalTexto(txt) {
   const t = txt.replace(/\r/g, ""), r = {};
-  let m = t.match(/local\s*(?:de\s+(?:prova|realiza[cç][aã]o(?:\s+da\s+prova)?|aplica[cç][aã]o))?\s*[:\-–]\s*([^\n]{4,100})/i);
+  let m = t.match(/(?:^|\n|\s)(?:escola|unidade|institui[cç][aã]o|estabelecimento|local\s*(?:de\s+(?:prova|realiza[cç][aã]o(?:\s+da\s+prova)?|aplica[cç][aã]o))?)\s*[:;\-–]\s*([^\n]{4,100})/i);
   if (m && !/divulgad|ser[aá]|consult/i.test(m[1])) r.nome = maiusculasParaTitulo(m[1].replace(/\s+(endere[cç]o|sala|bloco)\b.*$/i, "").trim());
   m = t.match(/endere[cç]o\s*[:\-–]\s*([^\n]{5,140})/i);
   if (m) {
@@ -464,6 +538,9 @@ function lerLocalTexto(txt) {
     if (p) { r.logradouro = maiusculasParaTitulo(p[1].replace(/,\s*$/, "").trim()); r.numero = p[2]; const resto = p[3].split(/\s*[-–,]\s*/).filter(Boolean); if (resto[0] && !/\d{5}/.test(resto[0])) r.bairro = maiusculasParaTitulo(resto[0]); }
     else r.logradouro = maiusculasParaTitulo(e.split(/\s*[-–]\s*/)[0]);
   }
+  m = t.match(/\bn[uú]mero\s*[:\-–]\s*(\d{1,6})/i); if (m) r.numero = m[1];
+  m = t.match(/\bbairro\s*[:\-–]\s*([^\n,]{3,40})/i); if (m) r.bairro = maiusculasParaTitulo(m[1].replace(/\s+(cidade|cep|munic).*$/i, "").trim());
+  m = t.match(/\b(?:[Ee]stado|ESTADO|U[Ff]|uf)\s*[:\-–]\s*([A-Z]{2})\b/); if (m) r.uf = m[1];
   if (!r.logradouro) { const h = lerReservaTexto(t, ""); if (h.logradouro) { r.logradouro = maiusculasParaTitulo(h.logradouro); if (h.numero) r.numero = h.numero; } }
   m = t.match(/CEP[:\s]*(\d{5})[-.\s]?(\d{3})/i) || t.match(/\b(\d{5})-(\d{3})\b/);
   if (m) r.cep = `${m[1]}-${m[2]}`;
@@ -472,7 +549,11 @@ function lerLocalTexto(txt) {
   const salas = [];
   const reS = /\b(sala|bloco|pr[eé]dio|andar|pavimento|port[aã]o(?: de acesso)?)\s*(?:n[º°o.]*)?\s*[:\-–]?\s*([A-Z0-9][A-Za-z0-9-]{0,8})\b/gi;
   while ((m = reS.exec(t))) { if (/^(sala|bloco|pr[eé]dio|andar|pavimento|port[aã]o)$/i.test(m[2])) { reS.lastIndex = m.index + m[1].length; continue; } const it = `${m[1][0].toUpperCase()}${m[1].slice(1).toLowerCase()} ${m[2]}`; if (!salas.includes(it) && !/^(de|da|do)$/i.test(m[2])) salas.push(it); }
+  m = t.match(/(\d{1,2})\s*[º°ª]\s*andar/i) || t.match(/andar\s*[:;\-–]?\s*(\d{1,2})\s*[º°ª]?/i);
+  if (m && !salas.some(x => /^andar/i.test(x))) salas.splice(Math.min(1, salas.length), 0, `Andar ${+m[1]}`);
   if (salas.length) r.sala = salas.slice(0, 4).join(", ");
+  limparEndereco(r);
+  if (r.logradouro) r.logradouro = maiusculasParaTitulo(r.logradouro);
   for (const k in r) if (!r[k]) delete r[k];
   return r;
 }
@@ -503,8 +584,8 @@ async function lerPrintReserva(arquivo) {
     const ano = (viagemAtual.bloco.inicio || String(new Date().getFullYear())).slice(0, 4);
     const r = lerReservaTexto(txt, ano);
     const h = viagemAtual.v.hospedagem, achados = [];
-    const nomes = { nome: "hotel", cep: "CEP", logradouro: "endereço", numero: "número", checkin_data: "check-in", checkin_hora: "horário de check-in", checkout_data: "check-out", checkout_hora: "horário de check-out", plataforma: "plataforma", codigo: "código", responsavel: "responsável" };
-    for (const k in r) { h[k] = r[k]; achados.push(nomes[k]); }
+    const nomes = { nome: "hotel", cep: "CEP", logradouro: "endereço", numero: "número", checkin_data: "check-in", checkin_hora: "horário de check-in", checkout_data: "check-out", checkout_hora: "horário de check-out", plataforma: "plataforma", codigo: "código", responsavel: "responsável", bairro: "bairro", cidade: "cidade", lat: "localização GPS" };
+    for (const k in r) { h[k] = r[k]; if (nomes[k]) achados.push(nomes[k]); }
     desenharViagem();
     if (r.cep) await buscarCep(r.cep).then(() => { if (r.logradouro) { viagemAtual.v.hospedagem.logradouro = r.logradouro; } if (r.numero) viagemAtual.v.hospedagem.numero = r.numero; desenharViagem(); });
     for (const k in r) { const el = document.querySelector(`#viagemConteudo [data-k="${k}"]`); if (el) el.classList.add("auto"); }

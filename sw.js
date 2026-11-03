@@ -1,9 +1,9 @@
 // Guarda os arquivos do app para funcionar sem internet
-const CACHE = "meus-concursos-v28";
+const CACHE = "meus-concursos-v31";
 const ARQUIVOS = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png", "./edital.js", "./boleto.js", "./viagem.js", "./config.js"];
 
 self.addEventListener("install", e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ARQUIVOS)));
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ARQUIVOS.map(u => new Request(u, { cache: "reload" })))));
   self.skipWaiting();
 });
 
@@ -16,7 +16,7 @@ self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
   if (new URL(e.request.url).origin !== self.location.origin) return;   // login, Apps Script e bibliotecas externas vão direto à rede
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: "no-cache" })   // confere com o GitHub (que guarda arquivos por 10 min no navegador)
       .then(r => { const copia = r.clone(); caches.open(CACHE).then(c => c.put(e.request, copia)); return r; })
       .catch(() => caches.match(e.request))
   );
