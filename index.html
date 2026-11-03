@@ -141,6 +141,16 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .chk{flex-direction:row;align-items:center;gap:8px}
 .chk input{width:auto}
 @media (max-width:560px){.vagas-grid{grid-template-columns:repeat(3,1fr)}}
+.chip svg{width:13px;height:13px;vertical-align:-2px;margin-right:4px}
+.copy-end{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;padding:4px 10px;border-radius:999px;color:var(--brand);vertical-align:middle}
+.copy-end svg{width:14px;height:14px}
+.end-acoes{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:13.5px}
+.desl{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.desl-it{border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:13.5px;display:flex;flex-direction:column;gap:4px}
+.desl-tit{font-weight:600;color:var(--ink)}
+.desl-num{font-family:var(--f-mono);font-size:13px}
+.desl-links{display:flex;gap:12px;flex-wrap:wrap;font-size:13px}
+.chip.pend{background:transparent;border:1px dashed var(--muted);color:var(--muted)}
 .tl-dir{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}
 .viagem-btns{display:inline-flex;gap:4px}
 .ic-btn{width:34px;height:34px;padding:7px;border-radius:50%;display:inline-grid;place-items:center;color:var(--muted);background:var(--bg)}
@@ -544,6 +554,16 @@ function cardHTML(x){
   const sub=[x.cargo,x.banca].filter(Boolean).join(" · ");
   const tv=textoVagas(x.vagas);
   const passo = (a.ativo && a.total>1) ? `<span class="chip">fase ${(f?a.prox.i:a.proxSemData?a.proxSemData.i:0)+1} de ${a.total}</span>` : "";
+  // transporte e hospedagem: só da viagem da próxima fase (com data marcada)
+  let chipsViagem="";
+  if(a.ativo && f){
+    const bl=blocosDeViagem(x).find(b=>b.fases.includes(a.prox.i)), v=bl&&(x.viagens||{})[bl.uid]||{};
+    const tp=v.transporte||{}, aviao=tp.tipo==="aviao";
+    const transpOk = tp.tipo==="carro" || (aviao && ((tp.ida&&tp.ida.trechos||[]).some(t=>t.voo||t.partida_hora||t.cia) || (tp.ida&&tp.ida.localizador)));
+    const hospOk = !!(v.hospedagem && (v.hospedagem.nome||v.hospedagem.logradouro||v.hospedagem.codigo||v.hospedagem.plataforma));
+    chipsViagem = `<span class="chip ${transpOk?"ok":"pend"}">${tp.tipo==="carro"?SVG_CARRO:SVG_AVIAO}${transpOk?(tp.tipo==="carro"?"Carro reservado":"Voo reservado"):(tp.tipo==="carro"?"Carro pendente":"Transporte pendente")}</span>`
+      + `<span class="chip ${hospOk?"ok":"pend"}">${SVG_HOTEL}${hospOk?"Hospedagem reservada":"Hospedagem pendente"}</span>`;
+  }
   const stChip = a.ativo ? `<span class="chip">${esc(situacaoDoCartao(x,a))}</span>` : "";
   // fases já concluídas com aprovação ficam registradas no cartão, antes da próxima fase
   const aprovadas=(x.fases||[]).filter(fz=>fz.situacao==="Aprovado").map(fz=>{
@@ -553,7 +573,7 @@ function cardHTML(x){
   return `<button class="card" type="button" data-id="${esc(x.id)}">
     <div class="date">${x.logo?`<img class="logo" src="${x.logo}" alt="">`:`<span class="sigla">${esc(siglaDoOrgao(x.nome))}</span>`}${d?`<span class="m">${String(d.getDate()).padStart(2,"0")} ${MESES[d.getMonth()]} ${String(d.getFullYear()).slice(2)}</span>`:""}</div>
     <div class="info"><h3>${esc(x.nome)}</h3>${sub?`<p>${esc(sub)}</p>`:""}${tv?`<p class="vagas-l"><b>${esc(tv.tot)}</b>${tv.det?" · "+esc(tv.det):""}</p>`:""}${aprovadas}${faseTxt?`<p class="fase-prox">${esc(faseTxt)}</p>`:""}</div>
-    <div class="right"><span class="count ${c.c}">${c.t}</span>${chipBoleto}${stChip}${passo}</div>
+    <div class="right"><span class="count ${c.c}">${c.t}</span>${chipBoleto}${stChip}${chipsViagem}${passo}</div>
   </button>`;
 }
 
@@ -587,8 +607,11 @@ function abrirVer(id){
     const quando=[f.data?fmtData(f.data):"data a definir", !soData&&horasTxt(f)].filter(Boolean).join(" · ");
     const b=blocosLocal[i];
     const raizDe = b.raiz && b.de!==undefined && b.de!==i ? b.de : (b.herda!==undefined ? b.herda : null);
+    const raizF = raizDe===null ? f : x.fases[raizDe], estrut = ((x.viagens||{})[raizF.uid]||{}).local;
+    // endereço completo (com copiar) aparece no quadro do local de prova; aqui só a referência
+    if(estrut && resumoLocal(estrut)) return `<div class="note">${esc(quando)}${raizDe!==null?`<br>Local: mesmo da fase ${raizDe+1}`:""}</div>`;
     const local = raizDe===null ? f.local : (x.fases[raizDe].local ? x.fases[raizDe].local+" (mesmo local da fase "+(raizDe+1)+")" : "");
-    return `<div class="note">${esc(quando)}${local?"<br>Local: "+esc(local):""}</div>`;
+    return `<div class="note">${esc(quando)}${local?"<br>Local: "+esc(local)+" "+botaoCopiar(raizF.local):""}</div>`;
   };
   const especificoTxt=(f,i,tur,extra="")=>{
     const sit=f.situacao||"Aguardando", cls=sit==="Aprovado"?"ok":(sit==="Reprovado"||sit==="Não fiz")?"bad":"";
@@ -647,6 +670,7 @@ function abrirVer(id){
     $("sim").onclick=()=>{ itens=itens.filter(i=>i.id!==id); excluidos[id]=new Date().toISOString(); salvar(); arq("apagar",id+":edital").catch(()=>{}); arq("apagar",id+":boleto").catch(()=>{}); (x.complementares||[]).forEach(c=>arq("apagar",`${id}:comp:${c.uid}`).catch(()=>{})); render(); $("dlgVer").close(); toast("Concurso excluído"); };
   };
   if(!$("dlgVer").open) $("dlgVer").showModal();
+  atualizarDeslocamentos(x);   // distâncias aeroporto → hospedagem → local de prova (calculadas em segundo plano)
 }
 
 // ---------- Formulário: tipo de cargo e fases ----------

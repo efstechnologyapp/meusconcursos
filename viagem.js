@@ -18,6 +18,8 @@ const PLATAFORMAS = ["Booking.com","Airbnb","Hoteis.com","Expedia","Decolar","Tr
 
 const SVG_AVIAO = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg>`;
 const SVG_HOTEL = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm12-6h-8v7H3V5H1v15h2v-3h18v3h2v-9a4 4 0 0 0-4-4z"/></svg>`;
+const SVG_LOCAL = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5.5C5 4.5 7.5 4.5 10 5.5v14c-2.5-1-5-1-7 0z"/><path d="M10 5.5c1.5-.6 3-.8 4.5-.7"/><path d="M10 19.5c1.2-.5 2.4-.7 3.6-.7"/><path d="M20.5 3.5l1 1-6.5 9.5-2.2 1 .3-2.4z"/></svg>`;
+const SVG_COPIAR = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>`;
 const SVG_CARRO = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M18.9 6a1.5 1.5 0 0 0-1.4-1h-11a1.5 1.5 0 0 0-1.4 1L3 12v8a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-1h12v1a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-8zM6.5 16a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm11 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zM5 11l1.5-4.5h11L19 11z"/></svg>`;
 
 // ---------- Blocos de viagem ----------
@@ -75,6 +77,22 @@ function resumoTransporte(tp) {
 function enderecoHosp(h) {
   return [[h.logradouro, h.numero].filter(Boolean).join(", "), h.complemento, h.bairro, [h.cidade, h.uf].filter(Boolean).join("/"), h.cep && "CEP " + h.cep].filter(Boolean).join(" – ");
 }
+function enderecoParaCopiar(h) {
+  const rua = [h.logradouro, h.numero].filter(Boolean).join(", ");
+  const cid = [h.cidade, h.uf].filter(Boolean).join(" - ");
+  return [rua && h.bairro ? `${rua} - ${h.bairro}` : (rua || h.bairro), cid, h.cep].filter(Boolean).join(", ") || h.nome || "";
+}
+async function copiarEndereco(t) {
+  if (!t) return;
+  try { await navigator.clipboard.writeText(t); toast("Endereço copiado. Cole no app do Uber ou no mapa."); }
+  catch (e) { prompt("Copie o endereço:", t); }
+}
+const linkMapa = (h, end) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([h.nome, end].filter(Boolean).join(", "))}`;
+const botaoCopiar = t => t ? `<button type="button" class="copy-end" data-copiar="${esc(t)}" title="Copiar endereço" aria-label="Copiar endereço">${SVG_COPIAR}<span>Copiar endereço</span></button>` : "";
+function resumoLocal(l) {
+  if (!l) return "";
+  return [l.nome, enderecoHosp(l), l.sala].filter(Boolean).join("\n");
+}
 function resumoHospedagem(h) {
   if (!h) return "";
   const l = [];
@@ -91,16 +109,134 @@ function resumoHospedagem(h) {
 function htmlBotoesViagem(x, uid) {
   const v = (x.viagens || {})[uid] || {};
   const temT = !!(v.transporte && v.transporte.tipo), temH = !!(v.hospedagem && resumoHospedagem(v.hospedagem));
+  const temL = !!(v.local && resumoLocal(v.local)) || !!localDaRaiz(x, uid);
   return `<span class="viagem-btns">
+    <button type="button" class="ic-btn${temL ? " on" : ""}" data-viagem="local" data-uid="${esc(uid)}" title="Local de prova" aria-label="Local de prova">${SVG_LOCAL}</button>
     <button type="button" class="ic-btn${temT ? " on" : ""}" data-viagem="transporte" data-uid="${esc(uid)}" title="Transporte" aria-label="Transporte">${v.transporte && v.transporte.tipo === "carro" ? SVG_CARRO : SVG_AVIAO}</button>
     <button type="button" class="ic-btn${temH ? " on" : ""}" data-viagem="hospedagem" data-uid="${esc(uid)}" title="Hospedagem" aria-label="Hospedagem">${SVG_HOTEL}</button></span>`;
 }
 function htmlResumoViagem(x, uid) {
   const v = (x.viagens || {})[uid] || {};
-  const t = resumoTransporte(v.transporte), h = resumoHospedagem(v.hospedagem);
-  const mapa = v.hospedagem && enderecoHosp(v.hospedagem);
-  return (t ? `<div class="viagem-res"><span class="vr-ic">${v.transporte.tipo === "carro" ? SVG_CARRO : SVG_AVIAO}</span><p class="pre">${esc(t)}</p></div>` : "") +
-    (h ? `<div class="viagem-res"><span class="vr-ic">${SVG_HOTEL}</span><p class="pre">${esc(h)}${mapa ? `\n<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([v.hospedagem.nome, mapa].filter(Boolean).join(", "))}" target="_blank" rel="noopener">Abrir no mapa</a>` : ""}</p></div>` : "");
+  const t = resumoTransporte(v.transporte), h = resumoHospedagem(v.hospedagem), l = resumoLocal(v.local);
+  const mapa = v.hospedagem && enderecoHosp(v.hospedagem), mapaL = v.local && enderecoHosp(v.local);
+  return (l ? `<div class="viagem-res"><span class="vr-ic">${SVG_LOCAL}</span><div><p class="pre"><b>Local de prova:</b> ${esc(l)}</p><div class="end-acoes">${botaoCopiar(enderecoParaCopiar(v.local))}${mapaL ? `<a href="${linkMapa(v.local, mapaL)}" target="_blank" rel="noopener">Abrir no mapa</a>` : ""}</div></div></div>` : "") +
+    (t ? `<div class="viagem-res"><span class="vr-ic">${v.transporte.tipo === "carro" ? SVG_CARRO : SVG_AVIAO}</span><p class="pre">${esc(t)}</p></div>` : "") +
+    (h ? `<div class="viagem-res"><span class="vr-ic">${SVG_HOTEL}</span><div><p class="pre">${esc(h)}</p><div class="end-acoes">${mapa ? botaoCopiar(enderecoParaCopiar(v.hospedagem)) + `<a href="${linkMapa(v.hospedagem, mapa)}" target="_blank" rel="noopener">Abrir no mapa</a>` : ""}</div></div></div>` : "") +
+    (trechosDeslocamento(x, uid).length ? `<div class="desl" id="desl-${esc(uid)}">${htmlDeslocamentos(x, uid)}</div>` : "");
+}
+
+// ---------- Deslocamentos (aeroporto → hospedagem → local de prova) ----------
+// Endereços viram coordenadas pelo OpenStreetMap (Nominatim) e a rota de carro vem do OSRM, ambos gratuitos.
+// Eles não têm trânsito em tempo real: para isso há os links do Google Maps e do Waze, que abrem a rota com o trânsito do momento.
+const pausa = ms => new Promise(r => setTimeout(r, ms));
+let filaGeo = Promise.resolve();
+function nominatim(params) {
+  // a política do Nominatim pede no máximo 1 consulta por segundo
+  const p = filaGeo.then(async () => {
+    const r = await fetch("https://nominatim.openstreetmap.org/search?" + new URLSearchParams({ format: "json", countrycodes: "br", limit: "5", "accept-language": "pt-BR", ...params })).then(r => r.json()).catch(() => []);
+    await pausa(1100);
+    return Array.isArray(r) ? r : [];
+  });
+  filaGeo = p.catch(() => {});
+  return p;
+}
+const chaveEnd = h => [h.logradouro, h.numero, h.bairro, h.cidade, h.uf, h.cep].map(s => (s || "").trim().toLowerCase()).join("|");
+async function geoEndereco(h) {
+  const cid = h.cidade || "", uf = h.uf || "";
+  const tentativas = [
+    h.logradouro && { street: [h.numero, h.logradouro].filter(Boolean).join(" "), city: cid, state: uf, country: "Brasil" },
+    h.logradouro && { street: h.logradouro, city: cid, state: uf, country: "Brasil" },
+    h.cep && { postalcode: h.cep, country: "Brasil" },
+    h.nome && { q: [h.nome, cid, uf].filter(Boolean).join(", ") }
+  ].filter(Boolean);
+  for (const t of tentativas) {
+    const r = await nominatim(t);
+    if (r[0]) return { lat: +r[0].lat, lon: +r[0].lon, aprox: !h.numero || !t.street || !t.street.startsWith(h.numero) };
+  }
+  return null;
+}
+async function geoAeroporto(sigla) {
+  const a = AEROPORTOS.find(([s]) => s === (sigla || "").toUpperCase());
+  const nome = a ? a[1].split("–").pop().trim() : sigla;
+  for (const q of [`Aeroporto ${nome}`, `${sigla} aeroporto ${a ? a[1].split("–")[0].trim() : ""}`]) {
+    const r = await nominatim({ q });
+    const ae = r.find(o => o.class === "aeroway" || o.type === "aerodrome") || null;
+    if (ae) return { lat: +ae.lat, lon: +ae.lon };
+  }
+  return null;
+}
+async function rotaCarro(a, b) {
+  try {
+    const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=false`).then(r => r.json());
+    if (r.code !== "Ok" || !r.routes || !r.routes[0]) return null;
+    return { km: r.routes[0].distance / 1000, min: Math.max(1, Math.round(r.routes[0].duration / 60)) };
+  } catch (e) { return null; }
+}
+function pontosDaViagem(x, uid) {
+  const v = (x.viagens || {})[uid] || {}, tp = v.transporte || {};
+  let aero = "";
+  if (tp.tipo === "aviao" && tp.ida && tp.ida.trechos && tp.ida.trechos.length) aero = (tp.ida.trechos[tp.ida.trechos.length - 1].para || "").toUpperCase();
+  const hosp = v.hospedagem && (v.hospedagem.logradouro || v.hospedagem.cep) ? v.hospedagem : null;
+  const local = v.local && (v.local.logradouro || v.local.cep) ? v.local : null;
+  return { v, aero, hosp, local };
+}
+function trechosDeslocamento(x, uid) {
+  const { aero, hosp, local } = pontosDaViagem(x, uid), t = [];
+  if (aero && hosp) t.push({ id: "aeroHosp", de: `Aeroporto (${aero})`, para: "Hospedagem", chave: aero + ">" + chaveEnd(hosp) });
+  if (hosp && local) t.push({ id: "hospLocal", de: "Hospedagem", para: "Local de prova", chave: chaveEnd(hosp) + ">" + chaveEnd(local) });
+  return t;
+}
+const fmtKm = km => km < 10 ? km.toFixed(1).replace(".", ",") : String(Math.round(km));
+const fmtTempo = m => m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
+function hhmmMenos(hhmm, min) { const [h, m] = hhmm.split(":").map(Number); const t = h * 60 + m - min; return t > 0 ? `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}` : ""; }
+function htmlDeslocamentos(x, uid) {
+  const tr = trechosDeslocamento(x, uid); if (!tr.length) return "";
+  const v = x.viagens[uid], rotas = v.rotas || {};
+  return tr.map(t => {
+    const r = rotas[t.id] && rotas[t.id].chave === t.chave ? rotas[t.id] : null;
+    let num = `<span class="note">calculando distância…</span>`, links = "", dica = "";
+    if (r && r.erro) num = `<span class="note">não foi possível localizar ${esc(r.erro)} no mapa; confira o endereço.</span>`;
+    else if (r) {
+      num = `<span class="desl-num">${fmtKm(r.km)} km · ~${fmtTempo(r.min)} de carro</span> <span class="note">(sem trânsito${r.aprox ? ", endereço aproximado" : ""})</span>`;
+      const o = `${r.a.lat},${r.a.lon}`, d = `${r.b.lat},${r.b.lon}`;
+      links = `<div class="desl-links"><a href="https://www.google.com/maps/dir/?api=1&origin=${o}&destination=${d}&travelmode=driving" target="_blank" rel="noopener">Trânsito agora (Google Maps)</a>
+        <a href="https://waze.com/ul?ll=${d}&navigate=yes" target="_blank" rel="noopener">Waze</a>
+        <a href="https://m.uber.com/ul/?action=setPickup&pickup[latitude]=${r.a.lat}&pickup[longitude]=${r.a.lon}&pickup[nickname]=${encodeURIComponent(t.de)}&dropoff[latitude]=${r.b.lat}&dropoff[longitude]=${r.b.lon}&dropoff[nickname]=${encodeURIComponent(t.para)}" target="_blank" rel="noopener">Pedir Uber</a></div>`;
+      // horário sugerido de saída para a prova: 30 min de folga antes dos portões (ou do início)
+      if (t.id === "hospLocal") {
+        const bl = blocosDeViagem(x).find(b => b.uid === uid);
+        const fases = bl ? bl.fases.map(i => x.fases[i]).filter(f => f.data && (f.portoes || f.horario)).sort((a, b) => (a.data + (a.portoes || a.horario)).localeCompare(b.data + (b.portoes || b.horario))) : [];
+        const dias = [...new Set(fases.map(f => f.data))];
+        dica = dias.map(d => { const f = fases.find(z => z.data === d), lim = f.portoes || f.horario, s = hhmmMenos(lim, r.min + 30); return s ? `${fmtCurta(d)}: sair até ${s} (${f.portoes ? "portões fecham" : "prova começa"} ${lim}; trajeto + 30 min de folga)` : ""; }).filter(Boolean).join("<br>");
+        if (dica) dica = `<div class="note">${dica}</div>`;
+      }
+    }
+    return `<div class="desl-it"><div class="desl-tit">${esc(t.de)} → ${esc(t.para)}</div>${num}${dica}${links}</div>`;
+  }).join("");
+}
+async function atualizarDeslocamentos(x) {
+  for (const b of blocosDeViagem(x)) {
+    const uid = b.uid, tr = trechosDeslocamento(x, uid);
+    for (const t of tr) {
+      const v = x.viagens[uid]; v.rotas = v.rotas || {};
+      if (v.rotas[t.id] && v.rotas[t.id].chave === t.chave) continue;
+      const { aero, hosp, local } = pontosDaViagem(x, uid);
+      const a = t.id === "aeroHosp" ? await geoAeroporto(aero) : await geoEndereco(hosp);
+      const bb = t.id === "aeroHosp" ? await geoEndereco(hosp) : await geoEndereco(local);
+      let r;
+      if (!a) r = { erro: t.id === "aeroHosp" ? "o aeroporto" : "a hospedagem" };
+      else if (!bb) r = { erro: t.id === "aeroHosp" ? "a hospedagem" : "o local de prova" };
+      else { const rc = await rotaCarro(a, bb); r = rc ? { ...rc, a: { lat: +a.lat.toFixed(6), lon: +a.lon.toFixed(6) }, b: { lat: +bb.lat.toFixed(6), lon: +bb.lon.toFixed(6) }, aprox: !!(a.aprox || bb.aprox) } : null; }
+      if (!r) continue;   // sem internet: tenta de novo na próxima abertura
+      v.rotas[t.id] = { ...r, chave: t.chave };
+      // a sincronização pode ter trocado o objeto do concurso enquanto o mapa respondia: grava no atual
+      const cur = itens.find(i => i.id === x.id), cv = cur && cur !== x && (cur.viagens || {})[uid];
+      if (cv) { cv.rotas = cv.rotas || {}; cv.rotas[t.id] = v.rotas[t.id]; }
+      salvar();   // guarda no aparelho para não recalcular
+      const el = document.getElementById("desl-" + uid);
+      if (el && $("verConteudo").dataset.id === x.id) el.innerHTML = htmlDeslocamentos(x, uid);
+    }
+  }
 }
 
 // ---------- Formulário ----------
@@ -112,12 +248,18 @@ function abrirViagem(id, uid, qual) {
   const bloco = blocosDeViagem(x).find(b => b.uid === uid) || { inicio: "", fim: "", fases: [] };
   const v = JSON.parse(JSON.stringify((x.viagens || {})[uid] || {}));
   const ida = somarDias(bloco.inicio, -1), volta = somarDias(bloco.fim, 1);
+  const cid = (x.cidade || "").split("/")[0].trim(), uf = ((x.cidade || "").split("/")[1] || "").trim();
   if (qual === "transporte") v.transporte = v.transporte || { tipo: "" };
+  else if (qual === "local") v.local = v.local || { nome: localDaRaiz(x, uid), cidade: cid, uf };
   else v.hospedagem = v.hospedagem || { checkin_data: ida, checkout_data: volta, cidade: (x.cidade || "").split("/")[0].trim(), uf: ((x.cidade || "").split("/")[1] || "").trim() };
   viagemAtual = { id, uid, qual, v, ida, volta, x, bloco };
   desenharViagem();
   const dlg = $("dlgViagem"); if (!dlg.open) dlg.showModal();
 }
+// texto do local guardado na fase (campo antigo do formulário / editais de convocação)
+function localDaRaiz(x, uid) { const f = (x.fases || []).find(f => f.uid === uid); return (f && f.local) || ""; }
+const alvoEndereco = () => viagemAtual.v[viagemAtual.qual];
+const TITULOS_V = { transporte: "Transporte", hospedagem: "Hospedagem", local: "Local de prova" };
 function tituloBloco() {
   const { x, bloco } = viagemAtual;
   const nomes = bloco.fases.map(i => x.fases[i].nome).join(" + ");
@@ -125,11 +267,11 @@ function tituloBloco() {
 }
 function desenharViagem() {
   const { qual, v } = viagemAtual;
-  const corpo = qual === "transporte" ? htmlFormTransporte(v.transporte) : htmlFormHospedagem(v.hospedagem);
+  const corpo = qual === "transporte" ? htmlFormTransporte(v.transporte) : qual === "local" ? htmlFormLocal(v.local) : htmlFormHospedagem(v.hospedagem);
   $("viagemConteudo").innerHTML = `
-    <div class="dlg-head"><div style="flex:1;min-width:0"><h2>${qual === "transporte" ? "Transporte" : "Hospedagem"}</h2><p class="sub">${tituloBloco()}</p></div><button type="button" class="close" data-close aria-label="Fechar">×</button></div>
+    <div class="dlg-head"><div style="flex:1;min-width:0"><h2>${TITULOS_V[qual]}</h2><p class="sub">${tituloBloco()}</p></div><button type="button" class="close" data-close aria-label="Fechar">×</button></div>
     ${corpo}
-    <div class="actions">${(qual === "transporte" ? v.transporte.tipo : resumoHospedagem(v.hospedagem)) ? `<button type="button" class="danger" id="vgLimpar" style="margin-right:auto">Apagar</button>` : ""}<button type="button" data-close>Cancelar</button><button type="button" class="primary" id="vgSalvar">Salvar</button></div>`;
+    <div class="actions">${(qual === "transporte" ? v.transporte.tipo : qual === "local" ? resumoLocal(v.local) : resumoHospedagem(v.hospedagem)) ? `<button type="button" class="danger" id="vgLimpar" style="margin-right:auto">Apagar</button>` : ""}<button type="button" data-close>Cancelar</button><button type="button" class="primary" id="vgSalvar">Salvar</button></div>`;
 }
 function campo(rot, k, val, tipo = "text", extra = "") {
   return `<label${/w2|w4/.test(extra) ? ` class="${extra.match(/w\d/)[0]}"` : ""}>${rot}<input data-k="${k}" type="${tipo}" value="${esc(val || "")}" ${extra.replace(/w\d/, "")}></label>`;
@@ -181,15 +323,7 @@ function htmlFormHospedagem(h) {
       <input type="file" id="vgArq" accept="image/*,application/pdf,.pdf" hidden><span class="note" id="vgStatus">Booking, Airbnb, Hoteis.com, e-mail de confirmação…</span></div>
     <div class="fase-grid">
       ${campo("Hotel / pousada / anúncio", "nome", h.nome, "text", "w4")}
-      ${campo("CEP", "cep", h.cep, "text", 'inputmode="numeric" placeholder="00000-000" maxlength="9"')}
-      <p class="note w2 cep-st" id="vgCep">${h.cep ? "" : "Digite o CEP para preencher o endereço."}</p>
-      ${campo("Rua / avenida", "logradouro", h.logradouro, "text", "w4")}
-      ${campo("Número", "numero", h.numero)}
-      ${campo("Complemento", "complemento", h.complemento, "text", 'placeholder="apto, bloco…"')}
-      ${campo("Bairro", "bairro", h.bairro, "text", "w2")}
-      ${campo("Cidade", "cidade", h.cidade, "text", "w2")}
-      ${campo("UF", "uf", h.uf, "text", 'maxlength="2"')}
-      <span></span>
+      ${camposEndereco(h, "apto, bloco…")}
       ${campo("Check-in – data", "checkin_data", h.checkin_data, "date")}
       ${campo("Check-in – a partir de", "checkin_hora", h.checkin_hora, "time")}
       ${campo("Check-out – data", "checkout_data", h.checkout_data, "date")}
@@ -200,10 +334,30 @@ function htmlFormHospedagem(h) {
     </div>`;
 }
 
+function camposEndereco(h, dicaCompl) {
+  return `${campo("CEP", "cep", h.cep, "text", 'inputmode="numeric" placeholder="00000-000" maxlength="9"')}
+      <p class="note w2 cep-st" id="vgCep">${h.cep ? "" : "Digite o CEP para preencher o endereço."}</p>
+      ${campo("Rua / avenida", "logradouro", h.logradouro, "text", "w4")}
+      ${campo("Número", "numero", h.numero)}
+      ${campo("Complemento", "complemento", h.complemento, "text", `placeholder="${dicaCompl}"`)}
+      ${campo("Bairro", "bairro", h.bairro, "text", "w2")}
+      ${campo("Cidade", "cidade", h.cidade, "text", "w2")}
+      ${campo("UF", "uf", h.uf, "text", 'maxlength="2"')}
+      <span></span>`;
+}
+function htmlFormLocal(l) {
+  return `<div class="fase-grid">
+      ${campo("Nome do local", "nome", l.nome, "text", 'w4 placeholder="escola, faculdade, centro de convenções…"')}
+      ${camposEndereco(l, "bloco, prédio…")}
+      ${campo("Sala / bloco / portão de entrada", "sala", l.sala, "text", "w4")}
+    </div>
+    <p class="note">Vale para todas as fases desta viagem (mesmo dia ou dia seguinte). O endereço pode ser copiado nos detalhes do concurso para colar no Uber.</p>`;
+}
+
 // ---------- Interações ----------
 function definirViagem(k, val) {
   const { qual, v } = viagemAtual;
-  const alvo = qual === "transporte" ? v.transporte : v.hospedagem;
+  const alvo = v[qual];
   const p = k.split(".");
   if (p.length === 1) alvo[p[0]] = val;
   else if (p.length === 2) alvo[p[0]][p[1]] = val;
@@ -227,7 +381,7 @@ async function buscarCep(cep) {
   try {
     const r = await fetch(`https://viacep.com.br/ws/${n}/json/`).then(r => r.json());
     if (r.erro) { if (st) st.textContent = "CEP não encontrado."; return; }
-    const h = viagemAtual.v.hospedagem;
+    const h = alvoEndereco();
     h.cep = `${n.slice(0, 5)}-${n.slice(5)}`;
     if (r.logradouro) h.logradouro = r.logradouro;
     if (r.bairro) h.bairro = r.bairro;
@@ -304,15 +458,20 @@ function salvarViagem(apagar) {
   x.viagens = x.viagens || {};
   const atual = x.viagens[uid] || {};
   if (apagar) delete atual[qual]; else atual[qual] = v[qual];
-  if (atual.transporte || atual.hospedagem) x.viagens[uid] = atual; else delete x.viagens[uid];
+  if (atual.transporte || atual.hospedagem || atual.local) x.viagens[uid] = atual; else delete x.viagens[uid];
+  if (qual === "local") {
+    const f = (x.fases || []).find(f => f.uid === uid);
+    if (f) f.local = apagar ? "" : [v.local.nome, enderecoHosp(v.local), v.local.sala].filter(Boolean).join(" – ");
+  }
   x.atualizado = new Date().toISOString();
   salvar(); render();
   $("dlgViagem").close();
   abrirVer(id);
-  toast(apagar ? "Apagado" : (qual === "transporte" ? "Transporte salvo" : "Hospedagem salva"));
+  toast(apagar ? "Apagado" : ({ transporte: "Transporte salvo", hospedagem: "Hospedagem salva", local: "Local de prova salvo" })[qual]);
 }
 
 document.addEventListener("click", e => {
+  const cp = e.target.closest("[data-copiar]"); if (cp) { copiarEndereco(cp.dataset.copiar); return; }
   const b = e.target.closest("[data-viagem]");
   if (b) { const id = b.closest("#verConteudo") && $("verConteudo").dataset.id; if (id) abrirViagem(id, b.dataset.uid, b.dataset.viagem); return; }
   if (!e.target.closest("#viagemConteudo") || !viagemAtual) return;
