@@ -19,13 +19,15 @@ function carregarPdfJs() {
 // fiquem com o evento e a data na mesma linha. Funciona também em páginas
 // e tabelas giradas (listas de resultado em "paisagem").
 // Além do texto, guarda a estrutura de células (textoDoPdf.estrutura) para ler quadros em colunas.
-async function textoDoPdf(arquivo, maxPaginas = 90) {
+async function textoDoPdf(arquivo, maxPaginas = 90, opcoes = {}) {
   const pdfjs = await carregarPdfJs();
   const pdf = await pdfjs.getDocument({ data: await arquivo.arrayBuffer() }).promise;
   const n = Math.min(pdf.numPages, maxPaginas);
   let texto = "";
   const estrutura = [];
   for (let i = 1; i <= n; i++) {
+    if (opcoes.aoProgredir && i % 10 === 1) opcoes.aoProgredir(i, n);
+    const inicioPagina = texto.length;
     const pag = await pdf.getPage(i);
     const vp = pag.getViewport({ scale: 1 });
     const c = await pag.getTextContent();
@@ -74,9 +76,50 @@ async function textoDoPdf(arquivo, maxPaginas = 90) {
       texto += textoLinha + "\n";
       estrutura.push({ pagina: i, celulas: celulas.map(c => ({ x: Math.round(c.x), s: juntar(c.partes) })).filter(c => c.s) });
     }
+    // parada antecipada (ex.: já achou o candidato numa lista de milhares de páginas)
+    if (opcoes.parar && i >= 2 && opcoes.parar(texto.slice(inicioPagina), texto)) break;
   }
   textoDoPdf.estrutura = estrutura;
   return texto;
+}
+
+// Logo do órgão: a imagem do cabeçalho da 1ª página do edital (devolve um PNG pequeno em data URL, ou "")
+async function extrairLogo(arquivo) {
+  try {
+    const pdfjs = await carregarPdfJs();
+    const pdf = await pdfjs.getDocument({ data: await arquivo.arrayBuffer() }).promise;
+    const pag = await pdf.getPage(1);
+    const ops = await pag.getOperatorList();
+    const nomes = [];
+    ops.fnArray.forEach((fn, k) => { if (fn === pdfjs.OPS.paintImageXObject) nomes.push(ops.argsArray[k][0]); });
+    let melhor = null;
+    for (const nome of nomes.slice(0, 8)) {
+      const img = await new Promise(ok => { const fonte = nome.startsWith("g_") ? pag.commonObjs : pag.objs; try { fonte.get(nome, ok); } catch (e) { ok(null); } setTimeout(() => ok(null), 3000); });
+      if (!img || !img.width || !img.height) continue;
+      const razao = img.width / img.height;
+      if (razao < 0.35 || razao > 4.5 || img.width < 40 || img.height < 30) continue;   // descarta faixas e ícones minúsculos
+      if (!melhor || img.width * img.height > melhor.width * melhor.height) melhor = img;
+    }
+    if (!melhor) return "";
+    const c = document.createElement("canvas");
+    c.width = melhor.width; c.height = melhor.height;
+    const ctx = c.getContext("2d");
+    if (melhor.bitmap) ctx.drawImage(melhor.bitmap, 0, 0);
+    else if (melhor.data) {
+      const n = melhor.width * melhor.height, d = melhor.data, rgba = new Uint8ClampedArray(n * 4);
+      if (d.length === n * 4) rgba.set(d);
+      else if (d.length === n * 3) for (let i = 0; i < n; i++) { rgba[i*4] = d[i*3]; rgba[i*4+1] = d[i*3+1]; rgba[i*4+2] = d[i*3+2]; rgba[i*4+3] = 255; }
+      else if (d.length === n) for (let i = 0; i < n; i++) { rgba[i*4] = rgba[i*4+1] = rgba[i*4+2] = d[i]; rgba[i*4+3] = 255; }
+      else return "";
+      ctx.putImageData(new ImageData(rgba, melhor.width, melhor.height), 0, 0);
+    } else return "";
+    // reduz para no máximo 160 px (fica leve para sincronizar)
+    const esc = Math.min(1, 160 / Math.max(c.width, c.height));
+    const out = document.createElement("canvas");
+    out.width = Math.round(c.width * esc); out.height = Math.round(c.height * esc);
+    out.getContext("2d").drawImage(c, 0, 0, out.width, out.height);
+    return out.toDataURL("image/png");
+  } catch (e) { return ""; }
 }
 
 // ---------- Utilidades de texto ----------
@@ -136,7 +179,7 @@ const MODELOS = {
     detectar: /magistratura|juiz substituto/i,
     fases: [
       { nome: "1ª etapa – Prova objetiva seletiva", carater: "EC", chave: /prova objetiva seletiva/i },
-      { nome: "2ª etapa – Prova discursiva", carater: "EC", chave: /prova\s+discursiva|prova escrita ser[aá] discursiva/i },
+      { nome: "2ª etapa – Prova discursiva", carater: "EC", chave: /prova\s+(?:escrita\s+)?discursiva|prova escrita ser[aá] discursiva/i },
       { nome: "2ª etapa – Sentença cível", carater: "EC", chave: /senten[cç]a (?:de natureza )?c[ií]vel/i, chaveDur: /senten[cç]as?[^.]{0,60}natureza c[ií]vel/i },
       { nome: "2ª etapa – Sentença criminal", carater: "EC", chave: /senten[cç]a (?:de natureza )?criminal/i, chaveDur: /senten[cç]as?[^.]{0,90}natureza criminal/i },
       { nome: "3ª etapa – Inscrição definitiva (sindicância, exame médico e psicotécnico)", carater: "E", chave: /inscri[cç][aã]o definitiva/i },
@@ -286,13 +329,13 @@ function interpretarEdital(textoBruto, tipoForcado, estrutura) {
   for (const re of ORGAOS) {
     const m = inicio.match(re);
     if (!m) continue;
-    let nome = limpar(m[0].split(/\s+(?:torna|faz|fazem|comunica|no uso|resolve|EDITAL|CONCURSO|-\s|–\s|\|)|\s+(?:Avenida|Av\.|Rua|R\.|Pra[cç]a|P[cç]a\.|Rodovia|Alameda|Travessa|Setor|SAF|SAS|Quadra|Bairro|CEP|Endere[cç]o|Telefone|www\.)\b/i)[0]);
+    let nome = limpar(m[0].split(/\s+(?:torna|faz|fazem|comunica|no uso|resolve|EDITAL|CONCURSO|-\s|–\s|\|)|\s+(?:Avenida|Av|Rua|Pra[cç]a|P[cç]a|Rodovia|Alameda|Travessa|Setor|SAF|SAS|Quadra|Bairro|CEP|Endere[cç]o|Telefone)(?![A-Za-zÀ-ú])|\s+www\./i)[0]);
     if (nome.length > 6) { r.nome = nome === nome.toUpperCase() ? titulo(nome) : nome; break; }
   }
 
   const cargo = plano.match(/\b(?:para o cargo de|ao cargo de|o cargo de|cargo:)\s+([A-ZÀ-Ú][^.;:()\n]{3,80})/i)
              || plano.match(/\bcargos? de\s+([A-ZÀ-Ú][^.;:()\n]{3,80})/i);
-  if (cargo) r.cargo = limpar(cargo[1].split(/\s*,|\s+(?:e |conforme|n[ºo°]|com |do quadro|para |de que|do (?:Tribunal|Minist[ée]rio|Estado|Poder|MP))/i)[0]);
+  if (cargo) r.cargo = (c => c === c.toUpperCase() ? titulo(c) : c)(limpar(cargo[1].split(/\s*,|\s+(?:e |conforme|n[ºo°]|com |do quadro|para |de que|do (?:Tribunal|Minist[ée]rio|Estado|Poder|MP))/i)[0]));
 
   const cid = plano.match(/(?:nas? cidades? de|no munic[ií]pio de)\s+([A-ZÀ-Ú][\wÀ-ú' ]{2,40}?)(?:\s*[\/–-]\s*([A-Z]{2}))?(?=[,.;)]|\s+e\s|\s+no\s|\s+na\s|\s+das\s)/);
   if (cid) r.cidade = limpar(cid[1]) + (cid[2] ? "/" + cid[2] : "");
@@ -365,6 +408,12 @@ const RE_ITEM = /(\d{1,2})\s*\([^)]*\)\s*(quest(?:ão|ões)(?:\s+discursivas?)?(
 
 function itensEscritos(janela) {
   const itens = [];
+  const faixa = janela.match(/(\d{1,2})\s*(?:\([^)]*\))?\s*a\s*(\d{1,2})\s*(?:\([^)]*\))?\s*(quest(?:ões|oes)(?:\s+discursivas?)?)/i);
+  if (faixa) {
+    const depois = janela.slice(faixa.index + faixa[0].length, faixa.index + faixa[0].length + 110);
+    const lin = depois.match(/^[^.;]*?(?:de até|com|até)\s*(\d{1,3})\s*(?:\([^)]*\))?\s*linhas/i);
+    itens.push({ chave: "questao", qtd: `${faixa[1]} a ${faixa[2]}`, tipo: faixa[3].toLowerCase(), linhas: lin ? +lin[1] : "" });
+  }
   let m;
   RE_ITEM.lastIndex = 0;
   while ((m = RE_ITEM.exec(janela))) {
@@ -417,9 +466,23 @@ function blocosDaTabela(estrutura) {
   });
 }
 
+const NUM_EXTENSO = { um: "I", uma: "I", dois: "II", duas: "II", "três": "III", tres: "III", quatro: "IV", cinco: "V", seis: "VI" };
+function blocosNoTexto(plano) {
+  const re = /\b(bloco|grupo|m[óo]dulo)\s+(um|uma|dois|duas|tr[êe]s|quatro|cinco|seis|[ivx]{1,4}|\d)\s*[:–-]\s*([^]{5,400}?)\s*[–-]\s*(\d{1,3})\s*(?:\([^)]*\)\s*)?quest/gi;
+  const out = []; let m;
+  while ((m = re.exec(plano))) {
+    const id = NUM_EXTENSO[m[2].toLowerCase()] || m[2].toUpperCase();
+    if (out.some(b => b.id === id)) continue;
+    const disciplinas = m[3].replace(/\s+e\s+(?=(?:Direito|Direitos|No[cç][oõ]es|L[ií]ngua|Legisla|Teoria|Tutela|Racioc|Inform)\b)/g, ", ").split(/\s*,\s*/).map(x => x.trim()).filter(x => x.length > 2);
+    out.push({ id, nome: `${m[1][0].toUpperCase()}${m[1].slice(1).toLowerCase()} ${id}`, qtd: +m[4], disciplinas });
+  }
+  return out.length >= 2 ? out.map(({ id, ...b }) => b) : [];
+}
+
 function composicaoDasFases(plano, linhasTexto, tipo, estrutura) {
   const modelo = MODELOS[tipo] || MODELOS.outro;
   let blocos = blocosDoQuadro(linhasTexto);
+  if (!blocos.length) blocos = blocosNoTexto(plano);
   const daTabela = blocosDaTabela(estrutura);
   // o quadro em colunas é mais confiável quando ele existe e fecha a conta
   if (daTabela.length >= 2 && (!blocos.length || blocos.some(b => /\d/.test(b.disciplinas.join(" "))) || daTabela.reduce((s, b) => s + b.qtd, 0) !== blocos.reduce((s, b) => s + b.qtd, 0))) blocos = daTabela;
@@ -427,8 +490,8 @@ function composicaoDasFases(plano, linhasTexto, tipo, estrutura) {
   return modelo.fases.map(f => {
     const c = { objetivas: null, escritas: [] };
     if (f.formato === "objetiva") {
-      const re = new RegExp("(?:" + f.chave.source + ")[^.]{0,220}?(\\d{1,3})\\s*(?:\\([^)]*\\))?\\s*quest(?:ões|oes) de m[úu]ltipla escolha", "i");
-      const m = plano.match(re) || plano.match(/(\d{1,3})\s*(?:\([^)]*\))?\s*quest(?:ões|oes) de m[úu]ltipla escolha/i);
+      const re = new RegExp("(?:" + f.chave.source + ")[^.]{0,220}?(\\d{1,3})\\s*(?:\\([^)]*\\))?\\s*quest(?:ões|oes)(?:\\s+objetivas)?\\s+de\\s+m[úu]ltipla escolha", "i");
+      const m = plano.match(re) || plano.match(/(\d{1,3})\s*(?:\([^)]*\))?\s*quest(?:ões|oes)(?:\s+objetivas)?\s+de\s+m[úu]ltipla escolha/i);
       if (m || (!objetivaUsada && blocos.length)) {
         const total = m ? +m[1] : blocos.reduce((s, b) => s + b.qtd, 0);
         c.objetivas = { total, blocos: objetivaUsada ? [] : blocos.map(b => ({ nome: b.nome, qtd: b.qtd, disciplinas: b.disciplinas.join(", ") })) };
@@ -440,7 +503,7 @@ function composicaoDasFases(plano, linhasTexto, tipo, estrutura) {
     } else if (f.formato === "escrita") {
       const re = new RegExp("(?:" + f.chave.source + ")[\\s\\S]{0,450}?(?:consistir|compost|constitu[ií]d)", "gi");
       let m, janela = "";
-      while ((m = re.exec(plano))) { janela = plano.slice(m.index, m.index + 1600).split(/\s\d{1,2}(?:\.\d{1,2})*\.?\s+(?:DA|DAS|DO|DOS)\s+[A-ZÀ-Ú]{3}|\b(?:segunda|terceira) prova (?:escrita|pr[áa]tica)/i)[0]; if (RE_ITEM.test(janela) || /linhas/i.test(janela)) break; janela = ""; }
+      while ((m = re.exec(plano))) { janela = plano.slice(m.index, m.index + 1600).split(/\s\d{1,2}(?:\.\d{1,2})*\.?\s+(?:DA|DAS|DO|DOS)\s+[A-ZÀ-Ú]{3}|\b(?:segunda|terceira) prova (?:escrita|pr[áa]tica)|\bprova pr[áa]tica de senten/i)[0]; if (RE_ITEM.test(janela) || /linhas/i.test(janela)) break; janela = ""; }
       RE_ITEM.lastIndex = 0;
       c.escritas = janela ? itensEscritos(janela) : [];
       if (!c.escritas.length && /senten[cç]a/i.test(f.nome)) c.escritas = [{ qtd: 1, tipo: f.nome.replace(/^.*?–\s*/, "").toLowerCase(), linhas: "" }];
@@ -509,10 +572,14 @@ function acharCandidato(texto, { nome, inscricao }) {
 }
 function lerListaDoCandidato(texto, candidato, tipo) {
   const plano = texto.replace(/\s+/g, " ");
-  const ehResultado = /resultado|habilitad[oa]s|aprovad[oa]s|classifica[cç][aã]o (?:final|preliminar)/i.test(plano) && /\b\d{1,2},\d\b/.test(plano);
-  const ehHomologacao = /inscri[cç][oõ]es?[^.]{0,80}(?:homologad|deferid)|(?:homologa[cç][aã]o|deferimento)[^.]{0,40}inscri[cç]/i.test(plano);
+  const cabeca = plano.slice(0, 4000);
+  const ehHomologacao = /inscri[cç][oõ]es?[^.]{0,80}(?:homologad|deferid)|(?:homologa[cç][aã]o|deferimento)[^.]{0,40}inscri[cç]/i.test(cabeca)
+                     || (/inscri[cç][oõ]es?[^.]{0,80}(?:homologad|deferid)|(?:homologa[cç][aã]o|deferimento)[^.]{0,40}inscri[cç]/i.test(plano) && !/nota|pontua|acertos/i.test(cabeca));
+  const linhasComNota = (texto.match(/^.*[A-Za-zÀ-ú]{3,}.*\s\d{1,3},\d{1,3}\s*$/gm) || []).length;
+  const ehResultado = !ehHomologacao && /resultado|habilitad[oa]s|aprovad[oa]s|classifica[cç][aã]o (?:final|preliminar)/i.test(plano) && linhasComNota >= 10;
   // só é lista se tiver muitas linhas do tipo "nº de inscrição + nome" (evita confundir com o edital de abertura)
-  const linhasDeLista = (texto.match(/^\s*\d{5,}[\s,;-]+[A-Za-zÀ-ú]{2,}/gm) || []).length;
+  const linhasDeLista = (texto.match(/^\s*\d{5,}[\s,;-]+[A-Za-zÀ-ú]{2,}/gm) || []).length
+                      + (texto.match(/^\s*[A-Za-zÀ-ú][A-Za-zÀ-ú' ().-]{5,}\s+\d{5,}\s*$/gm) || []).length;   // "NOME   7190076518"
   const ehLista = linhasDeLista >= 15;
   const r = { tipoLista: !ehLista ? null : ehResultado ? "resultado" : ehHomologacao ? "homologacao" : null };
   if (!r.tipoLista) return r;
@@ -522,7 +589,7 @@ function lerListaDoCandidato(texto, candidato, tipo) {
   if (idx >= 0) {
     const linha = linhas[idx].replace(/\s+/g, " ").trim();
     r.linha = linha.slice(0, 220);
-    const insc = linha.match(/(?:^|\s)(\d[\d.\-\/]{4,}\d)(?=\s)/);
+    const insc = linha.match(/(?:^|\s)(\d[\d.\-\/]{4,}\d)(?=\s|$)/);
     if (insc) r.inscricao = insc[1].replace(/\D/g, "");
   }
   if (r.tipoLista === "resultado") {
@@ -608,4 +675,4 @@ function instrucoesDeIdentificacao(plano) {
   return partes.join("\n\n");
 }
 
-if (typeof module !== "undefined") module.exports = { lerListaDoCandidato, acharCandidato, previsoesDasFases, blocosDaTabela, duracoesDasFases, composicaoDasFases, instrucoesDeIdentificacao, notasDasFases, regraPortoes, interpretarEdital, datasNoTrecho, MODELOS, detectarTipo, datasDasFases };
+if (typeof module !== "undefined") module.exports = { textoDoPdf, lerListaDoCandidato, acharCandidato, previsoesDasFases, blocosDaTabela, duracoesDasFases, composicaoDasFases, instrucoesDeIdentificacao, notasDasFases, regraPortoes, interpretarEdital, datasNoTrecho, MODELOS, detectarTipo, datasDasFases };

@@ -188,6 +188,12 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .sinc[data-estado="rodando"]::before,.sinc[data-estado="pendente"]::before{background:var(--accent)}
 .sinc[data-estado="offline"]::before,.sinc[data-estado="erro"]::before{background:var(--danger)}
 .usuario{flex-wrap:wrap}
+.date .logo{width:56px;height:56px;object-fit:contain;margin-bottom:4px}
+.sigla{width:52px;height:52px;border-radius:12px;background:var(--chip);color:var(--brand);font-family:var(--f-display);font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;margin-bottom:4px;letter-spacing:.02em}
+.fase-ok{color:var(--ok)!important;font-size:13px!important;font-weight:600}
+.fase-ok::before{content:"✓ ";font-weight:800}
+.logo-prev{width:36px;height:36px;object-fit:contain;background:#fff;border-radius:6px}
+.logo-det{width:52px;height:52px;object-fit:contain;flex:none;background:#fff;border-radius:8px;padding:2px}
 </style>
 </head>
 <body>
@@ -251,6 +257,7 @@ fieldset{border:none;padding:0;margin:0;display:contents}
       <input type="file" id="arqEdital" accept="application/pdf,.pdf" hidden>
       <span class="note" id="editalStatus">Envie o PDF do edital e o app tenta preencher os campos e as fases. Confira antes de salvar.</span>
       <div class="anexo" id="editalAnexo" hidden>
+        <img id="logoPrev" class="logo-prev" alt="Logo do órgão" hidden>
         <a id="lnkEdital" target="_blank" rel="noopener">edital.pdf</a>
         <button type="button" class="link-x" id="btnTirarEdital">Remover</button>
       </div>
@@ -343,7 +350,7 @@ const STATUS_CURTO=["Inscrição pendente","Pagamento pendente","Aguardando homo
 const STATUS_ANTIGO={"Inscrição a fazer":0,"Inscrito":3,"Boleto pago":2,"Em andamento":4,"Aprovado":4,"Encerrado":4};
 const CLIP_SVG='<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.4 11.6 12.3 20.7a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const CHAVE_NOME="meus-concursos-nome";
-let formId=null, pendentes={}, compForm=[];   // arquivos escolhidos no formulário, gravados ao salvar
+let formId=null, pendentes={}, compForm=[], logoForm="";   // arquivos escolhidos no formulário, gravados ao salvar
 let itens=[], editandoId=null, tipoAtual="outro", fasesForm=[];
 const $=id=>document.getElementById(id);
 
@@ -430,6 +437,26 @@ function andamento(x){
 }
 
 // ---------- Lista ----------
+// Sigla quando o edital não tem logo: "Polícia Civil da Bahia" → "PCB"
+function siglaDoOrgao(nome){
+  const ign=new Set(["de","da","do","das","dos","e","estado","estadual"]);
+  return String(nome||"?").split(/\s+/).filter(w=>w&&!ign.has(w.toLowerCase())).map(w=>w[0].toUpperCase()).join("").slice(0,4)||"?";
+}
+// Selo de situação: até a homologação vale a situação da inscrição; depois, o que falta na próxima fase
+function situacaoDoCartao(x,a){
+  const i=STATUS.indexOf(x.status);
+  const prox = a.prox ? a.prox : a.proxSemData;
+  const passou=(x.fases||[]).some(f=>f.situacao==="Aprovado");
+  if(i<3 && !passou) return STATUS_CURTO[i>=0?i:0];
+  if(!prox) return STATUS_CURTO[i>=0?i:0];
+  const f=prox.f, n=prox.i+1;
+  if(!f.data) return `Fase ${n}: aguardando data`;
+  const b=blocosDeLocal(x.fases)[prox.i];
+  const raiz = b.raiz && b.de!==undefined && b.de!==prox.i ? b.de : (b.herda!==undefined ? b.herda : prox.i);
+  if(!(x.fases[raiz]||{}).local) return `Fase ${n}: aguardando local`;
+  if(!f.horario) return `Fase ${n}: aguardando horário`;
+  return `Fase ${n}: local divulgado`;
+}
 function cardHTML(x){
   const a=andamento(x), f=a.prox&&a.prox.f;
   const d=f? parseData(f.data) : null;
@@ -440,10 +467,15 @@ function cardHTML(x){
   const faseTxt = f ? `${grupoProx.map(k=>x.fases[k].nome).join(" + ")}${f.horario?" · "+f.horario+(f.fim?"–"+f.fim:""):""}` : (a.ativo && a.proxSemData ? `${a.proxSemData.f.nome} · data a definir${a.proxSemData.f.previsao?" (previsão: "+a.proxSemData.f.previsao+")":""}` : "");
   const sub=[x.cargo,x.banca].filter(Boolean).join(" · ");
   const passo = (a.ativo && a.total>1) ? `<span class="chip">fase ${(f?a.prox.i:a.proxSemData?a.proxSemData.i:0)+1} de ${a.total}</span>` : "";
-  const stIdx=STATUS.indexOf(x.status), stChip = stIdx>=0 && a.ativo ? `<span class="chip">${esc(STATUS_CURTO[stIdx])}</span>` : "";
+  const stChip = a.ativo ? `<span class="chip">${esc(situacaoDoCartao(x,a))}</span>` : "";
+  // fases já concluídas com aprovação ficam registradas no cartão, antes da próxima fase
+  const aprovadas=(x.fases||[]).filter(fz=>fz.situacao==="Aprovado").map(fz=>{
+    const q = fz.acertos!=="" && fz.acertos!=null && fz.objetivas && fz.objetivas.total ? `${fz.acertos} de ${fz.objetivas.total} questões` : (fz.nota?`nota ${fz.nota}`:"");
+    return `<p class="fase-ok">${esc([fz.nome,"Aprovado",q,fz.classificacao&&`classificação ${fz.classificacao}`].filter(Boolean).join(" · "))}</p>`;
+  }).join("");
   return `<button class="card" type="button" data-id="${esc(x.id)}">
-    <div class="date">${d?`<span class="d">${String(d.getDate()).padStart(2,"0")}</span><span class="m">${MESES[d.getMonth()]} ${String(d.getFullYear()).slice(2)}</span>`:`<span class="m">a definir</span>`}</div>
-    <div class="info"><h3>${esc(x.nome)}</h3>${sub?`<p>${esc(sub)}</p>`:""}${faseTxt?`<p class="fase-prox">${esc(faseTxt)}</p>`:""}</div>
+    <div class="date">${x.logo?`<img class="logo" src="${x.logo}" alt="">`:`<span class="sigla">${esc(siglaDoOrgao(x.nome))}</span>`}${d?`<span class="m">${String(d.getDate()).padStart(2,"0")} ${MESES[d.getMonth()]} ${String(d.getFullYear()).slice(2)}</span>`:""}</div>
+    <div class="info"><h3>${esc(x.nome)}</h3>${sub?`<p>${esc(sub)}</p>`:""}${aprovadas}${faseTxt?`<p class="fase-prox">${esc(faseTxt)}</p>`:""}</div>
     <div class="right"><span class="count ${c.c}">${c.t}</span>${chipBoleto}${stChip}${passo}</div>
   </button>`;
 }
@@ -502,7 +534,7 @@ function abrirVer(id){
   }).join("");
   const c = a.eliminado ? {t:"encerrado",c:"past"} : contagem(a.prox? diasAte(a.prox.f.data) : null);
   $("verConteudo").innerHTML=`
-    <div class="dlg-head"><div><h2>${esc(x.nome)}</h2><p class="sub">${esc([x.cargo,x.banca].filter(Boolean).join(" · "))}</p></div><button type="button" class="close" data-close aria-label="Fechar">×</button></div>
+    <div class="dlg-head">${x.logo?`<img class="logo-det" src="${x.logo}" alt="">`:""}<div style="flex:1;min-width:0"><h2>${esc(x.nome)}</h2><p class="sub">${esc([x.cargo,x.banca].filter(Boolean).join(" · "))}</p></div><button type="button" class="close" data-close aria-label="Fechar">×</button></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="count ${c.c}">${c.t}</span><span class="chip">${esc(MODELOS[x.tipo].rotulo)}</span></div>
     <div class="block"><h4>Situação</h4><p class="pre">${esc(x.status)}</p></div>
     ${x.status===STATUS[1] && (x.boleto_linha||x.boleto_venc||x.boleto_arquivo) ? `<div class="block"><h4>Boleto</h4>
@@ -611,7 +643,7 @@ function htmlComposicao(f){
   if(temEscrita(f)){
     h+=`<div class="comp"><div class="comp-tit">Questões escritas</div>
       ${(f.escritas||[]).map((e,k)=>`<div class="linha-esc">
-        <input type="number" min="1" data-f="esc.${k}.qtd" value="${esc(e.qtd)}" placeholder="Qtd." aria-label="Quantidade">
+        <input inputmode="numeric" data-f="esc.${k}.qtd" value="${esc(e.qtd)}" placeholder="Qtd." aria-label="Quantidade">
         <input data-f="esc.${k}.tipo" value="${esc(e.tipo)}" placeholder="questões discursivas, dissertação, peça…" aria-label="Tipo">
         <input type="number" min="0" data-f="esc.${k}.linhas" value="${esc(e.linhas)}" placeholder="Linhas" aria-label="Linhas por resposta">
         <button type="button" class="fase-x" data-acao="rem-esc" data-k="${k}" aria-label="Remover item">×</button></div>`).join("")}
@@ -773,6 +805,7 @@ function abrirForm(x){
   $("boletoStatus").textContent="Anexe o boleto para ver o vencimento e copiar o código de pagamento.";
   mostrarAnexo("edital", x&&x.edital_arquivo&&x.edital_arquivo.nome);
   compForm = x&&x.complementares ? JSON.parse(JSON.stringify(x.complementares)) : [];
+  logoForm = (x&&x.logo)||""; mostrarLogoForm();
   $("compStatus").textContent="Retificações e editais de convocação: o app atualiza datas, horários, portões e composição das fases conforme o novo edital.";
   renderComplementares();
   mostrarAnexo("boleto", x&&x.boleto_arquivo&&x.boleto_arquivo.nome);
@@ -790,6 +823,7 @@ $("form").addEventListener("submit", e=>{
   dados.tipo=tipoAtual;
   dados.fases=lerFasesDoForm().map((f,i)=>({...f, nome:f.nome||`Fase ${i+1}`}));
   dados.complementares=compForm;
+  dados.logo=logoForm;
   for(const c of compForm){ const p=pendentes["comp:"+c.uid]; if(p&&p!=="remover") arq("gravar",`${formId}:comp:${c.uid}`,p).catch(()=>{}); }
   for(const f of dados.fases){ const p=pendentes["res:"+f.uid]; if(p&&p!=="remover"){ arq("gravar",`${formId}:res:${f.uid}`,p).catch(()=>{}); f.resultado_arquivo={nome:p.name}; } }
   dados.atualizado=new Date().toISOString();
@@ -847,6 +881,8 @@ $("arqBoleto").onchange=async e=>{
 $("btnTirarBoleto").onclick=()=>{ pendentes.boleto="remover"; $("boletoAnexo").hidden=true; };
 $("btnTirarEdital").onclick=()=>{ pendentes.edital="remover"; $("editalAnexo").hidden=true; };
 
+function mostrarLogoForm(){ const im=$("logoPrev"); if(!im) return; im.hidden=!logoForm; if(logoForm) im.src=logoForm; }
+
 // ---------- Editais complementares ----------
 function renderComplementares(){
   $("compLista").innerHTML = compForm.map((c,k)=>`<li>
@@ -866,13 +902,20 @@ $("arqComplementar").onchange=async e=>{
 async function aplicarComplementar(f, st, btn){
   btn.disabled=true; st.textContent="Lendo o edital complementar…";
   try{
-    const texto=await textoDoPdf(f, 500);
+    const candidato={ nome:(usuarioAtual&&usuarioAtual.nome)||"", inscricao:$("f_inscricao").value };
+    const texto=await textoDoPdf(f, 3000, {
+      aoProgredir:(i,n)=>{ if(n>40) st.textContent=`Lendo o edital complementar… página ${i} de ${n}`; },
+      // listas enormes: para de ler quando encontra você (depois de ler o cabeçalho)
+      parar:(pagina,tudo)=>{ const cab=tudo.slice(0,4000);
+        // só em listas de inscrições (num resultado é preciso ler tudo para calcular a classificação)
+        return tudo.length>3000 && /deferimento|deferid|homologa/i.test(cab) && !/nota|pontua|acertos/i.test(cab) && acharCandidato(pagina,candidato)>=0; }
+    });
     if(texto.replace(/\s/g,"").length<100){ st.textContent="Não encontrei texto nesse PDF (parece imagem). Atualize as fases manualmente."; return; }
     const r=interpretarEdital(texto, tipoAtual);
     const alteracoes=[], destaques=[];
     const fmtT=v=>v||"vazio", fmtD=v=>v?fmtCurta(v):"sem data";
     // listas com o nome do candidato: inscrições homologadas e resultados
-    const lista=lerListaDoCandidato(texto, { nome:(usuarioAtual&&usuarioAtual.nome)||"", inscricao:$("f_inscricao").value }, tipoAtual);
+    const lista=lerListaDoCandidato(texto, candidato, tipoAtual);
     if(lista.tipoLista==="homologacao"){
       if(lista.encontrado){
         if(lista.inscricao && lista.inscricao!==$("f_inscricao").value){ alteracoes.push(`Nº de inscrição: ${lista.inscricao} (encontrado na lista de inscrições homologadas)`); $("f_inscricao").value=lista.inscricao; $("f_inscricao").classList.add("auto"); }
@@ -1171,12 +1214,14 @@ $("arqEdital").onchange=async e=>{
   if(lerFasesDoForm().some(f=>f.data||f.horario||f.situacao!=="Aguardando")){
     // concurso já preenchido: o novo PDF é tratado como edital complementar (atualiza em vez de só preencher vazios)
     st.textContent="Este concurso já tem fases preenchidas: tratei o PDF como edital complementar (veja a seção Editais complementares).";
+    if(!logoForm) extrairLogo(f).then(u=>{ if(u){ logoForm=u; mostrarLogoForm(); } });   // concursos antigos ganham a logo ao juntar o edital de abertura
     await aplicarComplementar(f, $("compStatus"), $("btnComplementar"));
     $("compStatus").scrollIntoView({block:"center",behavior:"smooth"});
     return;
   }
   btn.disabled=true; st.textContent="Lendo o edital…";
   pendentes.edital=f; mostrarAnexo("edital", f.name);
+  extrairLogo(f).then(u=>{ if(u){ logoForm=u; mostrarLogoForm(); } });
   try{
     const texto=await textoDoPdf(f);
     if(texto.replace(/\s/g,"").length<300){ st.textContent="Não encontrei texto nesse PDF. Ele parece ser escaneado (imagem); preencha manualmente."; return; }
