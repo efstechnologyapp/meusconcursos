@@ -1,6 +1,6 @@
 // Guarda os arquivos do app para funcionar sem internet
-const CACHE = "meus-concursos-v10";
-const ARQUIVOS = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png", "./edital.js", "./boleto.js"];
+const CACHE = "meus-concursos-v12";
+const ARQUIVOS = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png", "./edital.js", "./boleto.js", "./config.js"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ARQUIVOS)));
@@ -14,6 +14,7 @@ self.addEventListener("activate", e => {
 
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
+  if (new URL(e.request.url).origin !== self.location.origin) return;   // login, Apps Script e bibliotecas externas vão direto à rede
   e.respondWith(
     fetch(e.request)
       .then(r => { const copia = r.clone(); caches.open(CACHE).then(c => c.put(e.request, copia)); return r; })

@@ -173,10 +173,53 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .fase.sub{border:none;border-left:4px solid var(--accent);border-radius:0 10px 10px 0;background:var(--bg);padding:8px 10px}
 .sub-tit{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--brand);font-weight:700}
 .tl-grupo{border-left:3px solid var(--accent);padding-left:8px;margin-top:6px}
+.tela{min-height:calc(100vh - 80px);display:flex;align-items:center;justify-content:center}
+.tela-cartao{width:min(420px,100%);background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:28px 24px;display:flex;flex-direction:column;gap:14px;text-align:center}
+.tela-cartao h2{font-family:var(--f-display);font-size:26px;margin:0}
+.gbtn{display:flex;justify-content:center;min-height:44px}
+.codigo{font-family:var(--f-mono);font-size:28px;letter-spacing:10px;text-align:center;padding:10px}
+.tela-acoes{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.tela-acoes button{font-size:13px;padding:7px 12px}
+.usuario{display:flex;align-items:center;gap:8px;justify-content:flex-end;font-size:13px;color:var(--muted)}
+.usuario img{width:26px;height:26px;border-radius:50%}
+.usuario button{font-size:12px;padding:5px 10px}
+.sinc{margin-right:auto;border:none;background:transparent;padding:2px 0;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;text-align:left}
+.sinc::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none}
+.sinc[data-estado="rodando"]::before,.sinc[data-estado="pendente"]::before{background:var(--accent)}
+.sinc[data-estado="offline"]::before,.sinc[data-estado="erro"]::before{background:var(--danger)}
+.usuario{flex-wrap:wrap}
 </style>
 </head>
 <body>
-<div class="wrap">
+<section class="tela" id="telaLogin" hidden>
+  <div class="tela-cartao">
+    <h1>Meus <mark>Concursos</mark></h1>
+    <p class="sub">Organize provas, fases, boletos e resultados dos concursos que você vai fazer.</p>
+    <div id="gbtn" class="gbtn"></div>
+    <p class="note" id="loginStatus">Entre com sua conta Google. No primeiro acesso, enviamos um código ao seu e-mail para confirmar que ele é seu.</p>
+  </div>
+</section>
+
+<section class="tela" id="telaCodigo" hidden>
+  <form class="tela-cartao" id="formCodigo">
+    <h2>Confirme seu e-mail</h2>
+    <p class="sub">Enviamos um código de 6 dígitos para <b id="codEmail"></b>. Digite-o abaixo para liberar o acesso.</p>
+    <input id="codigo" class="codigo" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" aria-label="Código de 6 dígitos">
+    <button class="primary" type="submit" id="btnConfirmar">Confirmar e entrar</button>
+    <p class="note" id="codStatus">Confira também a caixa de spam.</p>
+    <div class="tela-acoes">
+      <button type="button" id="btnReenviar">Reenviar código</button>
+      <button type="button" id="btnOutraConta">Usar outra conta</button>
+    </div>
+  </form>
+</section>
+
+<div class="wrap" id="app" hidden>
+  <div class="usuario" id="usuario" hidden>
+    <button type="button" class="sinc" id="sincStatus" title="Sincronizar agora"></button>
+    <img id="usuFoto" alt="" referrerpolicy="no-referrer"><span id="usuEmail"></span>
+    <button type="button" id="btnSair">Sair</button>
+  </div>
   <header>
     <div>
       <h1>Meus <mark>Concursos</mark></h1>
@@ -195,7 +238,7 @@ fieldset{border:none;padding:0;margin:0;display:contents}
     <button type="button" id="btnImportar">Restaurar backup</button>
     <input type="file" id="arqBackup" accept=".json,application/json" hidden>
   </div>
-  <p class="note" style="text-align:center;margin:0">Seus dados ficam salvos neste navegador. Faça backup de vez em quando.</p>
+  <p class="note" style="text-align:center;margin:0">Seus concursos e anexos são sincronizados com a sua conta e aparecem em qualquer aparelho em que você entrar. O backup em arquivo é opcional.</p>
 </div>
 
 <dialog id="dlgVer"><div class="dlg" id="verConteudo"></div></dialog>
@@ -280,6 +323,7 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 
 <div class="toast" id="toast" hidden></div>
 
+<script src="config.js"></script>
 <script src="edital.js"></script>
 <script src="boleto.js"></script>
 <script>
@@ -314,9 +358,18 @@ function normalizar(x){
   if(!STATUS.includes(x.status)) x.status = STATUS[STATUS_ANTIGO[x.status] ?? 0];
   return x;
 }
-function carregar(){ try{ itens=(JSON.parse(localStorage.getItem(CHAVE))||[]).map(normalizar); }catch(e){ itens=[]; } }
-function salvar(){
-  try{ localStorage.setItem(CHAVE,JSON.stringify(itens)); return true; }
+let usuarioAtual=null, excluidos={};
+const chaveUsuario=base=>base+(usuarioAtual?":"+usuarioAtual.email:"");
+function carregar(){
+  try{ itens=(JSON.parse(localStorage.getItem(chaveUsuario(CHAVE)))||[]).map(normalizar); }catch(e){ itens=[]; }
+  try{ excluidos=JSON.parse(localStorage.getItem(chaveUsuario("meus-concursos-excluidos")))||{}; }catch(e){ excluidos={}; }
+}
+function salvar(opcoes={}){
+  try{
+    localStorage.setItem(chaveUsuario(CHAVE),JSON.stringify(itens));
+    localStorage.setItem(chaveUsuario("meus-concursos-excluidos"),JSON.stringify(excluidos));
+    if(!opcoes.remoto) marcarAlteracao();
+    return true; }
   catch(e){ toast("Não foi possível salvar neste navegador."); return false; }
 }
 function novoId(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
@@ -337,7 +390,8 @@ async function arq(modo, chave, valor){
 const urlsAbertas=[];
 async function urlDoArquivo(id, tipo){
   const p=pendentes[tipo];
-  const blob = (p && p!=="remover") ? p : (p==="remover" ? null : await arq("ler", `${id}:${tipo}`).catch(()=>null));
+  let blob = (p && p!=="remover") ? p : (p==="remover" ? null : await arq("ler", `${id}:${tipo}`).catch(()=>null));
+  if(!blob && p!=="remover") blob = await baixarDaNuvem(`${id}:${tipo}`);
   if(!blob) return null;
   const u=URL.createObjectURL(blob); urlsAbertas.push(u); return u;
 }
@@ -473,7 +527,7 @@ function abrirVer(id){
   $("btnExcluir").onclick=()=>{
     $("verAcoes").innerHTML=`<span class="note" style="margin-right:auto">Excluir este concurso?</span><button type="button" id="nao">Cancelar</button><button type="button" class="primary" id="sim" style="background:var(--danger);border-color:var(--danger)">Excluir</button>`;
     $("nao").onclick=()=>abrirVer(id);
-    $("sim").onclick=()=>{ itens=itens.filter(i=>i.id!==id); salvar(); arq("apagar",id+":edital").catch(()=>{}); arq("apagar",id+":boleto").catch(()=>{}); (x.complementares||[]).forEach(c=>arq("apagar",`${id}:comp:${c.uid}`).catch(()=>{})); render(); $("dlgVer").close(); toast("Concurso excluído"); };
+    $("sim").onclick=()=>{ itens=itens.filter(i=>i.id!==id); excluidos[id]=new Date().toISOString(); salvar(); arq("apagar",id+":edital").catch(()=>{}); arq("apagar",id+":boleto").catch(()=>{}); (x.complementares||[]).forEach(c=>arq("apagar",`${id}:comp:${c.uid}`).catch(()=>{})); render(); $("dlgVer").close(); toast("Concurso excluído"); };
   };
   $("dlgVer").showModal();
 }
@@ -859,13 +913,219 @@ $("arqComplementar").onchange=async e=>{
   }finally{ btn.disabled=false; }
 };
 
+// ---------- Login com Google + confirmação de e-mail ----------
+const CHAVE_SESSAO="meus-concursos-sessao", CHAVE_APARELHO="meus-concursos-aparelho";
+const cfg=window.CONFIG||{};
+let tokenGoogle=null, perfil=null, esperaReenvio=0;
+const lerJSON=(k,p)=>{ try{ return JSON.parse(localStorage.getItem(k))||p; }catch(e){ return p; } };
+const gravarJSON=(k,v)=>{ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} };
+function decodificarJWT(t){ const b=t.split(".")[1].replace(/-/g,"+").replace(/_/g,"/"); return JSON.parse(decodeURIComponent(escape(atob(b)))); }
+function mostrarTela(qual){
+  $("telaLogin").hidden = qual!=="login"; $("telaCodigo").hidden = qual!=="codigo"; $("app").hidden = qual!=="app";
+}
+function entrarNoApp(sessao){
+  usuarioAtual=sessao;
+  // dados usados antes do login passam a ser desta conta
+  try{ const antigo=localStorage.getItem(CHAVE); if(antigo && !localStorage.getItem(chaveUsuario(CHAVE))){ localStorage.setItem(chaveUsuario(CHAVE),antigo); localStorage.removeItem(CHAVE); localStorage.setItem(chaveUsuario("meus-concursos-pendente"),"1"); } }catch(e){}
+  carregar();
+  mostrarTela("app");
+  $("usuario").hidden=false; $("usuEmail").textContent=sessao.email;
+  if(sessao.foto){ $("usuFoto").src=sessao.foto; $("usuFoto").hidden=false; } else $("usuFoto").hidden=true;
+  render();
+  iniciarSincronizacao();
+}
+function carregarGIS(){
+  if(window.google&&google.accounts&&google.accounts.id) return Promise.resolve();
+  return new Promise((ok,falha)=>{ const s=document.createElement("script"); s.src="https://accounts.google.com/gsi/client"; s.async=true; s.onload=ok; s.onerror=()=>falha(new Error("sem-internet")); document.head.appendChild(s); });
+}
+async function iniciarLogin(){
+  const sessao=lerJSON(CHAVE_SESSAO,null);
+  if(sessao && sessao.confirmado && sessao.sessao){ entrarNoApp(sessao); return; }
+  mostrarTela("login");
+  if(!cfg.GOOGLE_CLIENT_ID || !cfg.APPS_SCRIPT_URL){
+    $("loginStatus").textContent="O login ainda não foi configurado: preencha o ID do cliente Google e a URL do Apps Script no arquivo config.js (veja CONFIGURAR-LOGIN.md).";
+    return;
+  }
+  try{
+    await carregarGIS();
+    google.accounts.id.initialize({ client_id:cfg.GOOGLE_CLIENT_ID, callback:aoEntrarComGoogle, auto_select:true, ux_mode:"popup" });
+    google.accounts.id.renderButton($("gbtn"), { theme:"filled_blue", size:"large", shape:"pill", text:"signin_with", locale:"pt-BR", width:280 });
+  }catch(e){ $("loginStatus").textContent="Não foi possível carregar o login do Google. Verifique a internet e recarregue a página."; }
+}
+async function aoEntrarComGoogle(resp){
+  tokenGoogle=resp.credential;
+  const p=decodificarJWT(tokenGoogle);
+  perfil={ email:String(p.email||"").toLowerCase(), nome:p.name||"", foto:p.picture||"" };
+  if(!p.email_verified){ $("loginStatus").textContent="Essa conta Google não tem e-mail verificado. Use outra conta."; return; }
+  const aparelho=lerJSON(CHAVE_APARELHO,{});
+  if(aparelho[perfil.email]){ perfil.sessao=aparelho[perfil.email]; concluirLogin(); return; }
+  $("codEmail").textContent=perfil.email; $("codigo").value="";
+  mostrarTela("codigo"); $("codigo").focus();
+  enviarCodigo();
+}
+async function chamarScript(params){
+  const r=await fetch(cfg.APPS_SCRIPT_URL+"?"+new URLSearchParams(params).toString(), { redirect:"follow" });
+  if(!r.ok) throw new Error("http");
+  return r.json();
+}
+async function enviarCodigo(){
+  const st=$("codStatus"); st.textContent="Enviando o código para o seu e-mail…";
+  try{
+    const r=await chamarScript({ acao:"enviar", email:perfil.email, token:tokenGoogle });
+    st.textContent = r.ok ? `Código enviado. Ele vale por ${r.validadeMin||10} minutos; confira também a caixa de spam.` : (r.erro||"Não foi possível enviar o código.");
+    if(r.ok){ esperaReenvio=Date.now()+60000; atualizarReenvio(); }
+  }catch(e){ st.textContent="Não foi possível falar com o servidor de confirmação. Verifique a internet e tente reenviar."; }
+}
+function atualizarReenvio(){
+  const falta=Math.ceil((esperaReenvio-Date.now())/1000), b=$("btnReenviar");
+  b.disabled=falta>0; b.textContent = falta>0 ? `Reenviar código (${falta}s)` : "Reenviar código";
+  if(falta>0) setTimeout(atualizarReenvio,1000);
+}
+$("btnReenviar").onclick=()=>enviarCodigo();
+$("btnOutraConta").onclick=()=>{ try{ google.accounts.id.disableAutoSelect(); }catch(e){} tokenGoogle=null; perfil=null; mostrarTela("login"); };
+$("codigo").addEventListener("input",e=>{ e.target.value=e.target.value.replace(/\D/g,"").slice(0,6); });
+$("formCodigo").addEventListener("submit", async e=>{
+  e.preventDefault();
+  const cod=$("codigo").value, st=$("codStatus"), b=$("btnConfirmar");
+  if(cod.length!==6){ st.textContent="Digite os 6 dígitos do código."; return; }
+  b.disabled=true; st.textContent="Conferindo…";
+  try{
+    const r=await chamarScript({ acao:"verificar", email:perfil.email, codigo:cod });
+    if(r.ok){ const a=lerJSON(CHAVE_APARELHO,{}); a[perfil.email]=r.sessao||""; gravarJSON(CHAVE_APARELHO,a); perfil.sessao=r.sessao||""; concluirLogin(); }
+    else st.textContent=r.erro||"Código incorreto.";
+  }catch(err){ st.textContent="Não foi possível conferir agora. Verifique a internet e tente de novo."; }
+  finally{ b.disabled=false; }
+});
+function concluirLogin(){
+  const sessao={ ...perfil, confirmado:true, desde:new Date().toISOString() };
+  gravarJSON(CHAVE_SESSAO,sessao); entrarNoApp(sessao); toast("E-mail confirmado. Bem-vindo!");
+}
+$("btnSair").onclick=()=>{
+  pararSincronizacao(); usuarioAtual=null; itens=[]; excluidos={};
+  try{ localStorage.removeItem(CHAVE_SESSAO); }catch(e){}
+  try{ google.accounts.id.disableAutoSelect(); }catch(e){}
+  $("usuario").hidden=true; iniciarLogin();
+};
+
+// ---------- Sincronização entre aparelhos (Apps Script + Google Drive) ----------
+const sinc={ rodando:false, versaoLocal:0, timer:null, intervalo:null, rev:0 };
+const chaveRev=()=>chaveUsuario("meus-concursos-rev"), chavePend=()=>chaveUsuario("meus-concursos-pendente");
+const temPendencia=()=>{ try{ return localStorage.getItem(chavePend())==="1"; }catch(e){ return false; } };
+function marcarAlteracao(){
+  if(!usuarioAtual) return;
+  sinc.versaoLocal++;
+  try{ localStorage.setItem(chavePend(),"1"); }catch(e){}
+  mostrarSinc("pendente");
+  clearTimeout(sinc.timer); sinc.timer=setTimeout(sincronizar,1500);
+}
+function mostrarSinc(estado, extra){
+  const el=$("sincStatus"); if(!el) return;
+  const hora=new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+  const t={ ok:`Sincronizado às ${hora}`, rodando:"Sincronizando…", pendente:"Alterações a enviar…",
+            offline:"Sem conexão — as alterações serão enviadas quando a internet voltar", erro:"Não foi possível sincronizar"+(extra?": "+extra:"") };
+  el.textContent=t[estado]||""; el.dataset.estado=estado;
+}
+async function postScript(obj){
+  const r=await fetch(cfg.APPS_SCRIPT_URL,{ method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify(obj), redirect:"follow" });
+  if(!r.ok) throw new Error("http");
+  return r.json();
+}
+// mesma regra do servidor: vale a versão mais recente de cada concurso; exclusões vencem edições anteriores
+function mesclarDados(a,b){
+  const exc={...(a.excluidos||{})};
+  for(const [id,t] of Object.entries(b.excluidos||{})) if(!exc[id]||t>exc[id]) exc[id]=t;
+  const porId={}; for(const x of a.itens||[]) porId[x.id]=x;
+  for(const x of b.itens||[]){ const at=porId[x.id]; if(!at||String(x.atualizado||"")>String(at.atualizado||"")) porId[x.id]=x; }
+  return { itens:Object.values(porId).filter(x=>!(exc[x.id]&&exc[x.id]>=String(x.atualizado||""))), excluidos:exc };
+}
+function sessaoExpirada(){
+  const a=lerJSON(CHAVE_APARELHO,{}); if(usuarioAtual) delete a[usuarioAtual.email]; gravarJSON(CHAVE_APARELHO,a);
+  try{ localStorage.removeItem(CHAVE_SESSAO); }catch(e){}
+  pararSincronizacao(); toast("Sua sessão expirou. Entre de novo para continuar sincronizando.");
+  $("usuario").hidden=true; usuarioAtual=null; iniciarLogin();
+}
+async function sincronizar(){
+  if(!usuarioAtual || !usuarioAtual.sessao || !cfg.APPS_SCRIPT_URL || sinc.rodando) return;
+  if(!navigator.onLine){ mostrarSinc("offline"); return; }
+  sinc.rodando=true; clearTimeout(sinc.timer); mostrarSinc("rodando");
+  const versaoEnviada=sinc.versaoLocal;
+  try{
+    const r=await postScript({ acao:"sincronizar", sessao:usuarioAtual.sessao, itens, excluidos });
+    if(!r.ok){ if(r.sessaoInvalida){ sinc.rodando=false; sessaoExpirada(); return; } mostrarSinc("erro", r.erro); return; }
+    let resultado={ itens:r.itens, excluidos:r.excluidos };
+    const mudouDurante = sinc.versaoLocal!==versaoEnviada;
+    if(mudouDurante) resultado=mesclarDados(resultado,{ itens, excluidos });   // não perde o que foi salvo enquanto sincronizava
+    const antes=JSON.stringify(itens);
+    itens=resultado.itens.map(normalizar); excluidos=resultado.excluidos;
+    salvar({ remoto:true });
+    sinc.rev=r.rev; try{ localStorage.setItem(chaveRev(),String(r.rev)); if(!mudouDurante) localStorage.removeItem(chavePend()); }catch(e){}
+    if(JSON.stringify(itens)!==antes) render();
+    mostrarSinc(mudouDurante?"pendente":"ok");
+    enviarAnexos(r.arquivos||[]);
+    if(mudouDurante) sinc.timer=setTimeout(sincronizar,800);
+  }catch(e){ mostrarSinc(navigator.onLine?"erro":"offline", navigator.onLine?"servidor indisponível":""); }
+  finally{ sinc.rodando=false; }
+}
+async function verificarNovidades(){
+  if(!usuarioAtual || !usuarioAtual.sessao || sinc.rodando || document.visibilityState!=="visible") return;
+  if(temPendencia()){ sincronizar(); return; }
+  try{
+    const r=await postScript({ acao:"versao", sessao:usuarioAtual.sessao });
+    if(r.ok && String(r.rev)!==String(sinc.rev)) sincronizar();
+    else if(!r.ok && r.sessaoInvalida) sessaoExpirada();
+    else if(r.ok) mostrarSinc("ok");
+  }catch(e){ mostrarSinc("offline"); }
+}
+function chavesDeAnexos(){
+  const k=[];
+  for(const x of itens){
+    if(x.edital_arquivo) k.push(`${x.id}:edital`);
+    if(x.boleto_arquivo) k.push(`${x.id}:boleto`);
+    for(const f of x.fases||[]) if(f.resultado_arquivo) k.push(`${x.id}:res:${f.uid}`);
+    for(const c of x.complementares||[]) k.push(`${x.id}:comp:${c.uid}`);
+  }
+  return k;
+}
+const nomeNaNuvem=chave=>String(chave).replace(/[^\w.-]/g,"__");
+const paraBase64=blob=>new Promise((ok,falha)=>{ const r=new FileReader(); r.onload=()=>ok(String(r.result).split(",")[1]); r.onerror=falha; r.readAsDataURL(blob); });
+async function enviarAnexos(naNuvem){
+  const ja=new Set(naNuvem);
+  for(const chave of chavesDeAnexos()){
+    if(ja.has(nomeNaNuvem(chave))) continue;
+    const blob=await arq("ler",chave).catch(()=>null); if(!blob) continue;
+    try{ await postScript({ acao:"enviarArquivo", sessao:usuarioAtual.sessao, chave, nome:blob.name||chave, tipo:blob.type, base64:await paraBase64(blob) }); }catch(e){ return; }
+  }
+}
+async function baixarDaNuvem(chave){
+  if(!usuarioAtual || !usuarioAtual.sessao || !cfg.APPS_SCRIPT_URL) return null;
+  try{
+    const r=await postScript({ acao:"baixarArquivo", sessao:usuarioAtual.sessao, chave });
+    if(!r.ok) return null;
+    const bin=atob(r.base64), u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i);
+    const blob=new File([u8], r.nome||chave, { type:r.tipo||"application/octet-stream" });
+    arq("gravar",chave,blob).catch(()=>{});
+    return blob;
+  }catch(e){ return null; }
+}
+function iniciarSincronizacao(){
+  pararSincronizacao();
+  try{ sinc.rev=localStorage.getItem(chaveRev())||0; }catch(e){ sinc.rev=0; }
+  sincronizar();
+  sinc.intervalo=setInterval(verificarNovidades, 30000);
+}
+function pararSincronizacao(){ clearInterval(sinc.intervalo); clearTimeout(sinc.timer); sinc.intervalo=null; }
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") verificarNovidades(); });
+window.addEventListener("online",()=>sincronizar());
+window.addEventListener("offline",()=>mostrarSinc("offline"));
+$("sincStatus").onclick=()=>sincronizar();
+
 // ---------- Backup ----------
 $("btnExportar").onclick=()=>{
   const blob=new Blob([JSON.stringify({app:"meus-concursos",versao:2,itens},null,2)],{type:"application/json"});
   const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
   a.download=`backup-concursos-${new Date().toISOString().slice(0,10)}.json`;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
-  toast("Backup baixado (os PDFs anexados ficam só neste navegador).");
+  toast("Backup baixado (os PDFs anexados ficam na sua nuvem, não no arquivo).");
 };
 $("btnImportar").onclick=()=>$("arqBackup").click();
 $("arqBackup").onchange=async e=>{
@@ -874,7 +1134,7 @@ $("arqBackup").onchange=async e=>{
     const j=JSON.parse(await f.text()); const lista=Array.isArray(j)? j : j.itens;
     if(!Array.isArray(lista)) throw 0;
     const ids=new Set(itens.map(i=>i.id)); let n=0;
-    for(const x of lista){ if(x && x.nome){ if(!x.id||ids.has(x.id)) x.id=novoId(); itens.push(normalizar(x)); n++; } }
+    for(const x of lista){ if(x && x.nome){ if(!x.id||ids.has(x.id)) x.id=novoId(); x.atualizado=new Date().toISOString(); itens.push(normalizar(x)); n++; } }
     salvar(); render(); toast(`${n} concurso(s) restaurado(s)`);
   }catch(err){ toast("Esse arquivo não é um backup válido do app."); }
   e.target.value="";
@@ -957,7 +1217,7 @@ $("arqEdital").onchange=async e=>{
 $("form").addEventListener("input",e=>e.target.classList.remove("auto"));
 
 montarSeletor();
-carregar(); render();
+iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){

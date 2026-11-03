@@ -2,6 +2,10 @@
 
 App simples para organizar os concursos que vou fazer: data e horário da prova, local, instruções gerais, hospedagem, transporte e link do edital, com contagem regressiva até cada prova.
 
+## Login
+
+O app abre numa tela de login com Google. No primeiro acesso em cada aparelho, um código de 6 dígitos é enviado ao e-mail da conta e precisa ser digitado para liberar a tela inicial. Depois do login, os concursos e anexos são sincronizados automaticamente entre todos os aparelhos da conta (Google Drive, via Apps Script). Para ativar, siga **CONFIGURAR-LOGIN.md** (Google Cloud + Apps Script, gratuitos) e preencha o `config.js`.
+
 ## Como usar
 
 - Acesse o link do GitHub Pages deste repositório no Chrome.
@@ -35,7 +39,7 @@ A situação segue a ordem: pendente de inscrição → pendente de pagamento �
 
 ## Dados
 
-Os concursos ficam salvos no próprio navegador (localStorage). O edital e o boleto anexados ficam guardados no navegador (IndexedDB) e não entram no arquivo de backup. Use **Fazer backup** para baixar uma cópia em `.json` e **Restaurar backup** para recuperar ou levar para outro aparelho.
+Os concursos ficam salvos no navegador e sincronizados com a nuvem da conta. O edital e o boleto anexados ficam guardados no navegador (IndexedDB) e não entram no arquivo de backup. Use **Fazer backup** para baixar uma cópia em `.json` e **Restaurar backup** para recuperar ou levar para outro aparelho.
 
 ## Arquivos
 
@@ -45,5 +49,8 @@ Os concursos ficam salvos no próprio navegador (localStorage). O edital e o bol
 | `manifest.json` | Nome, cores e ícones para o Chrome instalar como app |
 | `edital.js` | Lê o PDF do edital e encontra os dados da prova |
 | `boleto.js` | Lê o boleto em PDF (linha digitável, vencimento e valor) |
+| `config.js` | ID do cliente Google e URL do Apps Script (preencher) |
+| `apps-script/Codigo.gs` | Servidor que envia e confere o código por e-mail (colar no Apps Script) |
+| `CONFIGURAR-LOGIN.md` | Passo a passo para ativar o login |
 | `sw.js` | Permite abrir o app sem internet |
 | `icon-192.png`, `icon-512.png` | Ícones do app |
