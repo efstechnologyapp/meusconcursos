@@ -922,7 +922,7 @@ $("form").addEventListener("submit", e=>{
   dados.fases=lerFasesDoForm().map((f,i)=>({...f, nome:f.nome||`Fase ${i+1}`}));
   dados.complementares=compForm;
   dados.logo=logoForm;
-  dados.vagas=lerVagasForm();
+  dados.vagas=lerVagasForm(); dados.vagasLidas=2;
   for(const c of compForm){ const p=pendentes["comp:"+c.uid]; if(p&&p!=="remover") arq("gravar",`${formId}:comp:${c.uid}`,p).catch(()=>{}); }
   for(const f of dados.fases){ const p=pendentes["res:"+f.uid]; if(p&&p!=="remover"){ arq("gravar",`${formId}:res:${f.uid}`,p).catch(()=>{}); f.resultado_arquivo={nome:p.name}; } }
   dados.atualizado=new Date().toISOString();
@@ -1109,13 +1109,14 @@ async function consertarCadastros(){
       const n=x.nome.replace(CORTE_NOME,"").trim();
       if(n.length>6 && n!==x.nome){ x.nome=n; x.atualizado=new Date().toISOString(); mudou=true; }
     }
-    if((!x.logo || x.vagas===undefined) && x.edital_arquivo){
+    if((!x.logo || (x.vagasLidas||0)<2) && x.edital_arquivo){
       try{
         const blob=await arq("ler",`${x.id}:edital`).catch(()=>null) || await baixarDaNuvem(`${x.id}:edital`);
         if(!blob) continue;
         if(!x.logo){ const u=await extrairLogo(blob); if(u){ x.logo=u; x.atualizado=new Date().toISOString(); mudou=true; } }
         // vagas do cargo, para concursos cadastrados antes desta função
-        if(x.vagas===undefined){ x.vagas=vagasDoEdital(await textoDoPdf(blob,25), x.cargo)||null; x.atualizado=new Date().toISOString(); mudou=true; }
+        // (versão 2 da leitura: corrige o TJMG, em que o rodapé da página era lido como linha do quadro)
+        if((x.vagasLidas||0)<2){ const v=vagasDoEdital(await textoDoPdf(blob,25), x.cargo); if(v) x.vagas=v; x.vagasLidas=2; x.atualizado=new Date().toISOString(); mudou=true; }
       }catch(e){}
     }
   }

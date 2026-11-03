@@ -412,7 +412,7 @@ function vagasDoEdital(texto, cargo) {
   // 2) quadro de vagas em colunas (uma linha por cargo)
   if (!v) {
     const tok = /(\d{1,4}\s*\+\s*CR\b\*?|\bCR\b\*?|\b\d{1,4}\b)/gi;
-    const limpar = l => l.replace(/^\d{1,2}(?:\.\d{1,2})+\.?\s/, " ").replace(/^\d{1,4}\s+(?=[A-Za-zÀ-ú])/, " ").replace(/[\d.]+\/\d{2,4}\b/g, " ").replace(/\bn[º°o]\.?\s*[\d.]+/gi, " ").replace(/R\$\s*[\d.,]+/g, " ").replace(/\d+(?:,\d+)?\s*%/g, " ").replace(/\b\d{1,3}(?:\.\d{3})+\b|\d+\/\d+/g, " ").replace(/\(\d+\)/g, " ");
+    const limpar = l => l.replace(/\b\d{1,2}\/\d{1,2}\/\d{2,4}\b|\b\d{1,2}[:h]\d{2}\b/g, " ").replace(/^\d{1,2}(?:\.\d{1,2})+\.?\s/, " ").replace(/^\d{1,4}\s+(?=[A-Za-zÀ-ú])/, " ").replace(/[\d.]+\/\d{2,4}\b/g, " ").replace(/\bn[º°o]\.?\s*[\d.]+/gi, " ").replace(/R\$\s*[\d.,]+/g, " ").replace(/\d+(?:,\d+)?\s*%/g, " ").replace(/\b\d{1,3}(?:\.\d{3})+\b|\d+\/\d+/g, " ").replace(/\(\d+\)/g, " ");
     const valores = l => (limpar(l).match(tok) || []).map(valorVaga);
     for (let a = 0; a < linhas.length && !v; a++) {
       if (!/quadro de vagas|cargos e vagas|das vagas|n[uú]mero de vagas|^vagas$|especialidade vagas/i.test(linhas[a])) continue;
