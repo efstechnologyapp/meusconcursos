@@ -1,6 +1,6 @@
 # Meus Concursos
 
-App simples para organizar os concursos que vou fazer: data e horário da prova, local, instruções gerais, hospedagem, transporte e link do edital, com contagem regressiva até cada prova.
+App simples para organizar os concursos que vou fazer: data e horário da prova, local, instruções gerais, transporte, hospedagem e link do edital, com contagem regressiva até cada prova.
 
 ## Login
 
@@ -11,6 +11,10 @@ O app abre numa tela de login com Google. No primeiro acesso em cada aparelho, u
 - Acesse o link do GitHub Pages deste repositório no Chrome.
 - Clique no ícone de instalar na barra de endereço (ou menu ⋮ → **Transmitir, salvar e compartilhar → Instalar página como app**).
 - No celular: menu ⋮ → **Adicionar à tela inicial**.
+
+## Vagas
+
+O app lê o quadro de vagas do edital para o cargo escolhido (tabela por cargo, tabela por categoria ou texto corrido) e mostra o total, a ampla concorrência, as vagas para pessoas com deficiência, negros, indígenas e quilombolas e se há cadastro de reserva (CR). Aparece no cartão, nos detalhes e no formulário (seção Tipo de cargo), onde pode ser corrigido.
 
 ## Fases por tipo de cargo
 
@@ -24,6 +28,13 @@ No cadastro, escolha o tipo de cargo e o formulário monta as fases daquela carr
 - Resultado: acertos (com aproveitamento), nota e classificação. Ao juntar o PDF do resultado, o app procura seu nº de inscrição (campo que aparece quando a situação passa a "Inscrição homologada") e preenche nota e classificação.
 
 - Fases no mesmo dia aparecem unificadas: data e local uma vez só, e o que é específico de cada prova (nome, situação, caráter, composição, resultado, observações) em destaque logo abaixo. Se começam no mesmo horário, os horários também são comuns; se são em turnos diferentes (ex.: objetiva de manhã e discursiva à tarde), cada prova mostra seu turno, início, término e fechamento dos portões.
+
+## Transporte e hospedagem
+
+Ficam fora do formulário do concurso. Ao abrir o concurso na tela inicial, cada viagem (fases no mesmo local: mesmo dia ou dia seguinte) tem dois ícones ao lado das fases:
+
+- **Avião (transporte):** escolha avião ou carro. No carro, data, horário e locais de ida e de volta. No avião, a ida e a volta são montadas por trechos, como no Google Voos: cada trecho tem cia aérea, nº do voo, aeroportos e horários de partida e chegada; **+ Conexão** acrescenta o trecho seguinte, já partindo do aeroporto de chegada do anterior. O app mostra o resumo (ex.: "FOR 06:10 → MCP 13:15 · 1 parada: conexão de 1h35 em BSB (troca para LATAM)") e o localizador. As datas já vêm sugeridas (dia anterior à primeira prova e dia seguinte à última).
+- **Hotel (hospedagem):** nome, endereço com preenchimento pelo CEP (ViaCEP), check-in e check-out (data e horário), plataforma, código da reserva e responsável. O botão **Preencher com print ou PDF da reserva** lê a confirmação (Booking, Airbnb, Hoteis.com, e-mail…) e preenche o que encontrar, destacando os campos para conferência. Há um link para abrir o endereço no mapa.
 
 ## Preencher com o edital
 
@@ -49,6 +60,7 @@ Os concursos ficam salvos no navegador e sincronizados com a nuvem da conta. O e
 | `manifest.json` | Nome, cores e ícones para o Chrome instalar como app |
 | `edital.js` | Lê o PDF do edital e encontra os dados da prova |
 | `boleto.js` | Lê o boleto em PDF (linha digitável, vencimento e valor) |
+| `viagem.js` | Transporte (voos com conexões ou carro) e hospedagem de cada viagem |
 | `config.js` | ID do cliente Google e URL do Apps Script (preencher) |
 | `apps-script/Codigo.gs` | Servidor que envia e confere o código por e-mail (colar no Apps Script) |
 | `CONFIGURAR-LOGIN.md` | Passo a passo para ativar o login |

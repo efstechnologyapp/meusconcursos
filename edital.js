@@ -267,6 +267,12 @@ function procurarDataDaFase(plano, f, corte) {
       }
       const h = horasNoTrecho(depoisFrase.slice(d.i));
       const ok = h.length && h[0].i < 260;
+      if (!ok) {
+        // horário numa frase seguinte do mesmo subitem ("... 24 de janeiro. A aplicação ocorrerá ... das 13h às 18h")
+        const item = plano.slice(fim, fim + 500).split(/\s\d{1,2}(?:\.\d{1,2}){1,3}\s/)[0];
+        const r = item.match(/\bdas\s+(\d{1,2})\s*(?:h|:)\s*(\d{2})?\s*(?:min)?\s*(?:[àa]s|at[ée])\s+(\d{1,2})\s*(?:h|:)\s*(\d{2})?/i);
+        if (r && !RUIDO.test(item.slice(0, r.index))) return { data, horario: `${pad(r[1])}:${r[2] || "00"}`, fim: `${pad(r[3])}:${r[4] || "00"}` };
+      }
       return { data, horario: ok ? h[0].v : "", fim: ok ? fimNoTrecho(depoisFrase.slice(d.i + h[0].i, d.i + h[0].i + 40)) : "" };
     }
     if (dAntes.length && !f.segundoDia) {
@@ -364,7 +370,116 @@ function interpretarEdital(textoBruto, tipoForcado, estrutura) {
            || plano.match(/cada (?:resposta correta|quest[aã]o)[^.]{0,30}?valer[aá]\s+(\d+(?:,\d+)?)\s*(?:\([^)]*\)\s*)?pontos?/i);
   if (ppq) r.pontosQuestao = parseFloat(ppq[1].replace(",", "."));
   r.duracoes = duracoesDasFases(plano, r.tipo);
+  r.vagas = vagasDoEdital(textoBruto, r.cargo);
   return r;
+}
+
+// ---------- Vagas do cargo ----------
+// devolve {total, ampla, pcd, negros, indigenas, quilombolas, cr} — valores como "15", "CR" ou "10 + CR"
+const CATS_VAGA = [
+  ["ampla", /\bampla\b|\bAC\b/i],
+  ["pcd", /pessoas?\s+com|candidatos?\s+com|defici[eê]ncia|\bPC[Dd]\b|\bPNE\b/i],
+  ["negros", /negr[oa]s|pret[oa]s|\bPN\b/i],
+  ["indigenas", /ind[ií]genas?|\bPI\b/i],
+  ["quilombolas", /quilombolas?|\bPQ\b/i]
+];
+function valorVaga(t) {
+  t = t.replace(/\*/g, "").replace(/\s+/g, " ").trim();
+  if (/^CR$/i.test(t)) return "CR";
+  const m = t.match(/^(\d+)(?:\s*\+\s*CR)?$/i);
+  if (!m) return t;
+  return String(+m[1]) + (/CR/i.test(t) ? " + CR" : "");
+}
+const numVaga = v => parseInt(v, 10) || 0;
+function vagasDoEdital(texto, cargo) {
+  const linhas = texto.split("\n").map(l => l.replace(/\s+/g, " ").trim());
+  const plano = linhas.join(" ");
+  const inicio = plano.slice(0, 40000);
+  const cr = /cadastro de reserva|\+\s*CR\b/i.test(inicio);
+  let v = null;
+
+  // 1) por extenso: "19 (dezenove) vagas para ampla concorrência, 01 (uma) vaga para pessoas com deficiência…"
+  const prosa = {};
+  const reP = /(\d{1,4})\s*(?:\([^)]{1,40}\)\s*)?vagas?\s+(?:para|destinadas?\s+(?:a|à|às|aos)|reservadas?\s+(?:a|à|às|aos))\s+(?:a\s+|as\s+|os\s+)?(ampla|pessoas? com defici\S*|candidatos? com defici\S*|negr\S*|pret\S*|ind[ií]gen\S*|quilombol\S*)/gi;
+  let m;
+  while ((m = reP.exec(inicio))) {
+    const c = CATS_VAGA.find(([, re]) => re.test(m[2]));
+    if (c && prosa[c[0]] === undefined) prosa[c[0]] = String(+m[1]);
+  }
+  // só vale se a distribuição bater com o total anunciado
+  if (prosa.ampla && Object.keys(prosa).length >= 3) v = prosa;
+
+  // 2) quadro de vagas em colunas (uma linha por cargo)
+  if (!v) {
+    const tok = /(\d{1,4}\s*\+\s*CR\b\*?|\bCR\b\*?|\b\d{1,4}\b)/gi;
+    const limpar = l => l.replace(/^\d{1,2}(?:\.\d{1,2})+\.?\s/, " ").replace(/^\d{1,4}\s+(?=[A-Za-zÀ-ú])/, " ").replace(/[\d.]+\/\d{2,4}\b/g, " ").replace(/\bn[º°o]\.?\s*[\d.]+/gi, " ").replace(/R\$\s*[\d.,]+/g, " ").replace(/\d+(?:,\d+)?\s*%/g, " ").replace(/\b\d{1,3}(?:\.\d{3})+\b|\d+\/\d+/g, " ").replace(/\(\d+\)/g, " ");
+    const valores = l => (limpar(l).match(tok) || []).map(valorVaga);
+    for (let a = 0; a < linhas.length && !v; a++) {
+      if (!/quadro de vagas|cargos e vagas|das vagas|n[uú]mero de vagas|^vagas$|especialidade vagas/i.test(linhas[a])) continue;
+      if (/reserva(?:das?)? (?:de |às |aos )?vagas|destinadas/i.test(linhas[a]) && !/quadro/i.test(linhas[a])) continue;
+      // cabeçalho: linhas até a primeira com 3+ valores
+      let k = a, cab = "";
+      while (k < Math.min(linhas.length, a + 14) && valores(linhas[k]).length < 3) { cab += " " + linhas[k]; k++; }
+      if (k >= a + 14) continue;
+      const ordem = CATS_VAGA.map(([n, re]) => [n, cab.search(re)]).filter(([, i]) => i >= 0).sort((x, y) => x[1] - y[1]).map(([n]) => n);
+      if (ordem.length < 2 || !ordem.includes("ampla")) continue;
+      // linhas da tabela
+      const rotulos = [];
+      for (let j = k; j < Math.min(linhas.length, k + 40); j++) {
+        if (j > k && /^\d{1,2}(?:\.\d{1,2})+\.?\s+\S/.test(linhas[j])) break;   // próximo subitem: acabou o quadro
+        if (linhas[j].split(" ").length > 16) continue;   // texto corrido, não é linha de tabela
+        const vs = valores(linhas[j]);
+        if (vs.length < 3) continue;
+        if (/^total\b/i.test(linhas[j])) continue;
+        const rot = [linhas[j - 1] && valores(linhas[j - 1]).length < 2 ? linhas[j - 1] : "", limpar(linhas[j]).replace(tok, " "), linhas[j + 1] && valores(linhas[j + 1]).length < 2 ? linhas[j + 1] : ""].join(" ");
+        // valores que continuam na linha de baixo (ex.: "de Direito 15 + CR")
+        let vals = vs;
+        if (linhas[j + 1] && valores(linhas[j + 1]).length && valores(linhas[j + 1]).length < 3 && vs.length < ordem.length + 1) vals = vs.concat(valores(linhas[j + 1]));
+        rotulos.push({ rot, vals });
+      }
+      if (!rotulos.length) continue;
+      const pal = s => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").match(/[a-z]{4,}/g) || [];
+      const alvo = pal(cargo).map(w => w.slice(0, 6));
+      const nota = r => pal(r.rot).filter(w => alvo.includes(w.slice(0, 6))).length;
+      rotulos.sort((x, y) => nota(y) - nota(x));
+      const vals = rotulos[0].vals;
+      // o total é o valor igual à soma dos demais (ou o maior)
+      let iT = vals.findIndex((t, i) => numVaga(t) && numVaga(t) === vals.reduce((s, u, j) => s + (j === i ? 0 : numVaga(u)), 0));
+      if (iT < 0) { const mx = Math.max(...vals.map(numVaga)); iT = vals.map(numVaga).lastIndexOf(mx); }
+      const resto = vals.filter((_, i) => i !== iT);
+      v = { total: vals[iT] };
+      ordem.forEach((n, i) => { if (resto[i] !== undefined) v[n] = resto[i]; });
+      // cabeçalhos quebrados em várias linhas podem trocar a ordem: a cota de negros (20–30%) é maior que a de PcD (5–10%)
+      if (v.pcd && v.negros && numVaga(v.pcd) > numVaga(v.negros)) [v.pcd, v.negros] = [v.negros, v.pcd];
+    }
+  }
+
+  // 3) quadro com uma linha por categoria ("AMPLA CONCORRÊNCIA 62", "PESSOAS COM DEFICIÊNCIA ... 10")
+  if (!v) {
+    const a = linhas.findIndex(l => /^ampla\b/i.test(l) && /\d+\s*$/.test(l));
+    if (a >= 0) {
+      v = {};
+      for (let j = a; j < Math.min(linhas.length, a + 20); j++) {
+        const c = CATS_VAGA.find(([, re]) => re.test(linhas[j].split(/\s+(?:lei|resolu|decreto|-)/i)[0]));
+        const n = linhas[j].match(/(\d{1,4})\s*$/);
+        if (c && n && v[c[0]] === undefined && !/%\s*$|\/\d{4}\s*$/.test(linhas[j])) v[c[0]] = String(+n[1]);
+      }
+      if (!v.ampla) v = null;
+    }
+  }
+  if (!v) {
+    const t = inicio.match(/(?:provimento|preenchimento)\s+de\s+(\d{1,4})\s*(?:\([^)]*\)\s*)?(?:vagas|cargos)/i);
+    if (!t) return cr ? { cr: true } : null;
+    v = { total: String(+t[1]) };
+  }
+  if (!v.total) {
+    const t = inicio.match(/(?:provimento|preenchimento)\s+de\s+(\d{1,4})\s*(?:\([^)]*\)\s*)?(?:vagas|cargos)/i);
+    const soma = ["ampla", "pcd", "negros", "indigenas", "quilombolas"].reduce((s, k) => s + numVaga(v[k] || ""), 0);
+    v.total = t ? String(+t[1]) : String(soma);
+  }
+  v.total = String(v.total).replace(/\s*\+\s*CR/i, "");
+  v.cr = cr;
+  return v;
 }
 
 // ---------- Composição das provas ----------
