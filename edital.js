@@ -129,6 +129,22 @@ const MODELOS = {
     fases: [ { nome: "Prova objetiva", carater: "EC", chave: /provas? objetivas?/i } ]}
 };
 
+// Formato de cada fase: objetiva, escrita ou sem prova (inscrição, oral, títulos...)
+function formatoDaFase(nome) {
+  if (/objetiva/i.test(nome)) return "objetiva";
+  if (/discursiva|senten[cç]a|escrita|reda[cç][aã]o|pe[cç]a/i.test(nome)) return "escrita";
+  return "nenhum";
+}
+for (const m of Object.values(MODELOS)) for (const f of m.fases) f.formato = formatoDaFase(f.nome);
+
+// Horário de término: "das 13h às 18h"
+function fimNoTrecho(t) {
+  const m = t.match(/(\d{1,2})\s*h\s*(\d{2})?\s*(?:min)?\s*(?:às|as|até)\s*(\d{1,2})\s*h\s*(\d{2})?/i);
+  if (!m) return "";
+  const h = +m[3], mi = m[4] ? +m[4] : 0;
+  return h <= 23 ? `${pad(h)}:${pad(mi)}` : "";
+}
+
 function detectarTipo(plano) {
   const inicio = plano.slice(0, 5000);
   let melhor = "outro", maior = 0;
@@ -171,12 +187,13 @@ function procurarDataDaFase(plano, f, corte) {
         return { data, horario: "" };
       }
       const h = horasNoTrecho(depoisFrase.slice(d.i));
-      return { data, horario: (h.length && h[0].i < 260) ? h[0].v : "" };
+      const ok = h.length && h[0].i < 260;
+      return { data, horario: ok ? h[0].v : "", fim: ok ? fimNoTrecho(depoisFrase.slice(d.i + h[0].i, d.i + h[0].i + 40)) : "" };
     }
     if (dAntes.length && !f.segundoDia) {
       const d = dAntes[dAntes.length - 1];
       const h = horasNoTrecho(antesFrase.slice(d.i));
-      return { data: d.v, horario: h.length ? h[0].v : "" };
+      return { data: d.v, horario: h.length ? h[0].v : "", fim: h.length ? fimNoTrecho(antesFrase.slice(d.i + h[0].i, d.i + h[0].i + 40)) : "" };
     }
   }
   return null;
@@ -248,21 +265,93 @@ function interpretarEdital(textoBruto, tipoForcado) {
             || plano.match(/fechamento dos port[oõ]es[^.]{0,60}?(?:às|as)\s*(\d{1,2}\s*h\s*\d{0,2})/i);
   if (port) { const h = horasNoTrecho(port[1]); if (h.length) r.portoes = h[0].v; }
 
-  const frases = plano.split(/(?<=[.;])\s+(?=[A-ZÀ-Ú0-9])/);
-  const escolhidas = [], vistos = new Set();
-  for (const f of frases) {
-    if (f.length < 40 || f.length > 400 || INSTRUCOES_FORA.test(f)) continue;
-    const idx = INSTRUCOES_CHAVE.findIndex(re => re.test(f));
-    if (idx >= 0 && !vistos.has(idx)) { vistos.add(idx); escolhidas.push("• " + limpar(f.replace(/^[\d.]+\s*/, ""))); }
-    if (escolhidas.length >= 8) break;
-  }
-  if (escolhidas.length) r.instrucoes = escolhidas.join("\n");
+  r.instrucoes = instrucoesDeIdentificacao(plano);
 
   r.tipo = (tipoForcado && MODELOS[tipoForcado]) ? tipoForcado : detectarTipo(plano);
   r.fasesDatas = datasDasFases(plano, r.tipo);
   r.notas = notasDasFases(plano, r.tipo);
   r.portoesMin = regraPortoes(plano);
+  r.composicao = composicaoDasFases(plano, textoBruto.split("\n"), r.tipo);
   return r;
+}
+
+// ---------- Composição das provas ----------
+function numero(s) { return s ? +s : 0; }
+// Quadro de blocos/grupos: "Bloco I:" seguido das disciplinas, com o número de questões numa das linhas
+function blocosDoQuadro(linhasTexto) {
+  const blocos = []; let atual = null;
+  for (const bruta of linhasTexto) {
+    const l = bruta.trim();
+    const cab = l.match(/^(bloco|grupo|m[óo]dulo)\s+([ivx\d]+)\s*:?\s*(.*)$/i);
+    if (cab) {
+      atual = { nome: `${cab[1][0].toUpperCase()}${cab[1].slice(1).toLowerCase()} ${cab[2].toUpperCase()}`, qtd: 0, disciplinas: [] };
+      blocos.push(atual);
+      if (cab[3]) linhaDoBloco(atual, cab[3]);
+      continue;
+    }
+    if (!atual) continue;
+    if (/^total\b/i.test(l) || /^\d+(\.\d+)+\s/.test(l) || l.length > 120) { atual = null; if (blocos.length) break; continue; }
+    linhaDoBloco(atual, l);
+  }
+  return blocos.filter(b => b.qtd > 0 && b.disciplinas.length);
+}
+function linhaDoBloco(b, l) {
+  const m = l.match(/^(.*?)\s+(\d{1,3})$/);
+  if (m) { b.qtd = +m[2]; if (m[1].trim()) b.disciplinas.push(m[1].trim()); }
+  else if (l && !/^\d+$/.test(l)) b.disciplinas.push(l);
+}
+
+const RE_ITEM = /(\d{1,2})\s*\([^)]*\)\s*(quest(?:ão|ões)(?:\s+discursivas?)?(?:,?\s+na modalidade\s+estudo de caso|\s+de estudo de caso)?|pe[cç]as?(?:\s+[a-zà-ú]+){0,2}|disserta[cç](?:ão|ões)|pareceres?|senten[cç]as?)/gi;
+
+function itensEscritos(janela) {
+  const itens = [];
+  let m;
+  RE_ITEM.lastIndex = 0;
+  while ((m = RE_ITEM.exec(janela))) {
+    let tipo = limpar(m[2]).toLowerCase();
+    const chaveTipo = /pe[cç]a/i.test(tipo) ? "peca" : /disserta/i.test(tipo) ? "dissertacao" : /senten/i.test(tipo) ? "sentenca" : /parecer/i.test(tipo) ? "parecer" : "questao";
+    if (itens.some(i => i.chave === chaveTipo)) continue;
+    const depois = janela.slice(m.index + m[0].length, m.index + m[0].length + 110);
+    const lin = depois.match(/^[^.;]*?(?:de até|com|até)\s*(\d{1,3})\s*(?:\([^)]*\))?\s*linhas/i);
+    itens.push({ chave: chaveTipo, qtd: +m[1], tipo, linhas: lin ? +lin[1] : "" });
+  }
+  // "elaboração de texto de até 40 linhas" (peça, parecer ou dissertação sem número)
+  const texto = janela.match(/elabora[cç][aã]o de (?:um )?texto de até\s*(\d{1,3})\s*(?:\([^)]*\))?\s*linhas/i);
+  if (texto && !itens.some(i => i.chave === "texto")) itens.unshift({ chave: "texto", qtd: 1, tipo: "texto (peça, parecer, estudo de caso ou dissertação)", linhas: +texto[1] });
+  // "90 linhas para elaborar a peça" / "25 linhas para elaborar a resposta das questões"
+  const reLin = /(\d{1,3})\s*(?:\([^)]*\))?\s*linhas para elaborar\s+([^.;]{0,70})/gi;
+  while ((m = reLin.exec(janela))) {
+    const alvo = /pe[cç]a/i.test(m[2]) ? "peca" : /quest/i.test(m[2]) ? "questao" : null;
+    const it = itens.find(i => i.chave === alvo);
+    if (it && !it.linhas) it.linhas = +m[1];
+  }
+  return itens.map(({ chave, ...i }) => i);
+}
+
+function composicaoDasFases(plano, linhasTexto, tipo) {
+  const modelo = MODELOS[tipo] || MODELOS.outro;
+  const blocos = blocosDoQuadro(linhasTexto);
+  let objetivaUsada = false;
+  return modelo.fases.map(f => {
+    const c = { objetivas: null, escritas: [] };
+    if (f.formato === "objetiva") {
+      const re = new RegExp("(?:" + f.chave.source + ")[^.]{0,220}?(\\d{1,3})\\s*(?:\\([^)]*\\))?\\s*quest(?:ões|oes) de m[úu]ltipla escolha", "i");
+      const m = plano.match(re) || plano.match(/(\d{1,3})\s*(?:\([^)]*\))?\s*quest(?:ões|oes) de m[úu]ltipla escolha/i);
+      if (m || (!objetivaUsada && blocos.length)) {
+        const total = m ? +m[1] : blocos.reduce((s, b) => s + b.qtd, 0);
+        c.objetivas = { total, blocos: objetivaUsada ? [] : blocos.map(b => ({ nome: b.nome, qtd: b.qtd, disciplinas: b.disciplinas.join(", ") })) };
+        objetivaUsada = true;
+      }
+    } else if (f.formato === "escrita") {
+      const re = new RegExp("(?:" + f.chave.source + ")[\\s\\S]{0,450}?(?:consistir|compost|constitu[ií]d)", "gi");
+      let m, janela = "";
+      while ((m = re.exec(plano))) { janela = plano.slice(m.index, m.index + 1600).split(/\s\d{1,2}(?:\.\d{1,2})*\.?\s+(?:DA|DAS|DO|DOS)\s+[A-ZÀ-Ú]{3}/)[0]; if (RE_ITEM.test(janela) || /linhas/i.test(janela)) break; janela = ""; }
+      RE_ITEM.lastIndex = 0;
+      c.escritas = janela ? itensEscritos(janela) : [];
+      if (!c.escritas.length && /senten[cç]a/i.test(f.nome)) c.escritas = [{ qtd: 1, tipo: f.nome.replace(/^.*?–\s*/, "").toLowerCase(), linhas: "" }];
+    }
+    return c;
+  });
 }
 
 // Quando o edital não traz a data de uma fase, guarda a regra que ele dá
@@ -293,4 +382,29 @@ function regraPortoes(plano) {
   return m ? +m[1] : null;
 }
 
-if (typeof module !== "undefined") module.exports = { notasDasFases, regraPortoes, interpretarEdital, datasNoTrecho, MODELOS, detectarTipo, datasDasFases };
+// Instruções gerais: só o que o candidato precisa levar —
+// documentos de identificação aceitos (e os não aceitos) e a caneta permitida.
+function instrucoesDeIdentificacao(plano) {
+  const frases = plano.split(/(?<=[.;])\s+(?=\d{1,2}(?:\.\d{1,2})+\.?\s|[A-ZÀ-Ú])/)
+    .map(f => limpar(f.replace(/^(?:[A-ZÀ-Ú–\- ,]{6,}\s+)?\d{1,2}(?:\.\d{1,2})+\.?\s+/, "").replace(/\s\d{1,2}(?:\.\d{1,2})+\.?\s.*$/, "").replace(/\s+\d+(?:\.\d+)*\.?$/, "")));
+  const achar = (re, max = 900) => frases.find(f => f.length >= 30 && f.length <= max && re.test(f));
+  const partes = [];
+  const aceitos = achar(/(?:ser[aã]o|s[aã]o) considerados (?:como )?documentos? (?:de identidade|de identifica[cç][aã]o|oficiais)/i);
+  if (aceitos) partes.push("DOCUMENTOS ACEITOS: " + aceitos.replace(/^.*?considerados (?:como )?documentos? (?:de identidade|de identifica[cç][aã]o|oficiais)( de identidade)?:?\s*/i, ""));
+  const digitais = achar(/considerados (?:os seguintes )?documentos digitais/i);
+  if (digitais) partes.push("DOCUMENTOS DIGITAIS: " + digitais);
+  const naoAceitos = frases.filter(f => f.length <= 700 && /n[aã]o ser[aã]o aceitos?,?\s*(?:ainda,\s*)?(?:como documentos? de identi|documentos? digitais|c[oó]pias?|fotoc[oó]pias?)/i.test(f));
+  if (naoAceitos.length) partes.push("NÃO SÃO ACEITOS: " + naoAceitos.slice(0, 2).map(f => f.replace(/^n[aã]o ser[aã]o aceitos?,?\s*(?:como documentos? de identidade:?\s*)?/i, "")).map(f => f.replace(/[.;]\s*$/, "")).join("; ") + ".");
+  const original = frases.find(f => f.length <= 400 && /(identifica[cç][aã]o[^.]{0,80}documento (?:de identidade )?original|documento (?:de identidade )?original com foto|meio f[ií]sico)/i.test(f) && !/posse|requisitos|laudo|tempo adicional|perda|roubo|furto/i.test(f));
+  if (original) partes.push("ATENÇÃO: " + original);
+  const canetas = frases.filter(f => f.length <= 450 && /caneta esferogr[aá]fica/i.test(f));
+  const caneta = canetas.find(f => /transparente/i.test(f)) || canetas[0];
+  if (caneta) {
+    const cor = caneta.match(/tinta (?:azul|preta)(?: ou (?:azul|preta))?/i);
+    const transp = /transparente/i.test(caneta) ? ", de material transparente" : "";
+    partes.push("CANETA: esferográfica de " + (cor ? cor[0].toLowerCase() : "tinta indicada no edital") + transp + ".");
+  }
+  return partes.join("\n\n");
+}
+
+if (typeof module !== "undefined") module.exports = { composicaoDasFases, instrucoesDeIdentificacao, notasDasFases, regraPortoes, interpretarEdital, datasNoTrecho, MODELOS, detectarTipo, datasDasFases };

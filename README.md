@@ -12,13 +12,24 @@ App simples para organizar os concursos que vou fazer: data e horário da prova,
 
 No cadastro, escolha o tipo de cargo e o formulário monta as fases daquela carreira (Delegado, Juiz, Promotor, Analista/Técnico ou Outro). Cada fase tem data, horário, horário de fechamento dos portões, local, caráter e situação (aguardando, aprovado, reprovado). Dá para renomear, apagar e acrescentar fases.
 
+## O que cada fase guarda
+
+- Data, horário de início e de término e fechamento dos portões.
+- Local de prova: fases no mesmo dia ou no dia seguinte usam o mesmo local; com intervalo de 2 dias ou mais (ou fase ainda sem data), abre um campo de local para a fase.
+- Composição da prova: total de questões objetivas e os blocos/grupos com as disciplinas; nas provas escritas, a quantidade de questões, o tipo e o máximo de linhas.
+- Resultado: acertos (com aproveitamento), nota e classificação. Ao juntar o PDF do resultado, o app procura seu nome ou nº de inscrição e preenche nota e classificação.
+
 ## Preencher com o edital
 
 Ao cadastrar um concurso, clique em **Preencher com o edital (PDF)** e escolha o arquivo do edital. O app lê o texto no próprio navegador e identifica o tipo de cargo, monta as fases e tenta preencher concurso, cargo, banca, datas e horários das fases, fechamento dos portões, cidade e instruções gerais. Quando o edital não traz a data de uma fase (prova oral, inscrição definitiva etc.), o app guarda a regra do edital nas observações da fase. Os portões são preenchidos pelo horário informado ou calculados pela regra geral do edital (ex.: fecham 30 minutos antes do início). Para completar as datas depois, abra o concurso, clique em Editar e envie o edital de convocação: o app preenche só o que estiver vazio. Os campos preenchidos ficam destacados para conferência. PDFs escaneados (imagem) não funcionam.
 
+## Situação e boleto
+
+A situação segue a ordem: pendente de inscrição → pendente de pagamento → pagamento realizado, aguardando homologação → inscrição homologada, aguardando local de prova → local de prova divulgado. Em **Pendente de pagamento**, anexe o PDF do boleto: o app mostra o vencimento e o valor e deixa a linha digitável pronta para copiar e colar no app do banco.
+
 ## Dados
 
-Os concursos ficam salvos no próprio navegador (localStorage). Use **Fazer backup** para baixar uma cópia em `.json` e **Restaurar backup** para recuperar ou levar para outro aparelho.
+Os concursos ficam salvos no próprio navegador (localStorage). O edital e o boleto anexados ficam guardados no navegador (IndexedDB) e não entram no arquivo de backup. Use **Fazer backup** para baixar uma cópia em `.json` e **Restaurar backup** para recuperar ou levar para outro aparelho.
 
 ## Arquivos
 
@@ -27,5 +38,6 @@ Os concursos ficam salvos no próprio navegador (localStorage). Use **Fazer back
 | `index.html` | O app inteiro (tela, estilo e lógica) |
 | `manifest.json` | Nome, cores e ícones para o Chrome instalar como app |
 | `edital.js` | Lê o PDF do edital e encontra os dados da prova |
+| `boleto.js` | Lê o boleto em PDF (linha digitável, vencimento e valor) |
 | `sw.js` | Permite abrir o app sem internet |
 | `icon-192.png`, `icon-512.png` | Ícones do app |

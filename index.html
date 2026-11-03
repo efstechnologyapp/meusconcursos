@@ -116,6 +116,43 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .tl.ok::before{background:var(--ok);border-color:var(--ok)} .tl.bad::before{background:var(--danger);border-color:var(--danger)}
 .tl-head{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .tl .note{margin-top:2px}
+.ico{width:16px;height:16px;vertical-align:-3px;margin-right:4px}
+.anexo{flex-basis:100%;display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:14px}
+.anexo a{font-weight:600;overflow-wrap:anywhere}
+.anexo a::before{content:"PDF";font-family:var(--f-mono);font-size:11px;background:var(--danger);color:#fff;border-radius:4px;padding:1px 5px;margin-right:6px}
+.link-x{border:none;background:transparent;color:var(--danger);padding:2px 4px;font-size:13px}
+.boleto{border:1px dashed var(--brand);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px;background:var(--bg)}
+.boleto-top{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.boleto-top .note{flex:1 1 220px;min-width:0}
+.boleto-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.boleto-grid .full{grid-column:1/-1}
+.copiar{display:flex;gap:8px}
+.copiar input{font-family:var(--f-mono);font-size:13px;flex:1;min-width:0}
+.copiar button{flex:none;font-weight:600}
+.cod{font-family:var(--f-mono);font-size:13px;overflow-wrap:anywhere;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.count.warn{background:var(--danger);color:#fff}
+@media (max-width:520px){.boleto-grid{grid-template-columns:1fr}}
+.sec{border-top:1px dashed var(--line);padding-top:8px}
+.sec summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--ink);list-style:revert}
+.sec summary .note{font-weight:400;margin-left:6px}
+.sec[open]>summary{margin-bottom:8px}
+details.sec.auto{box-shadow:none;border-color:var(--accent)}
+details.sec.auto>summary{background:linear-gradient(transparent 60%,var(--accent) 60%);display:list-item}
+.comp{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.comp-tit{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+.comp .curto{max-width:180px}
+.linha-bloco{display:grid;grid-template-columns:110px 70px 1fr auto;gap:6px;align-items:center}
+.linha-esc{display:grid;grid-template-columns:64px 1fr 80px auto;gap:6px;align-items:center}
+.linha-bloco input,.linha-esc input,.comp input{font-size:14px;padding:6px 8px}
+.mini{font-size:13px;padding:5px 10px;align-self:flex-start}
+.res-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.res-grid input{font-size:14px;padding:6px 8px}
+.res-anexo{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin-top:8px}
+.res-anexo .note{flex:1 1 220px;min-width:0}
+.res-anexo button{font-size:13px;padding:6px 10px}
+.obs-fase textarea{min-height:52px;font-size:14px;padding:6px 8px}
+.local-nota{margin:0;padding:6px 0}
+@media (max-width:560px){.linha-bloco{grid-template-columns:1fr 70px auto}.linha-bloco input[data-f$="disciplinas"]{grid-column:1/-1;grid-row:2}.res-grid{grid-template-columns:1fr 1fr}}
 </style>
 </head>
 <body>
@@ -147,20 +184,41 @@ fieldset{border:none;padding:0;margin:0;display:contents}
   <form class="dlg" id="form">
     <div class="dlg-head"><h2 id="formTitulo">Novo concurso</h2><button type="button" class="close" data-close aria-label="Fechar">×</button></div>
     <div class="auto-box">
-      <button type="button" id="btnEdital">Preencher com o edital (PDF)</button>
+      <button type="button" id="btnEdital"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.4 11.6 12.3 20.7a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Preencher com o edital (PDF)</button>
       <input type="file" id="arqEdital" accept="application/pdf,.pdf" hidden>
-      <span class="note" id="editalStatus">Envie o PDF do edital e o app tenta preencher os campos. Confira antes de salvar.</span>
+      <span class="note" id="editalStatus">Envie o PDF do edital e o app tenta preencher os campos e as fases. Confira antes de salvar.</span>
+      <div class="anexo" id="editalAnexo" hidden>
+        <a id="lnkEdital" target="_blank" rel="noopener">edital.pdf</a>
+        <button type="button" class="link-x" id="btnTirarEdital">Remover</button>
+      </div>
     </div>
     <div class="grid">
       <label class="full">Concurso / órgão *<input id="f_nome" name="nome" required placeholder="Ex.: Tribunal de Justiça de Santa Catarina"></label>
       <label>Cargo (como está no edital)<input id="f_cargo" name="cargo" placeholder="Ex.: Juiz Substituto"></label>
       <label>Banca<input id="f_banca" name="banca" placeholder="Ex.: FGV"></label>
-      <label>Situação
-        <select id="f_status" name="status">
-          <option>Inscrição a fazer</option><option>Inscrito</option><option>Boleto pago</option>
-          <option>Em andamento</option><option>Aprovado</option><option>Encerrado</option>
-        </select></label>
-      <label>Link do edital<input id="f_edital" name="edital" type="url" placeholder="https://"></label>
+      <label>Seu nome completo (como na inscrição)<input id="f_candidato" name="candidato" autocomplete="name"></label>
+      <label>Nº de inscrição<input id="f_inscricao" name="inscricao" inputmode="numeric"></label>
+      <label class="full">Link do edital (site)<input id="f_edital" name="edital" type="url" placeholder="https://"></label>
+      <label class="full">Situação
+        <select id="f_status" name="status"></select></label>
+
+      <div class="full boleto" id="boletoBox" hidden>
+        <div class="boleto-top">
+          <button type="button" id="btnBoleto"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.4 11.6 12.3 20.7a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Anexar boleto (PDF)</button>
+          <input type="file" id="arqBoleto" accept="application/pdf,.pdf" hidden>
+          <span class="note" id="boletoStatus">Anexe o boleto para ver o vencimento e copiar o código de pagamento.</span>
+        </div>
+        <div class="anexo" id="boletoAnexo" hidden>
+          <a id="lnkBoleto" target="_blank" rel="noopener">boleto.pdf</a>
+          <button type="button" class="link-x" id="btnTirarBoleto">Remover</button>
+        </div>
+        <div class="boleto-grid">
+          <label>Vencimento<input id="f_boleto_venc" name="boleto_venc" type="date"></label>
+          <label>Valor<input id="f_boleto_valor" name="boleto_valor" placeholder="R$ 0,00"></label>
+          <label class="full">Linha digitável (código de barras)
+            <span class="copiar"><input id="f_boleto_linha" name="boleto_linha" inputmode="numeric" placeholder="Cole ou anexe o boleto"><button type="button" id="btnCopiarLinha">Copiar</button></span></label>
+        </div>
+      </div>
 
       <div class="legend">Tipo de cargo</div>
       <div class="full">
@@ -168,13 +226,14 @@ fieldset{border:none;padding:0;margin:0;display:contents}
         <p class="note" id="tipoBase"></p>
       </div>
 
+      <div class="legend">Local e instruções</div>
+      <label class="full">Cidade das provas<input id="f_cidade" name="cidade" placeholder="Ex.: Florianópolis/SC"></label>
+      <label class="full">Local de prova (1ª fase e fases no mesmo dia ou no dia seguinte)<input id="f_local_prova" name="local_prova" placeholder="Escola, endereço, bloco e sala (sai no cartão de confirmação)"></label>
+      <label class="full">Instruções gerais (documentos de identificação e caneta)<textarea id="f_instrucoes" name="instrucoes" rows="8" placeholder="Documentos de identificação aceitos e cor da caneta permitida"></textarea></label>
+
       <div class="legend">Fases do concurso</div>
       <div class="full fases" id="fasesBox"></div>
       <div class="full"><button type="button" id="btnAddFase">+ Adicionar fase</button></div>
-
-      <div class="legend">Local e instruções</div>
-      <label class="full">Cidade das provas<input id="f_cidade" name="cidade" placeholder="Ex.: Florianópolis/SC"></label>
-      <label class="full">Instruções gerais<textarea id="f_instrucoes" name="instrucoes" placeholder="Documento com foto, caneta preta de corpo transparente, proibido relógio…"></textarea></label>
 
       <div class="legend">Hospedagem</div>
       <label class="full">Hotel / pousada<input id="f_hosp_nome" name="hosp_nome"></label>
@@ -193,12 +252,25 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 <div class="toast" id="toast" hidden></div>
 
 <script src="edital.js"></script>
+<script src="boleto.js"></script>
 <script>
 const CHAVE="meus-concursos-dados";
 const MESES=["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
-const CAMPOS=["nome","cargo","banca","status","edital","cidade","instrucoes","hosp_nome","hosp_end","checkin","checkout","reserva","obs"];
+const CAMPOS=["nome","cargo","banca","inscricao","candidato","status","edital","boleto_venc","boleto_valor","boleto_linha","cidade","local_prova","instrucoes","hosp_nome","hosp_end","checkin","checkout","reserva","obs"];
 const CARATER={EC:"Eliminatória e classificatória",E:"Eliminatória",C:"Classificatória"};
 const SITUACOES=["Aguardando","Aprovado","Reprovado","Não fiz"];
+const STATUS=[
+  "Pendente de inscrição",
+  "Pendente de pagamento",
+  "Pagamento realizado, aguardando homologação da inscrição",
+  "Inscrição homologada, aguardando local de prova",
+  "Local de prova divulgado"
+];
+const STATUS_CURTO=["Inscrição pendente","Pagamento pendente","Aguardando homologação","Aguardando local de prova","Local divulgado"];
+const STATUS_ANTIGO={"Inscrição a fazer":0,"Inscrito":3,"Boleto pago":2,"Em andamento":4,"Aprovado":4,"Encerrado":4};
+const CLIP_SVG='<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.4 11.6 12.3 20.7a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const CHAVE_NOME="meus-concursos-nome";
+let formId=null, pendentes={};   // arquivos escolhidos no formulário, gravados ao salvar
 let itens=[], editandoId=null, tipoAtual="outro", fasesForm=[];
 const $=id=>document.getElementById(id);
 
@@ -208,6 +280,8 @@ function normalizar(x){
     x.fases = (x.data||x.horario||x.local) ? [{nome:"Prova",carater:"EC",data:x.data||"",horario:x.horario||"",portoes:x.portoes||"",local:x.local||"",situacao:"Aguardando"}] : [];
   }
   x.tipo = x.tipo && MODELOS[x.tipo] ? x.tipo : "outro";
+  x.fases = x.fases.map(f=>({...faseVazia(f.nome,f.carater,f.formato), ...f, uid:f.uid||novoId()}));
+  if(!STATUS.includes(x.status)) x.status = STATUS[STATUS_ANTIGO[x.status] ?? 0];
   return x;
 }
 function carregar(){ try{ itens=(JSON.parse(localStorage.getItem(CHAVE))||[]).map(normalizar); }catch(e){ itens=[]; } }
@@ -216,8 +290,32 @@ function salvar(){
   catch(e){ toast("Não foi possível salvar neste navegador."); return false; }
 }
 function novoId(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
-function faseVazia(nome="",carater="EC"){ return {nome,carater,data:"",horario:"",portoes:"",local:"",situacao:"Aguardando",obs:""}; }
-function fasesDoModelo(tipo){ return (MODELOS[tipo]||MODELOS.outro).fases.map(f=>faseVazia(f.nome,f.carater)); }
+function faseVazia(nome="",carater="EC",formato){ return {uid:novoId(),nome,carater,formato:formato||formatoDaFase(nome),data:"",horario:"",fim:"",portoes:"",local:"",situacao:"Aguardando",obs:"",objetivas:{total:"",blocos:[]},escritas:[],acertos:"",nota:"",classificacao:""}; }
+function fasesDoModelo(tipo){ return (MODELOS[tipo]||MODELOS.outro).fases.map(f=>faseVazia(f.nome,f.carater,f.formato)); }
+
+// ---------- Arquivos (edital e boleto) guardados no navegador ----------
+function abrirBanco(){
+  return new Promise((ok,falha)=>{ const r=indexedDB.open("meus-concursos-arquivos",1);
+    r.onupgradeneeded=()=>r.result.createObjectStore("arquivos"); r.onsuccess=()=>ok(r.result); r.onerror=()=>falha(r.error); });
+}
+async function arq(modo, chave, valor){
+  const db=await abrirBanco();
+  return new Promise((ok,falha)=>{ const tx=db.transaction("arquivos",modo==="ler"?"readonly":"readwrite"), st=tx.objectStore("arquivos");
+    const r = modo==="ler"? st.get(chave) : modo==="gravar"? st.put(valor,chave) : st.delete(chave);
+    r.onsuccess=()=>ok(r.result); r.onerror=()=>falha(r.error); });
+}
+const urlsAbertas=[];
+async function urlDoArquivo(id, tipo){
+  const p=pendentes[tipo];
+  const blob = (p && p!=="remover") ? p : (p==="remover" ? null : await arq("ler", `${id}:${tipo}`).catch(()=>null));
+  if(!blob) return null;
+  const u=URL.createObjectURL(blob); urlsAbertas.push(u); return u;
+}
+async function mostrarAnexo(tipo, nome){
+  const box=$(tipo==="edital"?"editalAnexo":"boletoAnexo"), lnk=$(tipo==="edital"?"lnkEdital":"lnkBoleto");
+  const u = nome ? await urlDoArquivo(formId, tipo) : null;
+  box.hidden=!u; if(u){ lnk.href=u; lnk.textContent=nome; lnk.title="Abrir "+nome; }
+}
 
 // ---------- Datas ----------
 function parseData(s){ if(!s) return null; const [y,m,d]=s.split("-").map(Number); return new Date(y,m-1,d); }
@@ -238,12 +336,12 @@ function toast(msg){ const t=$("toast"); t.textContent=msg; t.hidden=false; clea
 // Situação do concurso a partir das fases
 function andamento(x){
   const fases=x.fases||[];
-  const eliminado = fases.some(f=>f.situacao==="Reprovado"||f.situacao==="Não fiz") || x.status==="Encerrado";
+  const eliminado = fases.some(f=>f.situacao==="Reprovado"||f.situacao==="Não fiz");
   const futuras = fases.map((f,i)=>({f,i})).filter(o=>o.f.data && diasAte(o.f.data)>=0 && o.f.situacao==="Aguardando")
                        .sort((a,b)=>a.f.data.localeCompare(b.f.data));
   const semData = fases.map((f,i)=>({f,i})).filter(o=>!o.f.data && o.f.situacao==="Aguardando");
   const prox = futuras[0] || null;
-  const ativo = !eliminado && x.status!=="Aprovado" && (prox || semData.length>0 || !fases.length);
+  const ativo = !eliminado && (prox || semData.length>0 || !fases.length);
   return {prox, proxSemData: semData[0]||null, eliminado, ativo, total:fases.length};
 }
 
@@ -251,14 +349,17 @@ function andamento(x){
 function cardHTML(x){
   const a=andamento(x), f=a.prox&&a.prox.f;
   const d=f? parseData(f.data) : null;
-  const c = a.eliminado ? {t:"encerrado",c:"past"} : x.status==="Aprovado" ? {t:"aprovado",c:"ok"} : contagem(f? diasAte(f.data) : null);
-  const faseTxt = f ? `${f.nome}${f.horario?" · às "+f.horario:""}` : (a.ativo && a.proxSemData ? `${a.proxSemData.f.nome} · data a definir` : "");
+  let c = a.eliminado ? {t:"encerrado",c:"past"} : contagem(f? diasAte(f.data) : null);
+  const vb = x.status===STATUS[1] && x.boleto_venc ? diasAte(x.boleto_venc) : null;
+  const chipBoleto = vb===null ? "" : `<span class="count ${vb<=2?"warn":""}">${vb<0?"boleto vencido":vb===0?"boleto vence hoje":"boleto vence em "+vb+(vb===1?" dia":" dias")}</span>`;
+  const faseTxt = f ? `${f.nome}${f.horario?" · "+f.horario+(f.fim?"–"+f.fim:""):""}` : (a.ativo && a.proxSemData ? `${a.proxSemData.f.nome} · data a definir` : "");
   const sub=[x.cargo,x.banca].filter(Boolean).join(" · ");
-  const passo = (a.ativo && a.total>1) ? `<span class="chip">fase ${(f?a.prox.i:a.proxSemData?a.proxSemData.i:0)+1} de ${a.total}</span>` : (x.status?`<span class="chip">${esc(x.status)}</span>`:"");
+  const passo = (a.ativo && a.total>1) ? `<span class="chip">fase ${(f?a.prox.i:a.proxSemData?a.proxSemData.i:0)+1} de ${a.total}</span>` : "";
+  const stIdx=STATUS.indexOf(x.status), stChip = stIdx>=0 && a.ativo ? `<span class="chip">${esc(STATUS_CURTO[stIdx])}</span>` : "";
   return `<button class="card" type="button" data-id="${esc(x.id)}">
     <div class="date">${d?`<span class="d">${String(d.getDate()).padStart(2,"0")}</span><span class="m">${MESES[d.getMonth()]} ${String(d.getFullYear()).slice(2)}</span>`:`<span class="m">a definir</span>`}</div>
     <div class="info"><h3>${esc(x.nome)}</h3>${sub?`<p>${esc(sub)}</p>`:""}${faseTxt?`<p class="fase-prox">${esc(faseTxt)}</p>`:""}</div>
-    <div class="right"><span class="count ${c.c}">${c.t}</span>${passo}</div>
+    <div class="right"><span class="count ${c.c}">${c.t}</span>${chipBoleto}${stChip}${passo}</div>
   </button>`;
 }
 
@@ -284,32 +385,51 @@ function abrirVer(id){
   const linha=(k,v)=>v?`<dt>${k}</dt><dd>${esc(v)}</dd>`:"";
   const a=andamento(x);
   const hosp=linha("Hotel",x.hosp_nome)+linha("Endereço",x.hosp_end)+linha("Check-in",fmtCurta(x.checkin))+linha("Check-out",fmtCurta(x.checkout))+linha("Reserva",x.reserva);
+  const blocosLocal=blocosDeLocal(x.fases||[]);
   const fasesHTML=(x.fases||[]).map((f,i)=>{
     const atual = a.prox && a.prox.i===i;
     const sit = f.situacao||"Aguardando";
     const cls = sit==="Aprovado"?"ok":(sit==="Reprovado"||sit==="Não fiz")?"bad":"";
-    const quando=[f.data?fmtData(f.data):"data a definir", f.horario&&("às "+f.horario), f.portoes&&("portões fecham "+f.portoes)].filter(Boolean).join(" · ");
+    const quando=[f.data?fmtData(f.data):"data a definir", f.horario&&(f.fim?`das ${f.horario} às ${f.fim}`:"às "+f.horario), f.portoes&&("portões fecham "+f.portoes)].filter(Boolean).join(" · ");
+    const b=blocosLocal[i];
+    const local = b.raiz ? x.local_prova : b.herda!==undefined ? (x.fases[b.herda].local ? x.fases[b.herda].local+" (mesmo local da fase "+(b.herda+1)+")" : "") : f.local;
+    const comp=resumoComposicao(f);
+    const blocosTxt = temObjetiva(f) && f.objetivas && f.objetivas.blocos && f.objetivas.blocos.length ? f.objetivas.blocos.map(bl=>`${bl.nome}: ${bl.qtd} questões${bl.disciplinas?" ("+bl.disciplinas+")":""}`).join("\n") : "";
+    const res=[f.acertos!==""&&f.acertos!=null&&`${f.acertos} acertos`+(f.objetivas&&f.objetivas.total?` de ${f.objetivas.total}`:""), f.nota&&"nota "+f.nota, f.classificacao&&"classificação "+f.classificacao].filter(Boolean).join(" · ");
     return `<li class="tl ${atual?"atual":""} ${cls}">
       <div class="tl-head"><b>${esc(f.nome||"Fase "+(i+1))}</b><span class="chip ${cls}">${esc(sit)}</span></div>
-      <div class="note">${esc(quando)}${f.local?"<br>"+esc(f.local):""}</div>${f.obs?`<div class="note pre">${esc(f.obs)}</div>`:""}
+      <div class="note">${esc(quando)}${local?"<br>Local: "+esc(local):""}</div>
+      ${comp?`<div class="note"><b>Prova:</b> ${esc(comp)}</div>`:""}${blocosTxt?`<div class="note pre">${esc(blocosTxt)}</div>`:""}
+      ${res?`<div class="note"><b>Resultado:</b> ${esc(res)}</div>`:""}
+      ${f.obs?`<div class="note pre">${esc(f.obs)}</div>`:""}
       <div class="note">${esc(CARATER[f.carater]||"")}</div></li>`;
   }).join("");
   const c = a.eliminado ? {t:"encerrado",c:"past"} : contagem(a.prox? diasAte(a.prox.f.data) : null);
   $("verConteudo").innerHTML=`
     <div class="dlg-head"><div><h2>${esc(x.nome)}</h2><p class="sub">${esc([x.cargo,x.banca].filter(Boolean).join(" · "))}</p></div><button type="button" class="close" data-close aria-label="Fechar">×</button></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="count ${c.c}">${c.t}</span>${x.status?`<span class="chip">${esc(x.status)}</span>`:""}<span class="chip">${esc(MODELOS[x.tipo].rotulo)}</span></div>
-    ${fasesHTML?`<div class="block"><h4>Fases</h4><ol class="timeline">${fasesHTML}</ol></div>`:""}
-    ${x.cidade?`<div class="block"><h4>Cidade das provas</h4><p class="pre">${esc(x.cidade)}</p></div>`:""}
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="count ${c.c}">${c.t}</span><span class="chip">${esc(MODELOS[x.tipo].rotulo)}</span></div>
+    <div class="block"><h4>Situação</h4><p class="pre">${esc(x.status)}</p></div>
+    ${x.status===STATUS[1] && (x.boleto_linha||x.boleto_venc||x.boleto_arquivo) ? `<div class="block"><h4>Boleto</h4>
+      <dl class="kv">${linha("Vencimento",x.boleto_venc?fmtData(x.boleto_venc):"")}${linha("Valor",x.boleto_valor)}</dl>
+      ${x.boleto_linha?`<div class="copiar"><div class="cod" id="verLinha">${esc(x.boleto_linha)}</div><button type="button" id="btnCopiarVer">Copiar</button></div>`:""}
+      ${x.boleto_arquivo?`<div class="anexo"><a id="verLnkBoleto" target="_blank" rel="noopener">${esc(x.boleto_arquivo.nome)}</a></div>`:""}</div>`:""}
+    ${x.edital_arquivo?`<div class="block"><h4>Edital juntado</h4><div class="anexo"><a id="verLnkEdital" target="_blank" rel="noopener">${esc(x.edital_arquivo.nome)}</a></div></div>`:""}
+    ${(x.cidade||x.local_prova)?`<div class="block"><h4>Local de prova</h4><dl class="kv">${linha("Cidade",x.cidade)}${linha("Local",x.local_prova)}</dl></div>`:""}
     ${x.instrucoes?`<div class="block"><h4>Instruções gerais</h4><p class="pre">${esc(x.instrucoes)}</p></div>`:""}
+    ${fasesHTML?`<div class="block"><h4>Fases</h4><ol class="timeline">${fasesHTML}</ol></div>`:""}
     ${hosp?`<div class="block"><h4>Hospedagem</h4><dl class="kv">${hosp}</dl></div>`:""}
     ${x.obs?`<div class="block"><h4>Transporte e observações</h4><p class="pre">${esc(x.obs)}</p></div>`:""}
     ${x.edital && /^https?:\/\//.test(x.edital)?`<div class="block"><h4>Edital</h4><a href="${esc(x.edital)}" target="_blank" rel="noopener">${esc(x.edital)}</a></div>`:""}
     <div class="actions" id="verAcoes"><button type="button" class="danger" id="btnExcluir">Excluir</button><button type="button" class="primary" id="btnEditar">Editar</button></div>`;
   $("btnEditar").onclick=()=>{ $("dlgVer").close(); abrirForm(x); };
+  if($("btnCopiarVer")) $("btnCopiarVer").onclick=()=>copiarCodigo(x.boleto_linha);
+  pendentes={};
+  if(x.edital_arquivo) urlDoArquivo(x.id,"edital").then(u=>{ if(u&&$("verLnkEdital")) $("verLnkEdital").href=u; });
+  if(x.boleto_arquivo) urlDoArquivo(x.id,"boleto").then(u=>{ if(u&&$("verLnkBoleto")) $("verLnkBoleto").href=u; });
   $("btnExcluir").onclick=()=>{
     $("verAcoes").innerHTML=`<span class="note" style="margin-right:auto">Excluir este concurso?</span><button type="button" id="nao">Cancelar</button><button type="button" class="primary" id="sim" style="background:var(--danger);border-color:var(--danger)">Excluir</button>`;
     $("nao").onclick=()=>abrirVer(id);
-    $("sim").onclick=()=>{ itens=itens.filter(i=>i.id!==id); salvar(); render(); $("dlgVer").close(); toast("Concurso excluído"); };
+    $("sim").onclick=()=>{ itens=itens.filter(i=>i.id!==id); salvar(); arq("apagar",id+":edital").catch(()=>{}); arq("apagar",id+":boleto").catch(()=>{}); render(); $("dlgVer").close(); toast("Concurso excluído"); };
   };
   $("dlgVer").showModal();
 }
@@ -325,19 +445,12 @@ function marcarTipo(tipo){
   const m=MODELOS[tipo];
   $("tipoBase").textContent = m.base ? `${m.fases.length} fases, conforme o ${m.base}. Você pode renomear, apagar ou acrescentar fases.` : "Monte as fases do seu concurso: renomeie, apague ou acrescente quantas precisar.";
 }
-function lerFasesDoForm(){
-  return [...$("fasesBox").querySelectorAll(".fase")].map(el=>({
-    nome: el.querySelector(".f-nome").value.trim(),
-    carater: el.querySelector(".f-carater").value,
-    data: el.querySelector(".f-data").value,
-    horario: el.querySelector(".f-horario").value,
-    portoes: el.querySelector(".f-portoes").value,
-    local: el.querySelector(".f-local").value.trim(),
-    situacao: el.querySelector(".f-situacao").value,
-    obs: el.querySelector(".f-obs").value.trim()
-  }));
-}
-function temDados(f){ return !!(f.data||f.horario||f.portoes||f.local||f.obs||(f.situacao&&f.situacao!=="Aguardando")); }
+// ---------- Editor de fases ----------
+const FORMATOS={objetiva:"Prova objetiva",escrita:"Prova escrita",ambas:"Objetiva e escrita",nenhum:"Sem prova (inscrição, títulos…)"};
+const temObjetiva=f=>f.formato==="objetiva"||f.formato==="ambas";
+const temEscrita=f=>f.formato==="escrita"||f.formato==="ambas";
+function lerFasesDoForm(){ return JSON.parse(JSON.stringify(fasesForm)); }
+function temDados(f){ return !!(f.data||f.horario||f.fim||f.portoes||f.local||f.obs||f.acertos||f.nota||f.classificacao||(f.situacao&&f.situacao!=="Aguardando")); }
 function trocarTipo(tipo){
   const atuais=lerFasesDoForm();
   const novas=fasesDoModelo(tipo).map(n=>{ const igual=atuais.find(f=>f.nome===n.nome); return igual? igual : n; });
@@ -347,36 +460,197 @@ function trocarTipo(tipo){
   marcarTipo(tipo); renderFases();
   if(sobras.length) toast("Mantive no fim as fases que já tinham dados.");
 }
+
+// Local de prova: fases no mesmo dia ou no dia seguinte usam o mesmo local;
+// a partir de 2 dias de intervalo (ou fase ainda sem data) abre um campo novo.
+function blocosDeLocal(fases){
+  let ultimaComData=-1;
+  return fases.map((f,i)=>{
+    let r;
+    if(i===0) r={raiz:true};
+    else if(!f.data) r={novo:true};
+    else if(ultimaComData<0) r={raiz:true};
+    else{
+      const dias=Math.round((parseData(f.data)-parseData(fases[ultimaComData].data))/86400000);
+      r = dias<=1 ? {herda:ultimaComData} : {novo:true};
+    }
+    if(f.data) ultimaComData=i;
+    return r;
+  }).map((r,i,arr)=>{
+    // encontra a fase que define o local deste grupo
+    if(r.herda!==undefined){ let j=r.herda; while(arr[j].herda!==undefined) j=arr[j].herda; return arr[j].raiz?{raiz:true,de:j}:{herda:j}; }
+    return r;
+  });
+}
+function htmlLocal(f,i,b){
+  if(b.raiz) return `<p class="note local-nota">Local de prova: o informado em “Local e instruções”${b.de!==undefined&&b.de!==i?` (mesmo da fase ${b.de+1})`:""}.</p>`;
+  if(b.herda!==undefined) return `<p class="note local-nota">Mesmo local de prova da fase ${b.herda+1} (mesmo dia ou dia seguinte).</p>`;
+  return `<label>Local de prova desta fase<input class="f-local" data-f="local" value="${esc(f.local)}" placeholder="Escola, endereço, bloco e sala"></label>`;
+}
+function atualizarLocais(){
+  const blocos=blocosDeLocal(fasesForm);
+  $("fasesBox").querySelectorAll(".fase").forEach((el,i)=>{ el.querySelector(".f-localbox").innerHTML=htmlLocal(fasesForm[i],i,blocos[i]); });
+}
+
+function resumoComposicao(f){
+  const p=[];
+  if(temObjetiva(f) && f.objetivas && f.objetivas.total) p.push(`${f.objetivas.total} questões objetivas`+(f.objetivas.blocos&&f.objetivas.blocos.length?` em ${f.objetivas.blocos.length} blocos`:""));
+  if(temEscrita(f) && f.escritas && f.escritas.length) p.push(f.escritas.map(e=>`${String(e.qtd||1).padStart(2,"0")} ${e.tipo}${e.linhas?` (até ${e.linhas} linhas${e.qtd>1?" cada":""})`:""}`).join(" + "));
+  return p.join(" · ");
+}
+function htmlComposicao(f){
+  let h="";
+  if(temObjetiva(f)){
+    const o=f.objetivas||{total:"",blocos:[]};
+    h+=`<div class="comp"><div class="comp-tit">Questões objetivas</div>
+      <label class="curto">Total de questões<input type="number" min="0" data-f="obj.total" value="${esc(o.total)}"></label>
+      ${(o.blocos||[]).map((b,k)=>`<div class="linha-bloco">
+        <input data-f="bloco.${k}.nome" value="${esc(b.nome)}" placeholder="Bloco" aria-label="Nome do bloco">
+        <input type="number" min="0" data-f="bloco.${k}.qtd" value="${esc(b.qtd)}" placeholder="Qtd." aria-label="Questões do bloco">
+        <input data-f="bloco.${k}.disciplinas" value="${esc(b.disciplinas)}" placeholder="Disciplinas" aria-label="Disciplinas do bloco">
+        <button type="button" class="fase-x" data-acao="rem-bloco" data-k="${k}" aria-label="Remover bloco">×</button></div>`).join("")}
+      <button type="button" class="mini" data-acao="add-bloco">+ Bloco</button></div>`;
+  }
+  if(temEscrita(f)){
+    h+=`<div class="comp"><div class="comp-tit">Questões escritas</div>
+      ${(f.escritas||[]).map((e,k)=>`<div class="linha-esc">
+        <input type="number" min="1" data-f="esc.${k}.qtd" value="${esc(e.qtd)}" placeholder="Qtd." aria-label="Quantidade">
+        <input data-f="esc.${k}.tipo" value="${esc(e.tipo)}" placeholder="questões discursivas, dissertação, peça…" aria-label="Tipo">
+        <input type="number" min="0" data-f="esc.${k}.linhas" value="${esc(e.linhas)}" placeholder="Linhas" aria-label="Linhas por resposta">
+        <button type="button" class="fase-x" data-acao="rem-esc" data-k="${k}" aria-label="Remover item">×</button></div>`).join("")}
+      <p class="note">Quantidade · tipo · máximo de linhas por resposta</p>
+      <button type="button" class="mini" data-acao="add-esc">+ Item</button></div>`;
+  }
+  return h;
+}
+function htmlResultado(f){
+  const tot=f.objetivas&&+f.objetivas.total, ac=+f.acertos;
+  const pct = temObjetiva(f) && tot && f.acertos!=="" && f.acertos!=null ? ` <span class="note">${Math.round(ac/tot*1000)/10}%</span>` : "";
+  return `<div class="res-grid">
+      ${temObjetiva(f)?`<label>Acertos${tot?` (de ${tot})`:""}<input type="number" min="0" data-f="acertos" class="f-acertos" value="${esc(f.acertos)}"></label>`:""}
+      <label>Nota obtida<input data-f="nota" class="f-nota" value="${esc(f.nota)}" placeholder="conforme gabarito/resultado"></label>
+      <label>Classificação<input data-f="classificacao" class="f-classif" value="${esc(f.classificacao)}" placeholder="ex.: 12º"></label>
+    </div>${pct?`<p class="note">Aproveitamento:${pct}</p>`:""}
+    <div class="res-anexo">
+      <button type="button" data-acao="res-anexar">${CLIP_SVG} Juntar resultado (PDF)</button>
+      <input type="file" accept="application/pdf,.pdf" class="f-arqres" hidden>
+      <span class="note f-resstatus">${f.resultado_linha?`Encontrado no resultado: “${esc(f.resultado_linha)}”`:"O app procura seu nome ou nº de inscrição e mostra sua classificação."}</span>
+      <div class="anexo" ${f.resultado_arquivo?"":"hidden"}><a class="f-lnkres" target="_blank" rel="noopener">${esc(f.resultado_arquivo?f.resultado_arquivo.nome:"")}</a></div>
+    </div>`;
+}
 function renderFases(){
-  $("fasesBox").innerHTML = fasesForm.map((f,i)=>`
+  const blocos=blocosDeLocal(fasesForm);
+  $("fasesBox").innerHTML = fasesForm.map((f,i)=>{
+    const comp=resumoComposicao(f);
+    return `
     <div class="fase" data-i="${i}">
       <div class="fase-top">
         <span class="fase-n">${i+1}</span>
-        <input class="f-nome" value="${esc(f.nome)}" placeholder="Nome da fase" aria-label="Nome da fase ${i+1}">
-        <button type="button" class="fase-x" data-rem="${i}" aria-label="Remover fase ${i+1}">×</button>
+        <input class="f-nome" data-f="nome" value="${esc(f.nome)}" placeholder="Nome da fase" aria-label="Nome da fase ${i+1}">
+        <button type="button" class="fase-x" data-acao="rem-fase" aria-label="Remover fase ${i+1}">×</button>
       </div>
       <div class="fase-grid">
-        <label>Data<input class="f-data" type="date" value="${esc(f.data)}"></label>
-        <label>Horário<input class="f-horario" type="time" value="${esc(f.horario)}"></label>
-        <label>Portões fecham<input class="f-portoes" type="time" value="${esc(f.portoes)}"></label>
-        <label>Situação<select class="f-situacao">${SITUACOES.map(s=>`<option${s===(f.situacao||"Aguardando")?" selected":""}>${s}</option>`).join("")}</select></label>
-        <label class="w2">Caráter<select class="f-carater">${Object.entries(CARATER).map(([k,v])=>`<option value="${k}"${k===f.carater?" selected":""}>${v}</option>`).join("")}</select></label>
-        <label class="w2">Local (endereço, sala)<input class="f-local" value="${esc(f.local)}"></label>
-        <label class="w4">Observações da fase<textarea class="f-obs" rows="2" placeholder="Prazos, regras, o que levar…">${esc(f.obs||"")}</textarea></label>
+        <label>Data<input class="f-data" data-f="data" type="date" value="${esc(f.data)}"></label>
+        <label>Início<input class="f-horario" data-f="horario" type="time" value="${esc(f.horario)}"></label>
+        <label>Término<input class="f-fim" data-f="fim" type="time" value="${esc(f.fim)}"></label>
+        <label>Portões fecham<input class="f-portoes" data-f="portoes" type="time" value="${esc(f.portoes)}"></label>
+        <label>Situação<select class="f-situacao" data-f="situacao">${SITUACOES.map(s=>`<option${s===(f.situacao||"Aguardando")?" selected":""}>${s}</option>`).join("")}</select></label>
+        <label>Caráter<select class="f-carater" data-f="carater">${Object.entries({EC:"Elimin. e classif.",E:"Eliminatória",C:"Classificatória"}).map(([k,v])=>`<option value="${k}"${k===f.carater?" selected":""}>${v}</option>`).join("")}</select></label>
+        <label class="w2">Tipo de prova<select class="f-formato" data-f="formato" data-rerender="1">${Object.entries(FORMATOS).map(([k,v])=>`<option value="${k}"${k===(f.formato||"nenhum")?" selected":""}>${v}</option>`).join("")}</select></label>
+        <div class="w4 f-localbox">${htmlLocal(f,i,blocos[i])}</div>
       </div>
-    </div>`).join("") || `<p class="note">Nenhuma fase. Clique em “Adicionar fase”.</p>`;
+      ${f.formato!=="nenhum"?`<details class="sec sec-comp" open><summary>Composição da prova <span class="note">${esc(comp||"informe as questões")}</span></summary>${htmlComposicao(f)}</details>`:""}
+      <details class="sec" ${(f.acertos||f.nota||f.classificacao||f.resultado_arquivo)?"open":""}><summary>Resultado ${f.nota||f.acertos||f.classificacao?`<span class="note">${esc([f.acertos&&f.acertos+" acertos",f.nota&&"nota "+f.nota,f.classificacao&&"classificação "+f.classificacao].filter(Boolean).join(" · "))}</span>`:""}</summary>${htmlResultado(f)}</details>
+      <label class="obs-fase">Observações da fase<textarea class="f-obs" data-f="obs" rows="2" placeholder="Prazos, regras, o que levar…">${esc(f.obs||"")}</textarea></label>
+    </div>`;}).join("") || `<p class="note">Nenhuma fase. Clique em “Adicionar fase”.</p>`;
+  // links dos resultados já anexados
+  fasesForm.forEach((f,i)=>{ if(f.resultado_arquivo) urlDoArquivo(formId,"res:"+f.uid).then(u=>{ const a=$("fasesBox").querySelectorAll(".fase")[i]?.querySelector(".f-lnkres"); if(a&&u) a.href=u; }); });
 }
-$("fasesBox").addEventListener("click", e=>{
-  const b=e.target.closest("[data-rem]"); if(!b) return;
-  fasesForm=lerFasesDoForm(); fasesForm.splice(+b.dataset.rem,1); renderFases();
+function definirCampo(f,caminho,valor){
+  const p=caminho.split(".");
+  if(p[0]==="obj"){ f.objetivas=f.objetivas||{total:"",blocos:[]}; f.objetivas.total=valor; }
+  else if(p[0]==="bloco"){ f.objetivas.blocos[+p[1]][p[2]]=valor; }
+  else if(p[0]==="esc"){ f.escritas[+p[1]][p[2]]=valor; }
+  else f[p[0]]=valor;
+}
+$("fasesBox").addEventListener("input", e=>{
+  const el=e.target, card=el.closest(".fase"); if(!card||!el.dataset.f) return;
+  definirCampo(fasesForm[+card.dataset.i], el.dataset.f, el.type==="number"&&el.value!==""? +el.value : el.value);
 });
-$("btnAddFase").onclick=()=>{ fasesForm=lerFasesDoForm(); fasesForm.push(faseVazia(`${fasesForm.length+1}ª fase`)); renderFases();
+$("fasesBox").addEventListener("change", e=>{
+  const el=e.target, card=el.closest(".fase"); if(!card) return;
+  if(el.dataset.rerender){ renderFases(); return; }
+  if(el.dataset.f==="data") atualizarLocais();
+  if(el.dataset.f==="acertos"||el.dataset.f==="obj.total"){ const sec=card.querySelectorAll("details.sec"); renderFases(); }
+  if(el.classList.contains("f-arqres")) juntarResultado(+card.dataset.i, el);
+});
+$("fasesBox").addEventListener("click", e=>{
+  const b=e.target.closest("[data-acao]"); if(!b) return;
+  const i=+b.closest(".fase").dataset.i, f=fasesForm[i], k=+b.dataset.k;
+  switch(b.dataset.acao){
+    case "rem-fase": fasesForm.splice(i,1); break;
+    case "add-bloco": f.objetivas=f.objetivas||{total:"",blocos:[]}; f.objetivas.blocos.push({nome:`Bloco ${["I","II","III","IV","V","VI"][f.objetivas.blocos.length]||f.objetivas.blocos.length+1}`,qtd:"",disciplinas:""}); break;
+    case "rem-bloco": f.objetivas.blocos.splice(k,1); break;
+    case "add-esc": f.escritas=f.escritas||[]; f.escritas.push({qtd:1,tipo:"",linhas:""}); break;
+    case "rem-esc": f.escritas.splice(k,1); break;
+    case "res-anexar": b.closest(".fase").querySelector(".f-arqres").click(); return;
+  }
+  renderFases();
+  if(b.dataset.acao!=="rem-fase"){ const sec=$("fasesBox").querySelectorAll(".fase")[i]?.querySelector(".sec-comp"); if(sec) sec.open=true; }
+});
+$("btnAddFase").onclick=()=>{ fasesForm.push(faseVazia(`${fasesForm.length+1}ª fase`)); renderFases();
   const ult=$("fasesBox").querySelector(".fase:last-child .f-nome"); if(ult){ ult.focus(); ult.select(); } };
+
+// ---------- Resultado em PDF: procura o candidato e a classificação ----------
+const semAcento=s=>String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toUpperCase().replace(/\s+/g," ").trim();
+async function juntarResultado(i, input){
+  const arquivo=input.files[0]; input.value=""; if(!arquivo) return;
+  const f=fasesForm[i], uid=f.uid;
+  pendentes["res:"+uid]=arquivo; f.resultado_arquivo={nome:arquivo.name};
+  renderFases();
+  const card=()=>$("fasesBox").querySelectorAll(".fase")[i];
+  card().querySelectorAll("details.sec")[card().querySelectorAll("details.sec").length-1].open=true;
+  const st=()=>card().querySelector(".f-resstatus");
+  const nome=semAcento($("f_candidato").value), insc=String($("f_inscricao").value||"").replace(/\D/g,"");
+  if(!nome && !insc){ st().textContent="Informe seu nome ou nº de inscrição (nos dados do concurso) para eu procurar sua classificação."; return; }
+  st().textContent="Procurando você no resultado…";
+  try{
+    const texto=await textoDoPdf(arquivo, 400);
+    const linhas=texto.split("\n");
+    let idx=-1;
+    if(insc.length>=4) idx=linhas.findIndex(l=>l.replace(/\D/g," ").split(" ").includes(insc) || l.replace(/[^\d]/g,"").includes(insc));
+    if(idx<0 && nome) idx=linhas.findIndex(l=>semAcento(l).includes(nome));
+    if(idx<0){ st().textContent="Não encontrei seu nome nem seu nº de inscrição nesse resultado. Confira os dados ou preencha manualmente."; return; }
+    const linha=linhas[idx].replace(/\s+/g," ").trim();
+    const resto=linha.replace(insc,"");
+    const ordinal=resto.match(/(\d{1,5})\s*[ºª°]/);
+    const nota=(resto.match(/\b\d{1,3},\d{1,3}\b/)||resto.match(/\b\d{1,3}\.\d{2,3}\b/)||[])[0]||"";
+    const inteiros=(resto.replace(/\b\d{1,3}[.,]\d{1,3}\b/g," ").match(/\b\d{1,5}\b/g)||[]);
+    const classif = ordinal ? ordinal[1] : (inteiros.length ? inteiros[inteiros.length-1] : "");
+    f.resultado_linha=linha.slice(0,200);
+    if(classif && !f.classificacao) f.classificacao=classif+"º";
+    if(nota && !f.nota) f.nota=nota;
+    renderFases();
+    const c=card(); c.querySelectorAll("details.sec")[c.querySelectorAll("details.sec").length-1].open=true;
+    if(classif) c.querySelector(".f-classif").classList.add("auto");
+    if(nota) c.querySelector(".f-nota").classList.add("auto");
+    c.querySelector(".f-resstatus").textContent=`Encontrei você: “${f.resultado_linha}”. `+(classif?`Classificação: ${classif}º. `:"")+"Confira com o PDF.";
+  }catch(err){
+    st().textContent = err && err.message==="sem-internet" ? "Para ler o PDF é preciso internet na primeira vez." : "Não consegui abrir esse PDF.";
+  }
+}
+
 
 function abrirForm(x){
   editandoId = x? x.id : null;
   $("formTitulo").textContent = x? "Editar concurso" : "Novo concurso";
-  for(const k of CAMPOS){ const el=$("f_"+k); if(el) el.value = x? (x[k]??"") : (k==="status"?"Inscrição a fazer":""); }
+  formId = x? x.id : novoId(); pendentes={};
+  for(const k of CAMPOS){ const el=$("f_"+k); if(el) el.value = x? (x[k]??"") : (k==="status"?STATUS[0]:""); }
+  if(!$("f_candidato").value){ try{ $("f_candidato").value=localStorage.getItem(CHAVE_NOME)||""; }catch(e){} }
+  mostrarBoleto();
+  $("boletoStatus").textContent="Anexe o boleto para ver o vencimento e copiar o código de pagamento.";
+  mostrarAnexo("edital", x&&x.edital_arquivo&&x.edital_arquivo.nome);
+  mostrarAnexo("boleto", x&&x.boleto_arquivo&&x.boleto_arquivo.nome);
   const tipo = x? x.tipo : "outro";
   fasesForm = x? JSON.parse(JSON.stringify(x.fases||[])) : fasesDoModelo(tipo);
   marcarTipo(tipo); renderFases();
@@ -390,9 +664,16 @@ $("form").addEventListener("submit", e=>{
   const dados={}; for(const k of CAMPOS){ const el=$("f_"+k); dados[k]=el? el.value.trim() : ""; }
   dados.tipo=tipoAtual;
   dados.fases=lerFasesDoForm().map((f,i)=>({...f, nome:f.nome||`Fase ${i+1}`}));
+  try{ if(dados.candidato) localStorage.setItem(CHAVE_NOME,dados.candidato); }catch(e){}
+  for(const f of dados.fases){ const p=pendentes["res:"+f.uid]; if(p&&p!=="remover"){ arq("gravar",`${formId}:res:${f.uid}`,p).catch(()=>{}); f.resultado_arquivo={nome:p.name}; } }
   dados.atualizado=new Date().toISOString();
+  for(const tipo of ["edital","boleto"]){
+    const p=pendentes[tipo];
+    if(p==="remover"){ dados[tipo+"_arquivo"]=null; arq("apagar",`${formId}:${tipo}`).catch(()=>{}); }
+    else if(p){ dados[tipo+"_arquivo"]={nome:p.name}; arq("gravar",`${formId}:${tipo}`,p).catch(()=>toast("Não foi possível guardar o PDF neste navegador.")); }
+  }
   if(editandoId){ const i=itens.findIndex(x=>x.id===editandoId); if(i>=0) itens[i]={...itens[i],...dados}; }
-  else itens.push({id:novoId(),...dados});
+  else itens.push({id:formId,...dados});
   if(salvar()){ $("dlgForm").close(); render(); toast(editandoId? "Alterações salvas" : "Concurso adicionado"); }
 });
 
@@ -402,13 +683,45 @@ document.addEventListener("click", e=>{
 });
 $("btnNovo").onclick=()=>abrirForm(null);
 
+// ---------- Situação e boleto ----------
+$("f_status").innerHTML = STATUS.map(t=>`<option>${t}</option>`).join("");
+function mostrarBoleto(){ $("boletoBox").hidden = $("f_status").value!==STATUS[1]; }
+$("f_status").addEventListener("change", mostrarBoleto);
+async function copiarCodigo(texto){
+  const so=String(texto||"").replace(/\D/g,"");
+  if(!so){ toast("Nenhum código para copiar."); return; }
+  try{ await navigator.clipboard.writeText(so); toast("Código copiado. Cole no app do banco."); }
+  catch(e){ const i=$("f_boleto_linha"); if(i&&!$("dlgForm").hidden){ i.select(); } toast("Selecione o código e copie (Ctrl+C)."); }
+}
+$("btnCopiarLinha").onclick=()=>copiarCodigo($("f_boleto_linha").value);
+$("btnBoleto").onclick=()=>$("arqBoleto").click();
+$("arqBoleto").onchange=async e=>{
+  const f=e.target.files[0]; e.target.value=""; if(!f) return;
+  const st=$("boletoStatus"); st.textContent="Lendo o boleto…";
+  pendentes.boleto=f; mostrarAnexo("boleto", f.name);
+  try{
+    const b=await lerBoleto(f);
+    if(b.semTexto){ st.textContent="Esse PDF não tem texto (parece imagem). Digite ou cole a linha digitável e o vencimento."; return; }
+    const preenchido=[];
+    if(b.linha){ $("f_boleto_linha").value=b.linha; $("f_boleto_linha").classList.add("auto"); preenchido.push("código de pagamento"); }
+    if(b.vencimento){ $("f_boleto_venc").value=b.vencimento; $("f_boleto_venc").classList.add("auto"); preenchido.push("vencimento"); }
+    if(b.valor){ $("f_boleto_valor").value=b.valor; $("f_boleto_valor").classList.add("auto"); preenchido.push("valor"); }
+    st.textContent = !b.linha ? "Não encontrei a linha digitável nesse PDF. Digite ou cole o código."
+      : `Encontrei: ${preenchido.join(", ")}.` + (b.valida? " Código conferido." : " Atenção: os dígitos verificadores do código não conferem; compare com o boleto.");
+  }catch(err){
+    st.textContent = err && err.message==="sem-internet" ? "Para ler o boleto é preciso internet na primeira vez (o app baixa o leitor de PDF)." : "Não consegui abrir esse PDF.";
+  }
+};
+$("btnTirarBoleto").onclick=()=>{ pendentes.boleto="remover"; $("boletoAnexo").hidden=true; };
+$("btnTirarEdital").onclick=()=>{ pendentes.edital="remover"; $("editalAnexo").hidden=true; };
+
 // ---------- Backup ----------
 $("btnExportar").onclick=()=>{
   const blob=new Blob([JSON.stringify({app:"meus-concursos",versao:2,itens},null,2)],{type:"application/json"});
   const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
   a.download=`backup-concursos-${new Date().toISOString().slice(0,10)}.json`;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
-  toast("Backup baixado");
+  toast("Backup baixado (os PDFs anexados ficam só neste navegador).");
 };
 $("btnImportar").onclick=()=>$("arqBackup").click();
 $("arqBackup").onchange=async e=>{
@@ -430,6 +743,7 @@ $("arqEdital").onchange=async e=>{
   const f=e.target.files[0]; e.target.value=""; if(!f) return;
   const st=$("editalStatus"), btn=$("btnEdital");
   btn.disabled=true; st.textContent="Lendo o edital…";
+  pendentes.edital=f; mostrarAnexo("edital", f.name);
   try{
     const texto=await textoDoPdf(f);
     if(texto.replace(/\s/g,"").length<300){ st.textContent="Não encontrei texto nesse PDF. Ele parece ser escaneado (imagem); preencha manualmente."; return; }
@@ -437,8 +751,8 @@ $("arqEdital").onchange=async e=>{
     const preenchidos=[];
     for(const k of Object.keys(NOMES_CAMPO)){
       const el=$("f_"+k), v=r[k]; if(!el||!v) continue;
-      if(el.value && k!=="instrucoes") continue;          // não apaga o que você já digitou
-      el.value = (k==="instrucoes" && el.value) ? el.value+"\n"+v : v;
+      if(el.value) continue;          // não apaga o que você já digitou
+      el.value = v;
       el.classList.add("auto"); preenchidos.push(NOMES_CAMPO[k]);
     }
     // tipo de cargo e fases
@@ -452,12 +766,18 @@ $("arqEdital").onchange=async e=>{
       fasesForm=atuais;
       if(r.tipo!==tipoAtual) Object.assign(r, interpretarEdital(texto, tipoAtual));
     }
-    const destaques=[]; let novasDatas=0, regras=0, portoesCalc=0;
+    const destaques=[]; let compostas=0, novasDatas=0, regras=0, portoesCalc=0;
     MODELOS[r.tipo].fases.forEach((mf,i)=>{
       const alvo=fasesForm.find(f=>f.nome===mf.nome); if(!alvo) return;
       const idx=fasesForm.indexOf(alvo), d=(r.fasesDatas||[])[i]||{}, nota=(r.notas||[])[i]||"";
       if(d.data && !alvo.data){ alvo.data=d.data; destaques.push([idx,"f-data"]); novasDatas++; }
       if(d.horario && !alvo.horario){ alvo.horario=d.horario; destaques.push([idx,"f-horario"]); }
+      if(d.fim && !alvo.fim){ alvo.fim=d.fim; destaques.push([idx,"f-fim"]); }
+      const c=(r.composicao||[])[i];
+      if(c){
+        if(c.objetivas && !(alvo.objetivas&&alvo.objetivas.total)){ alvo.objetivas=c.objetivas; compostas++; destaques.push([idx,"sec-comp"]); }
+        if(c.escritas && c.escritas.length && !(alvo.escritas&&alvo.escritas.length)){ alvo.escritas=c.escritas; compostas++; destaques.push([idx,"sec-comp"]); }
+      }
       if(!alvo.data && nota && !alvo.obs){ alvo.obs=nota; destaques.push([idx,"f-obs"]); regras++; }
     });
     // portões: horário informado no edital para a 1ª prova; nas demais, a regra geral ("X minutos antes do início")
@@ -473,8 +793,9 @@ $("arqEdital").onchange=async e=>{
     });
     renderFases();
     const els=$("fasesBox").querySelectorAll(".fase");
-    destaques.forEach(([i,c])=>{ const el=els[i]&&els[i].querySelector("."+c); if(el) el.classList.add("auto"); });
-    if(novasDatas) preenchidos.push(`${novasDatas} data(s) de fase`);
+    destaques.forEach(([i,c])=>{ const el=els[i]&&els[i].querySelector("."+c); if(el){ el.classList.add("auto"); if(el.tagName==="DETAILS") el.open=true; } });
+    if(novasDatas) preenchidos.push(`${novasDatas} data(s) de fase com horários`);
+    if(compostas) preenchidos.push("composição das provas");
     if(primeira && r.portoes || portoesCalc) preenchidos.push("horário dos portões");
     if(regras) preenchidos.push(`regras de ${regras} fase(s) ainda sem data, nas observações`);
     st.textContent = preenchidos.length
