@@ -94,7 +94,12 @@ const MODELOS = {
   delegado: { rotulo: "Delegado de Polícia", base: "edital PC-BA 2026 (Instituto AOCP)",
     detectar: /delegado de pol[ií]cia/i,
     fases: [
-      { nome: "1ª etapa – Provas objetivas", carater: "EC", chave: /provas? objetivas?/i },
+      { nome: "1ª etapa – Provas objetivas", carater: "EC", chave: /provas? objetivas?/i,
+        // a Tabela 7.1 do edital PC-BA está como imagem no PDF; distribuição transcrita do edital
+        padrao: { objetivas: { total: 100, blocos: [
+          { nome: "Conhecimentos gerais", qtd: 40, disciplinas: "Língua Portuguesa, Raciocínio Lógico, Atualidades, Informática, Promoção da Igualdade Racial e de Gênero, Medicina Legal, Legislação Geral" },
+          { nome: "Conhecimentos específicos", qtd: 60, disciplinas: "Direito Administrativo, Direito Civil e Empresarial, Direito Constitucional, Direito Penal, Direito Processual Penal, Direito Processual Civil, Direito Tributário, Direito Ambiental, Legislação Penal e Processual Penal Extravagante, Criminologia" }
+        ] } } },
       { nome: "2ª etapa – Prova discursiva", carater: "EC", chave: /prova discursiva/i },
       { nome: "3ª etapa – Prova de títulos", carater: "C", chave: /prova de t[ií]tulos/i, nota: /(?:comprova[cç][aã]o|apresenta[cç][aã]o|entrega|envio|anexar) d[oe]s (?:documentos? (?:pertinentes|referentes) [àa] prova de )?t[ií]tulos|t[ií]tulos/i }
     ]},
@@ -178,7 +183,9 @@ function procurarDataDaFase(plano, f, corte) {
     if (RUIDO.test(antesFrase) || RUIDO.test(antesDaData)) continue;
     if (!INTENCAO.test(antesFrase + " " + depoisFrase)) continue;
     if (dDepois.length) {
-      const d = dDepois[0];
+      // em retificações ("prevista para X, será realizada no dia Y") vale a nova data
+      const NOVA = /(ser[aá] realizad[ao]|ser[aã]o realizad[ao]s|passa(?:r[aá])? a ser|fica(?:m)? (?:alterad|remarcad|transferid)|adiad[ao]s? para|transferid[ao]s? para|para o dia|nova data)[^.]{0,25}$/i;
+      const d = dDepois.find(x => NOVA.test(depoisFrase.slice(Math.max(0, x.i - 50), x.i))) || dDepois[0];
       let data = d.v;
       if (f.segundoDia) {
         const dois = depoisFrase.slice(d.i).match(/^(\d{1,2})\s+e\s+(\d{1,2})\s+de\s+(\S+)\s+de\s+(\d{4})/i);
@@ -272,6 +279,7 @@ function interpretarEdital(textoBruto, tipoForcado) {
   r.notas = notasDasFases(plano, r.tipo);
   r.portoesMin = regraPortoes(plano);
   r.composicao = composicaoDasFases(plano, textoBruto.split("\n"), r.tipo);
+  r.duracoes = duracoesDasFases(plano, r.tipo);
   return r;
 }
 
@@ -279,26 +287,43 @@ function interpretarEdital(textoBruto, tipoForcado) {
 function numero(s) { return s ? +s : 0; }
 // Quadro de blocos/grupos: "Bloco I:" seguido das disciplinas, com o número de questões numa das linhas
 function blocosDoQuadro(linhasTexto) {
-  const blocos = []; let atual = null;
+  // Aceita "Bloco I:", "Grupo 1:" (número do bloco numa das linhas) e "MÓDULO DE CONHECIMENTOS GERAIS"
+  // (número por matéria, às vezes com o nome quebrado em duas linhas).
+  const grupos = []; let atual = null, encerrou = false;
+  const fechar = () => { if (atual) grupos.push(atual); atual = null; };
   for (const bruta of linhasTexto) {
     const l = bruta.trim();
-    const cab = l.match(/^(bloco|grupo|m[óo]dulo)\s+([ivx\d]+)\s*:?\s*(.*)$/i);
-    if (cab) {
-      atual = { nome: `${cab[1][0].toUpperCase()}${cab[1].slice(1).toLowerCase()} ${cab[2].toUpperCase()}`, qtd: 0, disciplinas: [] };
-      blocos.push(atual);
-      if (cab[3]) linhaDoBloco(atual, cab[3]);
+    if (!l) continue;
+    const cab1 = l.match(/^(bloco|grupo|m[óo]dulo)\s+([ivx\d]+)\s*:?\s*(.*)$/i);
+    const cab2 = l.match(/^m[óo]dulo d[eo]s?\s+(.+)$/i);
+    if (cab1 || cab2) {
+      fechar();
+      const nome = cab1 ? `${cab1[1][0].toUpperCase()}${cab1[1].slice(1).toLowerCase()} ${cab1[2].toUpperCase()}`
+                        : cab2[1].charAt(0).toUpperCase() + cab2[1].slice(1).toLowerCase();
+      atual = { nome, itens: [] };
+      if (cab1 && cab1[3]) linhaDoBloco(atual, cab1[3]);
       continue;
     }
     if (!atual) continue;
-    if (/^total\b/i.test(l) || /^\d+(\.\d+)+\s/.test(l) || l.length > 120) { atual = null; if (blocos.length) break; continue; }
+    if (/^total\b/i.test(l)) { fechar(); encerrou = true; break; }
+    if (/^\d+(\.\d+)+\s/.test(l) || l.length > 120) { fechar(); if (grupos.length) break; continue; }
+    if (/^(disciplinas?|[áa]rea de conhecimento|conte[úu]dos?)\s+quest/i.test(l)) continue;
     linhaDoBloco(atual, l);
   }
-  return blocos.filter(b => b.qtd > 0 && b.disciplinas.length);
+  fechar();
+  return grupos.map(g => {
+    const numerados = g.itens.filter(i => i.n);
+    if (numerados.length <= 1) return { nome: g.nome, qtd: numerados.length ? numerados[0].n : 0, disciplinas: g.itens.map(i => i.t) };
+    return { nome: g.nome, qtd: numerados.reduce((s, i) => s + i.n, 0), disciplinas: g.itens.map(i => i.n ? `${i.t} (${i.n})` : i.t) };
+  }).filter(b => b.qtd > 0 && b.disciplinas.length);
 }
 function linhaDoBloco(b, l) {
+  const ult = b.itens[b.itens.length - 1];
+  if (/^\d{1,3}$/.test(l)) { if (ult && !ult.n) { ult.n = +l; ult.cont = true; } return; }
   const m = l.match(/^(.*?)\s+(\d{1,3})$/);
-  if (m) { b.qtd = +m[2]; if (m[1].trim()) b.disciplinas.push(m[1].trim()); }
-  else if (l && !/^\d+$/.test(l)) b.disciplinas.push(l);
+  if (m) { b.itens.push({ t: m[1].replace(/\s*-\s*$/, "").trim(), n: +m[2] }); return; }
+  if (ult && ult.cont) { ult.t = (ult.t.replace(/\s*-\s*$/, "") + (/-\s*$/.test(ult.t) ? " – " : " ") + l).trim(); ult.cont = false; return; }
+  b.itens.push({ t: l, n: 0 });
 }
 
 const RE_ITEM = /(\d{1,2})\s*\([^)]*\)\s*(quest(?:ão|ões)(?:\s+discursivas?)?(?:,?\s+na modalidade\s+estudo de caso|\s+de estudo de caso)?|pe[cç]as?(?:\s+[a-zà-ú]+){0,2}|disserta[cç](?:ão|ões)|pareceres?|senten[cç]as?)/gi;
@@ -342,6 +367,9 @@ function composicaoDasFases(plano, linhasTexto, tipo) {
         c.objetivas = { total, blocos: objetivaUsada ? [] : blocos.map(b => ({ nome: b.nome, qtd: b.qtd, disciplinas: b.disciplinas.join(", ") })) };
         objetivaUsada = true;
       }
+      // sem quadro em texto (ex.: tabela em imagem): usa a distribuição registrada no modelo, se o total bater
+      if (f.padrao && f.padrao.objetivas && (!c.objetivas || !c.objetivas.blocos.length) && (!c.objetivas || +c.objetivas.total === f.padrao.objetivas.total))
+        c.objetivas = JSON.parse(JSON.stringify(f.padrao.objetivas));
     } else if (f.formato === "escrita") {
       const re = new RegExp("(?:" + f.chave.source + ")[\\s\\S]{0,450}?(?:consistir|compost|constitu[ií]d)", "gi");
       let m, janela = "";
@@ -351,6 +379,34 @@ function composicaoDasFases(plano, linhasTexto, tipo) {
       if (!c.escritas.length && /senten[cç]a/i.test(f.nome)) c.escritas = [{ qtd: 1, tipo: f.nome.replace(/^.*?–\s*/, "").toLowerCase(), linhas: "" }];
     }
     return c;
+  });
+}
+
+// ---------- Turno e duração ("Período da Manhã: Provas Objetivas com duração de 04h00min") ----------
+function minutosDeDuracao(t) {
+  let m = t.match(/(\d{1,2})\s*h\s*(\d{2})\s*min/i);
+  if (m) return +m[1] * 60 + +m[2];
+  m = t.match(/(\d{1,2})\s*(?:\([^)]*\)\s*)?horas?(?:\s*e\s*(\d{1,2})\s*(?:\([^)]*\)\s*)?minutos)?/i);
+  return m ? +m[1] * 60 + (m[2] ? +m[2] : 0) : 0;
+}
+function duracoesDasFases(plano, tipo) {
+  const modelo = MODELOS[tipo] || MODELOS.outro;
+  return modelo.fases.map(f => {
+    if (f.formato === "nenhum") return {};
+    const re = new RegExp("(?:" + f.chave.source + ")", "gi");
+    let m;
+    while ((m = re.exec(plano))) {
+      const depois = plano.slice(m.index, m.index + 260).split(/;|\.\s+(?=[A-ZÀ-Ú])/)[0];
+      const d = depois.match(/dura[cç][aã]o(?: total)? de\s*([^.;]{3,60})/i);
+      if (!d) continue;
+      const min = minutosDeDuracao(d[1]);
+      if (!min || min > 600) continue;
+      const antes = plano.slice(Math.max(0, m.index - 60), m.index);
+      const turno = (antes.match(/per[ií]odo d[ae]\s+(manh[aã]|tarde|noite)/i) || depois.match(/per[ií]odo d[ae]\s+(manh[aã]|tarde|noite)|turno d[ae]\s+(manh[aã]|tarde|noite)/i) || [])
+        .slice(1).find(Boolean) || "";
+      return { duracao: min, turno: turno.toLowerCase() };
+    }
+    return {};
   });
 }
 
@@ -407,4 +463,4 @@ function instrucoesDeIdentificacao(plano) {
   return partes.join("\n\n");
 }
 
-if (typeof module !== "undefined") module.exports = { composicaoDasFases, instrucoesDeIdentificacao, notasDasFases, regraPortoes, interpretarEdital, datasNoTrecho, MODELOS, detectarTipo, datasDasFases };
+if (typeof module !== "undefined") module.exports = { duracoesDasFases, composicaoDasFases, instrucoesDeIdentificacao, notasDasFases, regraPortoes, interpretarEdital, datasNoTrecho, MODELOS, detectarTipo, datasDasFases };

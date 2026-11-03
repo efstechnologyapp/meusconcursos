@@ -15,17 +15,23 @@ No cadastro, escolha o tipo de cargo e o formulário monta as fases daquela carr
 ## O que cada fase guarda
 
 - Data, horário de início e de término e fechamento dos portões.
-- Local de prova: fases no mesmo dia ou no dia seguinte usam o mesmo local; com intervalo de 2 dias ou mais (ou fase ainda sem data), abre um campo de local para a fase.
+- Local de prova: informado na própria fase. Fases no mesmo dia ou no dia seguinte usam o mesmo local; com intervalo de 2 dias ou mais (ou fase ainda sem data), abre um campo de local novo.
 - Composição da prova: total de questões objetivas e os blocos/grupos com as disciplinas; nas provas escritas, a quantidade de questões, o tipo e o máximo de linhas.
-- Resultado: acertos (com aproveitamento), nota e classificação. Ao juntar o PDF do resultado, o app procura seu nome ou nº de inscrição e preenche nota e classificação.
+- Resultado: acertos (com aproveitamento), nota e classificação. Ao juntar o PDF do resultado, o app procura seu nº de inscrição (campo que aparece quando a situação passa a "Inscrição homologada") e preenche nota e classificação.
+
+- Fases no mesmo dia e com o mesmo horário de início aparecem unificadas: data, horários, portões e local uma vez só, e o que é específico de cada prova (nome, situação, caráter, composição, resultado, observações) em destaque logo abaixo.
 
 ## Preencher com o edital
 
 Ao cadastrar um concurso, clique em **Preencher com o edital (PDF)** e escolha o arquivo do edital. O app lê o texto no próprio navegador e identifica o tipo de cargo, monta as fases e tenta preencher concurso, cargo, banca, datas e horários das fases, fechamento dos portões, cidade e instruções gerais. Quando o edital não traz a data de uma fase (prova oral, inscrição definitiva etc.), o app guarda a regra do edital nas observações da fase. Os portões são preenchidos pelo horário informado ou calculados pela regra geral do edital (ex.: fecham 30 minutos antes do início). Para completar as datas depois, abra o concurso, clique em Editar e envie o edital de convocação: o app preenche só o que estiver vazio. Os campos preenchidos ficam destacados para conferência. PDFs escaneados (imagem) não funcionam.
 
+## Editais complementares
+
+Junte retificações e editais de convocação no campo **Editais complementares**. O app atualiza datas, horários, portões e composição das fases conforme o novo edital, destaca o que mudou e guarda a lista de alterações de cada edital.
+
 ## Situação e boleto
 
-A situação segue a ordem: pendente de inscrição → pendente de pagamento → pagamento realizado, aguardando homologação → inscrição homologada, aguardando local de prova → local de prova divulgado. Em **Pendente de pagamento**, anexe o PDF do boleto: o app mostra o vencimento e o valor e deixa a linha digitável pronta para copiar e colar no app do banco.
+A situação segue a ordem: pendente de inscrição → pendente de pagamento → pagamento realizado, aguardando homologação → inscrição homologada, aguardando local de prova → local de prova divulgado. Em **Pendente de pagamento**, anexe o boleto em PDF ou em imagem (print ou foto; a imagem é lida por reconhecimento de texto no navegador): o app mostra o vencimento e o valor e deixa a linha digitável pronta para copiar e colar no app do banco.
 
 ## Dados
 

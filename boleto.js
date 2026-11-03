@@ -56,12 +56,30 @@ function encontrarLinhaNoTexto(texto) {
   const banc = /(\d{5}[.\s]?\d{5})\s*(\d{5}[.\s]?\d{6})\s*(\d{5}[.\s]?\d{6})\s*(\d)\s*(\d{14})/g;
   const arrec = /(8\d{10}[-\s]?\d)\s*(\d{11}[-\s]?\d)\s*(\d{11}[-\s]?\d)\s*(\d{11}[-\s]?\d)/g;
   const candidatos = [...plano.matchAll(banc), ...plano.matchAll(arrec)].map(m => analisarLinha(m[0]));
+  // texto vindo de imagem (OCR): pontuação e espaços saem tortos; tenta pelos dígitos de cada linha
+  const linhas = texto.split("\n").map(corrigirOCR);
+  for (let i = 0; i < linhas.length; i++) {
+    for (const junto of [linhas[i], linhas[i] + (linhas[i + 1] || "")]) {
+      const d = soDigitos(junto);
+      for (const tam of [47, 48]) for (let k = 0; k + tam <= d.length; k++) {
+        const c = analisarLinha(d.slice(k, k + tam));
+        if (c.valida && (tam === 47 || d[k] === "8")) candidatos.push(c);
+      }
+    }
+  }
   return candidatos.find(c => c.valida) || candidatos[0] || null;
+}
+
+// Em linhas quase só de números, troca letras que o OCR confunde com dígitos
+function corrigirOCR(l) {
+  const dig = (l.match(/\d/g) || []).length;
+  if (dig < 20 || dig < l.replace(/\s/g, "").length * 0.7) return l;
+  return l.replace(/[Oo]/g, "0").replace(/[Il|]/g, "1").replace(/S/g, "5").replace(/B/g, "8").replace(/Z/g, "2");
 }
 
 function lerVencimentoNoTexto(texto) {
   const plano = texto.replace(/\s+/g, " ");
-  const m = plano.match(/vencimento[^0-9]{0,40}(\d{2})\/(\d{2})\/(\d{4})/i);
+  const m = plano.match(/venc(?:imento|\.)?[^0-9]{0,40}(\d{2})\s*\/\s*(\d{2})\s*\/\s*(\d{4})/i);
   return m ? `${m[3]}-${m[2]}-${m[1]}` : "";
 }
 function lerValorNoTexto(texto) {
@@ -70,8 +88,37 @@ function lerValorNoTexto(texto) {
   return m ? "R$ " + m[1] : "";
 }
 
-async function lerBoleto(arquivo) {
-  const texto = await textoDoPdf(arquivo, 5);
+// Imagem (print ou foto): reconhecimento de texto no próprio navegador (Tesseract.js, baixado na 1ª vez)
+const TESS_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+function carregarTesseract() {
+  if (window.Tesseract) return Promise.resolve(window.Tesseract);
+  return new Promise((ok, falha) => {
+    const s = document.createElement("script");
+    s.src = TESS_URL; s.onload = () => ok(window.Tesseract); s.onerror = () => falha(new Error("sem-internet"));
+    document.head.appendChild(s);
+  });
+}
+async function prepararImagem(arquivo) {
+  // amplia e passa para tons de cinza: melhora a leitura de prints pequenos
+  const img = await createImageBitmap(arquivo);
+  const escala = Math.min(3, Math.max(1, 1800 / img.width));
+  const c = document.createElement("canvas");
+  c.width = Math.round(img.width * escala); c.height = Math.round(img.height * escala);
+  const ctx = c.getContext("2d");
+  ctx.filter = "grayscale(1) contrast(1.4)";
+  ctx.drawImage(img, 0, 0, c.width, c.height);
+  return c;
+}
+async function textoDaImagem(arquivo, aoProgredir) {
+  const T = await carregarTesseract();
+  const worker = await T.createWorker("por", 1, { logger: m => { if (aoProgredir && m.status === "recognizing text") aoProgredir(Math.round(m.progress * 100)); } });
+  try { const { data } = await worker.recognize(await prepararImagem(arquivo)); return data.text || ""; }
+  finally { worker.terminate(); }
+}
+
+async function lerBoleto(arquivo, aoProgredir) {
+  const imagem = /^image\//.test(arquivo.type) || /\.(png|jpe?g|webp|heic|bmp)$/i.test(arquivo.name);
+  const texto = imagem ? await textoDaImagem(arquivo, aoProgredir) : await textoDoPdf(arquivo, 5);
   const linha = encontrarLinhaNoTexto(texto);
   return {
     semTexto: texto.replace(/\s/g, "").length < 40,
@@ -83,4 +130,4 @@ async function lerBoleto(arquivo) {
   };
 }
 
-if (typeof module !== "undefined") module.exports = { analisarLinha, encontrarLinhaNoTexto, dataDoFator, mod10, lerVencimentoNoTexto, lerValorNoTexto };
+if (typeof module !== "undefined") module.exports = { corrigirOCR, analisarLinha, encontrarLinhaNoTexto, dataDoFator, mod10, lerVencimentoNoTexto, lerValorNoTexto };
