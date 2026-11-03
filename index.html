@@ -96,12 +96,6 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .fase-prox{color:var(--ink)!important;font-weight:500}
 .count.ok{background:var(--ok);color:#fff}
 .chip.ok{background:var(--ok);color:#fff} .chip.bad{background:var(--danger);color:#fff}
-.seg{display:flex;flex-wrap:wrap;gap:8px;border-radius:12px;padding:2px}
-.seg-opt{flex-direction:row;cursor:pointer}
-.seg-opt input{position:absolute;opacity:0;width:1px;height:1px}
-.seg-opt span{display:inline-block;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:999px;padding:7px 14px;font-size:14px;font-weight:500}
-.seg-opt input:checked+span{background:var(--ink);color:var(--bg);border-color:var(--ink)}
-.seg-opt input:focus-visible+span{outline:3px solid var(--accent);outline-offset:2px}
 #tipoBase{margin:8px 0 0}
 .fases{display:flex;flex-direction:column;gap:10px}
 .fase{border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:10px;background:var(--surface)}
@@ -120,7 +114,6 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .tl.ok::before{background:var(--ok);border-color:var(--ok)} .tl.bad::before{background:var(--danger);border-color:var(--danger)}
 .tl-head{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .tl .note{margin-top:2px}
-#tipoSel.auto{box-shadow:0 0 0 2px var(--accent)}
 </style>
 </head>
 <body>
@@ -169,7 +162,7 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 
       <div class="legend">Tipo de cargo</div>
       <div class="full">
-        <div class="seg" id="tipoSel" role="radiogroup" aria-label="Tipo de cargo"></div>
+        <label>Cargo que vai concorrer<select id="tipoSel" name="tipo"></select></label>
         <p class="note" id="tipoBase"></p>
       </div>
 
@@ -321,13 +314,12 @@ function abrirVer(id){
 
 // ---------- Formulário: tipo de cargo e fases ----------
 function montarSeletor(){
-  $("tipoSel").innerHTML = Object.entries(MODELOS).map(([k,m])=>
-    `<label class="seg-opt"><input type="radio" name="tipo" value="${k}" id="tipo_${k}"><span>${esc(m.rotulo)}</span></label>`).join("");
-  $("tipoSel").addEventListener("change", e=>{ if(e.target.name==="tipo") trocarTipo(e.target.value); });
+  $("tipoSel").innerHTML = Object.entries(MODELOS).map(([k,m])=>`<option value="${k}">${esc(m.rotulo)}</option>`).join("");
+  $("tipoSel").addEventListener("change", e=>trocarTipo(e.target.value));
 }
 function marcarTipo(tipo){
   tipoAtual=tipo;
-  const r=$("tipo_"+tipo); if(r) r.checked=true;
+  $("tipoSel").value=tipo;
   const m=MODELOS[tipo];
   $("tipoBase").textContent = m.base ? `${m.fases.length} fases, conforme o ${m.base}. Você pode renomear, apagar ou acrescentar fases.` : "Monte as fases do seu concurso: renomeie, apague ou acrescente quantas precisar.";
 }
@@ -468,7 +460,7 @@ $("arqEdital").onchange=async e=>{
       : "Não consegui abrir esse PDF. Verifique se o arquivo não está protegido por senha.";
   }finally{ btn.disabled=false; }
 };
-$("form").addEventListener("input",e=>{ e.target.classList.remove("auto"); if(e.target.name==="tipo") $("tipoSel").classList.remove("auto"); });
+$("form").addEventListener("input",e=>e.target.classList.remove("auto"));
 
 montarSeletor();
 carregar(); render();

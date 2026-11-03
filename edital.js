@@ -27,14 +27,25 @@ async function textoDoPdf(arquivo, maxPaginas = 90) {
     const c = await pag.getTextContent();
     const linhas = [];
     for (const it of c.items) {
-      if (!it.str || !it.str.trim()) continue;
+      if (!it.str) continue;
       const y = it.transform[5], x = it.transform[4];
+      const h = Math.abs(it.transform[3]) || it.height || 10;
       let l = linhas.find(l => Math.abs(l.y - y) < 3);
       if (!l) { l = { y, partes: [] }; linhas.push(l); }
-      l.partes.push({ x, s: it.str });
+      l.partes.push({ x, w: it.width || 0, h, s: it.str });
     }
     linhas.sort((a, b) => b.y - a.y);
-    texto += linhas.map(l => l.partes.sort((a, b) => a.x - b.x).map(p => p.s).join(" ")).join("\n") + "\n";
+    // Junta os pedaços da linha: só põe espaço quando há um vão de verdade entre eles
+    // (o PDF costuma partir palavras e números em vários pedaços, como "202" + "7").
+    const juntar = partes => {
+      let out = "", ant = null;
+      for (const p of partes.sort((a, b) => a.x - b.x)) {
+        if (ant && !/\s$/.test(out) && !/^\s/.test(p.s) && p.x - (ant.x + ant.w) > p.h * 0.15) out += " ";
+        out += p.s; ant = p;
+      }
+      return out.replace(/\s+/g, " ").trim();
+    };
+    texto += linhas.map(l => juntar(l.partes)).filter(Boolean).join("\n") + "\n";
   }
   return texto;
 }
