@@ -121,9 +121,10 @@ function htmlResumoViagem(x, uid) {
   const v = (x.viagens || {})[uid] || {};
   const t = resumoTransporte(v.transporte), h = resumoHospedagem(v.hospedagem), l = resumoLocal(v.local);
   const mapa = v.hospedagem && enderecoHosp(v.hospedagem), mapaL = v.local && enderecoHosp(v.local);
-  return (l ? `<div class="viagem-res"><span class="vr-ic">${SVG_LOCAL}</span><div><p class="pre"><b>Local de prova:</b> ${esc(l)}</p><div class="end-acoes">${botaoCopiar(enderecoParaCopiar(v.local))}${v.local.arquivo ? `<a data-arqlocal="${esc(uid)}" target="_blank" rel="noopener">${esc(v.local.arquivo.nome)}</a>` : ""}${mapaL ? `<a href="${linkMapa(v.local, mapaL)}" target="_blank" rel="noopener">Abrir no mapa</a>` : ""}</div>${slotDesl(x, uid, "hospLocal")}</div></div>` : "") +
-    (t ? `<div class="viagem-res"><span class="vr-ic">${v.transporte.tipo === "carro" ? SVG_CARRO : SVG_AVIAO}</span><p class="pre">${esc(t)}</p></div>` : "") +
-    (h ? `<div class="viagem-res"><span class="vr-ic">${SVG_HOTEL}</span><div><p class="pre">${esc(h)}</p><div class="end-acoes">${mapa ? botaoCopiar(enderecoParaCopiar(v.hospedagem)) + `<a href="${linkMapa(v.hospedagem, mapa)}" target="_blank" rel="noopener">Abrir no mapa</a>` : ""}</div>${slotDesl(x, uid, "aeroHosp")}</div></div>` : "");
+  // ordem: transporte, hospedagem, local de prova
+  return (t ? `<div class="viagem-res"><span class="vr-ic">${v.transporte.tipo === "carro" ? SVG_CARRO : SVG_AVIAO}</span><p class="pre">${esc(t)}</p></div>` : "") +
+    (h ? `<div class="viagem-res"><span class="vr-ic">${SVG_HOTEL}</span><div><p class="pre"><span class="nome-l">${esc(v.hospedagem.nome || "Hospedagem")}${mapa ? botaoCopiar(enderecoParaCopiar(v.hospedagem)) : ""}</span>\n${esc(resumoHospedagem({ ...v.hospedagem, nome: "" }))}</p>${slotDesl(x, uid, "aeroHosp")}</div></div>` : "") +
+    (l ? `<div class="viagem-res"><span class="vr-ic">${SVG_LOCAL}</span><div><p class="pre"><span class="nome-l"><span><b>Local de prova:</b> ${esc(v.local.nome || "")}</span>${mapaL ? botaoCopiar(enderecoParaCopiar(v.local)) : ""}</span>\n${esc(resumoLocal({ ...v.local, nome: "" }))}</p>${v.local.arquivo ? `<div class="end-acoes"><a data-arqlocal="${esc(uid)}" target="_blank" rel="noopener">${esc(v.local.arquivo.nome)}</a></div>` : ""}${slotDesl(x, uid, "hospLocal")}</div></div>` : "");
 }
 
 // ---------- Deslocamentos (aeroporto → hospedagem → local de prova) ----------

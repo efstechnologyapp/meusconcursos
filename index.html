@@ -142,6 +142,8 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .chk input{width:auto}
 @media (max-width:560px){.vagas-grid{grid-template-columns:repeat(3,1fr)}}
 .chip svg{width:13px;height:13px;vertical-align:-2px;margin-right:4px}
+.nome-l{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
+.nome-l .copy-end{margin:0}
 .copy-end{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;padding:4px 10px;border-radius:999px;color:var(--brand);vertical-align:middle}
 .copy-end svg{width:14px;height:14px}
 .end-acoes{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:13.5px}
@@ -1466,7 +1468,7 @@ iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO=31;
+const APP_VERSAO=33;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{
