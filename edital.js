@@ -96,7 +96,7 @@ const MODELOS = {
     fases: [
       { nome: "1ª etapa – Provas objetivas", carater: "EC", chave: /provas? objetivas?/i },
       { nome: "2ª etapa – Prova discursiva", carater: "EC", chave: /prova discursiva/i },
-      { nome: "3ª etapa – Prova de títulos", carater: "C", chave: /prova de t[ií]tulos/i }
+      { nome: "3ª etapa – Prova de títulos", carater: "C", chave: /prova de t[ií]tulos/i, nota: /(?:comprova[cç][aã]o|apresenta[cç][aã]o|entrega|envio|anexar) d[oe]s (?:documentos? (?:pertinentes|referentes) [àa] prova de )?t[ií]tulos|t[ií]tulos/i }
     ]},
   juiz: { rotulo: "Juiz Substituto", base: "edital TJSC 2026 (FGV) e Resolução CNJ 75/2009",
     detectar: /magistratura|juiz substituto/i,
@@ -107,7 +107,7 @@ const MODELOS = {
       { nome: "2ª etapa – Sentença criminal", carater: "EC", chave: /senten[cç]a criminal/i },
       { nome: "3ª etapa – Inscrição definitiva (sindicância, exame médico e psicotécnico)", carater: "E", chave: /inscri[cç][aã]o definitiva/i },
       { nome: "4ª etapa – Prova oral", carater: "EC", chave: /prova oral/i },
-      { nome: "5ª etapa – Avaliação de títulos", carater: "C", chave: /avalia[cç][aã]o de t[ií]tulos/i }
+      { nome: "5ª etapa – Avaliação de títulos", carater: "C", chave: /avalia[cç][aã]o de t[ií]tulos/i, nota: /(?:comprova[cç][aã]o|apresenta[cç][aã]o|entrega|envio|anexar) d[oe]s (?:documentos? (?:pertinentes|referentes) [àa] prova de )?t[ií]tulos|t[ií]tulos/i }
     ]},
   promotor: { rotulo: "Promotor de Justiça", base: "edital MPMT 2026 (FGV)",
     detectar: /promotor de justi[cç]a/i,
@@ -117,7 +117,7 @@ const MODELOS = {
       { nome: "2ª fase – Provas discursivas (2º dia)", carater: "EC", chave: /provas discursivas/i, segundoDia: true },
       { nome: "3ª fase – Inscrição definitiva", carater: "E", chave: /inscri[cç][aã]o definitiva/i },
       { nome: "4ª fase – Prova oral", carater: "EC", chave: /prova oral/i },
-      { nome: "5ª fase – Avaliação de títulos", carater: "C", chave: /avalia[cç][aã]o de t[ií]tulos/i }
+      { nome: "5ª fase – Avaliação de títulos", carater: "C", chave: /avalia[cç][aã]o de t[ií]tulos/i, nota: /(?:comprova[cç][aã]o|apresenta[cç][aã]o|entrega|envio|anexar) d[oe]s (?:documentos? (?:pertinentes|referentes) [àa] prova de )?t[ií]tulos|t[ií]tulos/i }
     ]},
   analista: { rotulo: "Analista / Técnico Judiciário", base: "edital TJPB 2026 (FGV)",
     detectar: /analista\s*(?:[–-]\s*)?judici[aá]ri[oa]|t[eé]cnico judici[aá]rio/i,
@@ -212,7 +212,12 @@ const INSTRUCOES_CHAVE = [
 ];
 const INSTRUCOES_FORA = /divulgad|gabarito|posse|requisitos|inscri[cç][aã]o|isen[cç][aã]o|laudo|recurso|t[ií]tulos|heteroidentifica/i;
 
-function interpretarEdital(textoBruto) {
+function interpretarEdital(textoBruto, tipoForcado) {
+  // remove cabeçalhos e rodapés que se repetem em todas as páginas
+  const linhas = textoBruto.split("\n"), conta = {};
+  const chaveLinha = l => l.replace(/\d+\s*$/, "").trim();
+  for (const l of linhas) { const k = chaveLinha(l); if (k.length > 8 && k.length < 140) conta[k] = (conta[k] || 0) + 1; }
+  textoBruto = linhas.filter(l => (conta[chaveLinha(l)] || 0) < 5).join("\n");
   const plano = textoBruto.replace(/ /g, " ").replace(/-\n(?=[a-zà-ú])/g, "").replace(/\s+/g, " ");
   const r = {};
 
@@ -253,9 +258,39 @@ function interpretarEdital(textoBruto) {
   }
   if (escolhidas.length) r.instrucoes = escolhidas.join("\n");
 
-  r.tipo = detectarTipo(plano);
+  r.tipo = (tipoForcado && MODELOS[tipoForcado]) ? tipoForcado : detectarTipo(plano);
   r.fasesDatas = datasDasFases(plano, r.tipo);
+  r.notas = notasDasFases(plano, r.tipo);
+  r.portoesMin = regraPortoes(plano);
   return r;
 }
 
-if (typeof module !== "undefined") module.exports = { interpretarEdital, datasNoTrecho, MODELOS, detectarTipo, datasDasFases };
+// Quando o edital não traz a data de uma fase, guarda a regra que ele dá
+// (ex.: "prazo de 15 dias úteis contados da convocação", "datas constarão do edital de convocação").
+function notasDasFases(plano, tipo) {
+  const modelo = MODELOS[tipo] || MODELOS.outro;
+  const frases = plano.split(/(?<=[.;])\s+(?=\d{1,2}(?:\.\d{1,2})+\.?\s|[A-ZÀ-Ú])/);
+  return modelo.fases.map(f => {
+    const re = f.nota || f.chave;
+    let melhor = null, nota = 0;
+    for (const fr of frases) {
+      if (fr.length < 50 || fr.length > 420 || !re.test(fr)) continue;
+      let n = 0;
+      if (/\b(datas?|prazo|hor[aá]rios?|local)\b/i.test(fr)) n += 2;
+      if (/edital de convoca|convoca[cç][aã]o|convocad|edital espec[ií]fico|oportunamente|juntamente com o pedido|no momento da inscri|constar[aã]o|momento d[ao]|ser[aã]o realizad|ser[aá] realizad|dias [úu]teis/i.test(fr)) n += 2;
+      if (/recurso|nota|pontua|peso|n[aã]o haver[aá]|vedad|elimina/i.test(fr)) n -= 2;
+      if (n > nota) { nota = n; melhor = fr; }
+    }
+    if (nota < 2) return "";
+    // tira o título da seção e a numeração do item ("DA PROVA ORAL 15.1 ...")
+    return limpar(melhor.replace(/\s+\d+\.?\s*$/, "").replace(/^(?:[\d.]+\s*)?(?:[A-ZÀ-Ú–\- ,]{6,}\s+)?\d{1,2}(?:\.\d{1,2})+\.?\s+/, "").replace(/^[\d.]+\s*/, ""));
+  });
+}
+
+// Regra geral dos portões: "fechados 30 (trinta) minutos antes do início das provas"
+function regraPortoes(plano) {
+  const m = plano.match(/port[oõ]es[^.]{0,200}?fechad[oa]s,?(?:\s+[a-zà-ú]+,?){0,3}\s+(\d{1,3})\s*(?:\([^)]*\)\s*)?minutos\s+antes\s+do\s+in[ií]cio/i);
+  return m ? +m[1] : null;
+}
+
+if (typeof module !== "undefined") module.exports = { notasDasFases, regraPortoes, interpretarEdital, datasNoTrecho, MODELOS, detectarTipo, datasDasFases };

@@ -105,6 +105,8 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .fase-x{border:none;background:transparent;color:var(--muted);font-size:20px;line-height:1;padding:4px 8px;flex:none}
 .fase-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .fase-grid .w2{grid-column:span 2}
+.fase-grid .w4{grid-column:1/-1}
+.fase-grid textarea{min-height:52px;font-size:14px;padding:6px 8px}
 .fase-grid input,.fase-grid select{font-size:14px;padding:6px 8px}
 @media (max-width:560px){.fase-grid{grid-template-columns:1fr 1fr}.fase-grid .w2{grid-column:1/-1}}
 .timeline{list-style:none;margin:0;padding:0 0 0 14px;border-left:2px solid var(--line);display:flex;flex-direction:column;gap:12px}
@@ -214,7 +216,7 @@ function salvar(){
   catch(e){ toast("Não foi possível salvar neste navegador."); return false; }
 }
 function novoId(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
-function faseVazia(nome="",carater="EC"){ return {nome,carater,data:"",horario:"",portoes:"",local:"",situacao:"Aguardando"}; }
+function faseVazia(nome="",carater="EC"){ return {nome,carater,data:"",horario:"",portoes:"",local:"",situacao:"Aguardando",obs:""}; }
 function fasesDoModelo(tipo){ return (MODELOS[tipo]||MODELOS.outro).fases.map(f=>faseVazia(f.nome,f.carater)); }
 
 // ---------- Datas ----------
@@ -289,7 +291,7 @@ function abrirVer(id){
     const quando=[f.data?fmtData(f.data):"data a definir", f.horario&&("às "+f.horario), f.portoes&&("portões fecham "+f.portoes)].filter(Boolean).join(" · ");
     return `<li class="tl ${atual?"atual":""} ${cls}">
       <div class="tl-head"><b>${esc(f.nome||"Fase "+(i+1))}</b><span class="chip ${cls}">${esc(sit)}</span></div>
-      <div class="note">${esc(quando)}${f.local?"<br>"+esc(f.local):""}</div>
+      <div class="note">${esc(quando)}${f.local?"<br>"+esc(f.local):""}</div>${f.obs?`<div class="note pre">${esc(f.obs)}</div>`:""}
       <div class="note">${esc(CARATER[f.carater]||"")}</div></li>`;
   }).join("");
   const c = a.eliminado ? {t:"encerrado",c:"past"} : contagem(a.prox? diasAte(a.prox.f.data) : null);
@@ -331,10 +333,11 @@ function lerFasesDoForm(){
     horario: el.querySelector(".f-horario").value,
     portoes: el.querySelector(".f-portoes").value,
     local: el.querySelector(".f-local").value.trim(),
-    situacao: el.querySelector(".f-situacao").value
+    situacao: el.querySelector(".f-situacao").value,
+    obs: el.querySelector(".f-obs").value.trim()
   }));
 }
-function temDados(f){ return !!(f.data||f.horario||f.portoes||f.local||(f.situacao&&f.situacao!=="Aguardando")); }
+function temDados(f){ return !!(f.data||f.horario||f.portoes||f.local||f.obs||(f.situacao&&f.situacao!=="Aguardando")); }
 function trocarTipo(tipo){
   const atuais=lerFasesDoForm();
   const novas=fasesDoModelo(tipo).map(n=>{ const igual=atuais.find(f=>f.nome===n.nome); return igual? igual : n; });
@@ -359,6 +362,7 @@ function renderFases(){
         <label>Situação<select class="f-situacao">${SITUACOES.map(s=>`<option${s===(f.situacao||"Aguardando")?" selected":""}>${s}</option>`).join("")}</select></label>
         <label class="w2">Caráter<select class="f-carater">${Object.entries(CARATER).map(([k,v])=>`<option value="${k}"${k===f.carater?" selected":""}>${v}</option>`).join("")}</select></label>
         <label class="w2">Local (endereço, sala)<input class="f-local" value="${esc(f.local)}"></label>
+        <label class="w4">Observações da fase<textarea class="f-obs" rows="2" placeholder="Prazos, regras, o que levar…">${esc(f.obs||"")}</textarea></label>
       </div>
     </div>`).join("") || `<p class="note">Nenhuma fase. Clique em “Adicionar fase”.</p>`;
 }
@@ -438,19 +442,41 @@ $("arqEdital").onchange=async e=>{
       el.classList.add("auto"); preenchidos.push(NOMES_CAMPO[k]);
     }
     // tipo de cargo e fases
-    const algumaFaseComDados = lerFasesDoForm().some(temDados);
-    if(!algumaFaseComDados){
-      fasesForm=fasesDoModelo(r.tipo);
-      (r.fasesDatas||[]).forEach((d,i)=>{ if(fasesForm[i]){ fasesForm[i].data=d.data||""; fasesForm[i].horario=d.horario||""; } });
-      const primeira=fasesForm.find(x=>x.data); if(primeira && r.portoes && !primeira.portoes) primeira.portoes=r.portoes;
-      marcarTipo(r.tipo); renderFases();
-      const comData=fasesForm.filter(x=>x.data).length;
-      $("fasesBox").querySelectorAll(".fase").forEach((el,i)=>{
-        if(fasesForm[i].data){ el.querySelector(".f-data").classList.add("auto"); if(fasesForm[i].horario) el.querySelector(".f-horario").classList.add("auto"); }
-      });
-      $("tipoSel").classList.add("auto");
-      preenchidos.push(`tipo de cargo (${MODELOS[r.tipo].rotulo})`, `${comData} de ${fasesForm.length} datas de fase`);
+    const atuais=lerFasesDoForm();
+    if(!atuais.some(temDados)){
+      // formulário sem fases preenchidas: usa o tipo de cargo que o edital indica
+      fasesForm=fasesDoModelo(r.tipo); marcarTipo(r.tipo);
+      $("tipoSel").classList.add("auto"); preenchidos.push(`tipo de cargo (${MODELOS[r.tipo].rotulo})`);
+    }else{
+      // já há fases: completa só o que está vazio (ex.: edital de convocação para a prova oral)
+      fasesForm=atuais;
+      if(r.tipo!==tipoAtual) Object.assign(r, interpretarEdital(texto, tipoAtual));
     }
+    const destaques=[]; let novasDatas=0, regras=0, portoesCalc=0;
+    MODELOS[r.tipo].fases.forEach((mf,i)=>{
+      const alvo=fasesForm.find(f=>f.nome===mf.nome); if(!alvo) return;
+      const idx=fasesForm.indexOf(alvo), d=(r.fasesDatas||[])[i]||{}, nota=(r.notas||[])[i]||"";
+      if(d.data && !alvo.data){ alvo.data=d.data; destaques.push([idx,"f-data"]); novasDatas++; }
+      if(d.horario && !alvo.horario){ alvo.horario=d.horario; destaques.push([idx,"f-horario"]); }
+      if(!alvo.data && nota && !alvo.obs){ alvo.obs=nota; destaques.push([idx,"f-obs"]); regras++; }
+    });
+    // portões: horário informado no edital para a 1ª prova; nas demais, a regra geral ("X minutos antes do início")
+    const primeira=fasesForm.find(x=>x.data);
+    if(primeira && r.portoes && !primeira.portoes){ primeira.portoes=r.portoes; destaques.push([fasesForm.indexOf(primeira),"f-portoes"]); }
+    if(r.portoesMin) fasesForm.forEach((f,i)=>{
+      if(f.horario && !f.portoes){
+        const [h,m]=f.horario.split(":").map(Number), t=h*60+m-r.portoesMin;
+        if(t>0){ f.portoes=`${String(Math.floor(t/60)).padStart(2,"0")}:${String(t%60).padStart(2,"0")}`; destaques.push([i,"f-portoes"]); portoesCalc++;
+          const aviso=`Portões: calculado pela regra do edital (fecham ${r.portoesMin} minutos antes do início).`;
+          f.obs = f.obs ? (f.obs.includes("Portões:")?f.obs:f.obs+"\n"+aviso) : aviso; }
+      }
+    });
+    renderFases();
+    const els=$("fasesBox").querySelectorAll(".fase");
+    destaques.forEach(([i,c])=>{ const el=els[i]&&els[i].querySelector("."+c); if(el) el.classList.add("auto"); });
+    if(novasDatas) preenchidos.push(`${novasDatas} data(s) de fase`);
+    if(primeira && r.portoes || portoesCalc) preenchidos.push("horário dos portões");
+    if(regras) preenchidos.push(`regras de ${regras} fase(s) ainda sem data, nas observações`);
     st.textContent = preenchidos.length
       ? `Preenchi: ${preenchidos.join(", ")}. O que veio do edital está destacado em amarelo; confira antes de salvar.`
       : "Não consegui identificar os dados nesse edital. Preencha manualmente.";
