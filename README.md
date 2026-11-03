@@ -40,6 +40,10 @@ Ficam fora do formulário do concurso. Ao abrir o concurso na tela inicial, cada
 
 **Deslocamentos:** com o voo (aeroporto de chegada), a hospedagem e o local de prova preenchidos, o app mostra a distância e o tempo de carro do aeroporto até a hospedagem e da hospedagem até o local de prova, além do horário sugerido de saída em cada dia de prova (trajeto + 30 min de folga antes dos portões). Os endereços são localizados no OpenStreetMap (Nominatim) e a rota é calculada pelo OSRM, gratuitos e sem trânsito em tempo real; os links **Trânsito agora (Google Maps)**, **Waze** e **Pedir Uber** abrem a rota com o trânsito do momento.
 
+## Google Agenda
+
+Marcando **Gravar as datas das provas no meu Google Agenda** (fim da tela inicial), cada fase com data vira um evento na agenda, com local, horário de Brasília, portões e lembretes 1 dia e 3 horas antes; mudanças e exclusões são replicadas. Requer atualizar o Apps Script (veja CONFIGURAR-LOGIN.md).
+
 ## Imprimir uma fase
 
 Nos detalhes do concurso, o ícone de impressora ao lado de cada fase gera um documento só daquela fase (ou das fases do mesmo dia): data, horários, portões, composição da prova, local de prova com sala, transporte (voos e conexões), hospedagem, deslocamentos com horário sugerido de saída e instruções gerais. Na janela de impressão, escolha a impressora ou **Salvar como PDF**.

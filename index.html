@@ -181,6 +181,8 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .imp-kv dt{color:#555} .imp-kv dd{margin:0}
 .imp-sub{font-weight:700;margin-top:6px!important}
 .imp-rod{color:#666;font-size:9pt;margin-top:12px}
+.agenda-box{display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center}
+.agenda-box .chk{font-size:14px;color:var(--ink)}
 .chip.pend{background:transparent;border:1px dashed var(--muted);color:var(--muted)}
 .tl-dir{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}
 .viagem-btns{display:inline-flex;gap:4px}
@@ -329,6 +331,10 @@ fieldset{border:none;padding:0;margin:0;display:contents}
     <button type="button" id="btnExportar">Fazer backup (baixar arquivo)</button>
     <button type="button" id="btnImportar">Restaurar backup</button>
     <input type="file" id="arqBackup" accept=".json,application/json" hidden>
+  </div>
+  <div class="agenda-box">
+    <label class="chk"><input type="checkbox" id="chkAgenda"> Gravar as datas das provas no meu Google Agenda</label>
+    <p class="note" id="agendaStatus"></p>
   </div>
   <p class="note" style="text-align:center;margin:0">Seus concursos e anexos são sincronizados com a sua conta e aparecem em qualquer aparelho em que você entrar. O backup em arquivo é opcional.</p>
   <p class="note" id="versaoApp" style="text-align:center;margin:0;font-size:11px"></p>
@@ -1158,6 +1164,7 @@ function entrarNoApp(sessao){
   $("usuario").hidden=false; $("usuEmail").textContent=sessao.email;
   if(sessao.foto){ $("usuFoto").src=sessao.foto; $("usuFoto").hidden=false; } else $("usuFoto").hidden=true;
   render();
+  iniciarAgendaUI();
   iniciarSincronizacao();
   setTimeout(consertarCadastros, 4000);
 }
@@ -1300,7 +1307,7 @@ async function sincronizar(){
   sinc.rodando=true; clearTimeout(sinc.timer); mostrarSinc("rodando");
   const versaoEnviada=sinc.versaoLocal;
   try{
-    const r=await postScript({ acao:"sincronizar", sessao:usuarioAtual.sessao, itens, excluidos });
+    const r=await postScript({ acao:"sincronizar", sessao:usuarioAtual.sessao, itens, excluidos, agenda:agendaLigada() });
     if(!r.ok){ if(r.sessaoInvalida){ sinc.rodando=false; sessaoExpirada(); return; } mostrarSinc("erro", r.erro); return; }
     let resultado={ itens:r.itens, excluidos:r.excluidos };
     const mudouDurante = sinc.versaoLocal!==versaoEnviada;
@@ -1312,6 +1319,7 @@ async function sincronizar(){
     if(JSON.stringify(itens)!==antes) render();
     mostrarSinc(mudouDurante?"pendente":"ok");
     enviarAnexos(r.arquivos||[]);
+    if(agendaLigada()) mostrarAgenda(r.agenda);
     if(mudouDurante) sinc.timer=setTimeout(sincronizar,800);
   }catch(e){ mostrarSinc(navigator.onLine?"erro":"offline", navigator.onLine?"servidor indisponível":""); }
   finally{ sinc.rodando=false; }
@@ -1488,8 +1496,27 @@ montarSeletor();
 iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
+// ---------- Google Agenda ----------
+// O servidor (Apps Script) cria, atualiza e apaga um evento para cada fase com data, a cada sincronização.
+function chaveAgenda(){ return chaveUsuario("meus-concursos-agenda"); }
+function agendaLigada(){ try{ return localStorage.getItem(chaveAgenda())==="1"; }catch(e){ return false; } }
+function mostrarAgenda(a){
+  const st=$("agendaStatus"); if(!st) return;
+  if(!agendaLigada()){ st.textContent="Cada fase com data vira um evento na sua agenda, com lembretes 1 dia e 3 horas antes."; return; }
+  if(a===undefined){ st.textContent="O servidor ainda não grava na agenda: atualize o Apps Script (veja CONFIGURAR-LOGIN.md, seção Google Agenda)."; return; }
+  if(!a.ok){ st.textContent="Agenda: "+(a.erro||"não foi possível gravar."); return; }
+  const mud=[a.criados&&`${a.criados} criado(s)`,a.atualizados&&`${a.atualizados} atualizado(s)`,a.removidos&&`${a.removidos} removido(s)`].filter(Boolean).join(", ");
+  st.textContent=`Agenda em dia: ${a.eventos} prova(s) com data no Google Agenda${mud?" ("+mud+" agora)":""}.`;
+}
+$("chkAgenda").onchange=e=>{
+  try{ localStorage.setItem(chaveAgenda(), e.target.checked?"1":"0"); }catch(err){}
+  $("agendaStatus").textContent = e.target.checked ? "Gravando no Google Agenda…" : "Desligado. Os eventos já criados continuam na agenda.";
+  if(e.target.checked) sincronizar();
+};
+function iniciarAgendaUI(){ $("chkAgenda").checked=agendaLigada(); if(agendaLigada()) $("agendaStatus").textContent="Sincronizando com o Google Agenda…"; else mostrarAgenda(); }
+
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO=34;
+const APP_VERSAO=35;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{

@@ -67,3 +67,16 @@ Proteções incluídas: o servidor confere com o Google se o login é verdadeiro
 - Sem internet, o app continua funcionando; as alterações ficam guardadas e são enviadas quando a conexão voltar. O indicador no topo mostra a situação (verde: sincronizado; amarelo: enviando; vermelho: sem conexão). Clique nele para sincronizar na hora.
 - Se o mesmo concurso for editado em dois aparelhos ao mesmo tempo, vale a última alteração salva. Exclusões são replicadas para todos os aparelhos.
 - Os dados ficam no Google Drive da conta que publicou o Apps Script, na pasta **Meus Concursos – dados** (uma subpasta por usuário). Se outras pessoas usarem o seu app, os dados delas também ficam nessa pasta, na sua conta.
+
+## Google Agenda (gravar as provas na agenda)
+
+O app pode criar um evento no seu Google Agenda para cada fase com data. Os eventos se atualizam sozinhos quando a data ou o horário mudam e são apagados se a fase ou o concurso forem excluídos. Cada evento tem lembretes 1 dia e 3 horas antes. Fase sem horário vira evento de dia inteiro.
+
+Para ativar (uma vez só):
+
+1. Abra o projeto do Apps Script, apague o conteúdo de `Código.gs` e cole o novo `apps-script/Codigo.gs`. Salve.
+2. Escolha a função **autorizar** e clique em **Executar**. Aceite a nova permissão (Google Agenda).
+3. **Implantar → Gerenciar implantações → lápis (Editar) → Versão: Nova versão → Implantar**. A URL `/exec` continua a mesma.
+4. No app, no fim da tela inicial, marque **Gravar as datas das provas no meu Google Agenda**.
+
+Os eventos vão para a agenda principal da conta que publicou o Apps Script. Por isso, só essa conta pode ligar a opção; para outras contas o app avisa que não é possível.
