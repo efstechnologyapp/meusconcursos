@@ -330,6 +330,12 @@ function interpretarEdital(textoBruto, tipoForcado, estrutura) {
     const m = inicio.match(re);
     if (!m) continue;
     let nome = limpar(m[0].split(/\s+(?:torna|faz|fazem|comunica|no uso|resolve|EDITAL|CONCURSO|-\s|–\s|\|)|\s+(?:Avenida|Av|Rua|Pra[cç]a|P[cç]a|Rodovia|Alameda|Travessa|Setor|SAF|SAS|Quadra|Bairro|CEP|Endere[cç]o|Telefone)(?![A-Za-zÀ-ú])|\s+www\./i)[0]);
+    // cabeçalhos que repetem o nome (em caixa alta e depois normal): fica uma vez só
+    const pal = nome.split(" "), metade = Math.floor(pal.length / 2);
+    for (let k = 3; k <= metade; k++) {
+      const a = pal.slice(0, k).join(" "), resto = pal.slice(k).join(" ");
+      if (semAcentoE(resto).startsWith(semAcentoE(a))) { nome = resto.slice(0, a.length).trim() || a; break; }
+    }
     if (nome.length > 6) { r.nome = nome === nome.toUpperCase() ? titulo(nome) : nome; break; }
   }
 
