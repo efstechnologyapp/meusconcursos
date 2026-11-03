@@ -85,10 +85,42 @@ textarea{min-height:90px;resize:vertical}
 fieldset{border:none;padding:0;margin:0;display:contents}
 .legend{grid-column:1/-1;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink);font-weight:600;border-top:1px solid var(--line);padding-top:12px;margin-top:4px}
 @media (max-width:520px){form .grid{grid-template-columns:1fr}}
+.auto-box{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;background:var(--chip);border-radius:10px;padding:10px 12px}
+.auto-box button{background:var(--surface);font-weight:600}
+.auto-box .note{flex:1 1 220px;min-width:0}
+.auto{border-color:var(--brand)!important;box-shadow:0 0 0 2px var(--accent)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px}
 @media (prefers-reduced-motion:no-preference){.card{transition:border-color .15s}}
 .tools{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;border-top:1px solid var(--line);padding-top:16px}
 .tools button{font-size:13px;padding:7px 12px}
+.fase-prox{color:var(--ink)!important;font-weight:500}
+.count.ok{background:var(--ok);color:#fff}
+.chip.ok{background:var(--ok);color:#fff} .chip.bad{background:var(--danger);color:#fff}
+.seg{display:flex;flex-wrap:wrap;gap:8px;border-radius:12px;padding:2px}
+.seg-opt{flex-direction:row;cursor:pointer}
+.seg-opt input{position:absolute;opacity:0;width:1px;height:1px}
+.seg-opt span{display:inline-block;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:999px;padding:7px 14px;font-size:14px;font-weight:500}
+.seg-opt input:checked+span{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.seg-opt input:focus-visible+span{outline:3px solid var(--accent);outline-offset:2px}
+#tipoBase{margin:8px 0 0}
+.fases{display:flex;flex-direction:column;gap:10px}
+.fase{border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:10px;background:var(--surface)}
+.fase-top{display:flex;gap:8px;align-items:center}
+.fase-n{font-family:var(--f-mono);font-size:13px;background:var(--accent);color:var(--accent-ink);border-radius:6px;padding:2px 8px;flex:none}
+.fase-top .f-nome{font-weight:600;flex:1;min-width:0}
+.fase-x{border:none;background:transparent;color:var(--muted);font-size:20px;line-height:1;padding:4px 8px;flex:none}
+.fase-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.fase-grid .w2{grid-column:span 2}
+.fase-grid input,.fase-grid select{font-size:14px;padding:6px 8px}
+@media (max-width:560px){.fase-grid{grid-template-columns:1fr 1fr}.fase-grid .w2{grid-column:1/-1}}
+.timeline{list-style:none;margin:0;padding:0 0 0 14px;border-left:2px solid var(--line);display:flex;flex-direction:column;gap:12px}
+.tl{position:relative;padding-left:10px}
+.tl::before{content:"";position:absolute;left:-21px;top:5px;width:12px;height:12px;border-radius:50%;background:var(--surface);border:2px solid var(--line)}
+.tl.atual::before{background:var(--accent);border-color:var(--accent-ink)}
+.tl.ok::before{background:var(--ok);border-color:var(--ok)} .tl.bad::before{background:var(--danger);border-color:var(--danger)}
+.tl-head{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.tl .note{margin-top:2px}
+#tipoSel.auto{box-shadow:0 0 0 2px var(--accent)}
 </style>
 </head>
 <body>
@@ -101,9 +133,9 @@ fieldset{border:none;padding:0;margin:0;display:contents}
     <button class="primary" id="btnNovo" type="button">+ Novo concurso</button>
   </header>
 
-  <p class="section-label" id="lblProx" hidden>Próximas provas</p>
+  <p class="section-label" id="lblProx" hidden>Em andamento</p>
   <div class="list" id="proximos"></div>
-  <p class="section-label" id="lblPass" hidden>Já realizados</p>
+  <p class="section-label" id="lblPass" hidden>Encerrados</p>
   <div class="list past-list" id="passados"></div>
   <p class="note" id="aviso" hidden></p>
   <div class="tools">
@@ -119,23 +151,34 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 <dialog id="dlgForm">
   <form class="dlg" id="form">
     <div class="dlg-head"><h2 id="formTitulo">Novo concurso</h2><button type="button" class="close" data-close aria-label="Fechar">×</button></div>
+    <div class="auto-box">
+      <button type="button" id="btnEdital">Preencher com o edital (PDF)</button>
+      <input type="file" id="arqEdital" accept="application/pdf,.pdf" hidden>
+      <span class="note" id="editalStatus">Envie o PDF do edital e o app tenta preencher os campos. Confira antes de salvar.</span>
+    </div>
     <div class="grid">
-      <label class="full">Concurso / órgão *<input id="f_nome" name="nome" required placeholder="Ex.: TRF 5ª Região"></label>
-      <label>Cargo<input id="f_cargo" name="cargo" placeholder="Ex.: Analista Judiciário"></label>
-      <label>Banca<input id="f_banca" name="banca" placeholder="Ex.: FCC"></label>
+      <label class="full">Concurso / órgão *<input id="f_nome" name="nome" required placeholder="Ex.: Tribunal de Justiça de Santa Catarina"></label>
+      <label>Cargo (como está no edital)<input id="f_cargo" name="cargo" placeholder="Ex.: Juiz Substituto"></label>
+      <label>Banca<input id="f_banca" name="banca" placeholder="Ex.: FGV"></label>
       <label>Situação
         <select id="f_status" name="status">
           <option>Inscrição a fazer</option><option>Inscrito</option><option>Boleto pago</option>
-          <option>Prova feita</option><option>Aguardando resultado</option><option>Aprovado</option>
+          <option>Em andamento</option><option>Aprovado</option><option>Encerrado</option>
         </select></label>
       <label>Link do edital<input id="f_edital" name="edital" type="url" placeholder="https://"></label>
 
-      <div class="legend">Prova</div>
-      <label>Data da prova<input id="f_data" name="data" type="date"></label>
-      <label>Horário da prova<input id="f_horario" name="horario" type="time"></label>
-      <label>Abertura dos portões<input id="f_portoes" name="portoes" type="time"></label>
-      <label>Cidade<input id="f_cidade" name="cidade" placeholder="Ex.: Recife/PE"></label>
-      <label class="full">Local de prova (endereço, sala)<input id="f_local" name="local"></label>
+      <div class="legend">Tipo de cargo</div>
+      <div class="full">
+        <div class="seg" id="tipoSel" role="radiogroup" aria-label="Tipo de cargo"></div>
+        <p class="note" id="tipoBase"></p>
+      </div>
+
+      <div class="legend">Fases do concurso</div>
+      <div class="full fases" id="fasesBox"></div>
+      <div class="full"><button type="button" id="btnAddFase">+ Adicionar fase</button></div>
+
+      <div class="legend">Local e instruções</div>
+      <label class="full">Cidade das provas<input id="f_cidade" name="cidade" placeholder="Ex.: Florianópolis/SC"></label>
       <label class="full">Instruções gerais<textarea id="f_instrucoes" name="instrucoes" placeholder="Documento com foto, caneta preta de corpo transparente, proibido relógio…"></textarea></label>
 
       <div class="legend">Hospedagem</div>
@@ -154,20 +197,34 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 
 <div class="toast" id="toast" hidden></div>
 
+<script src="edital.js"></script>
 <script>
 const CHAVE="meus-concursos-dados";
 const MESES=["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
-const CAMPOS=["nome","cargo","banca","status","edital","data","horario","portoes","cidade","local","instrucoes","hosp_nome","hosp_end","checkin","checkout","reserva","obs"];
-let itens=[], editandoId=null;
+const CAMPOS=["nome","cargo","banca","status","edital","cidade","instrucoes","hosp_nome","hosp_end","checkin","checkout","reserva","obs"];
+const CARATER={EC:"Eliminatória e classificatória",E:"Eliminatória",C:"Classificatória"};
+const SITUACOES=["Aguardando","Aprovado","Reprovado","Não fiz"];
+let itens=[], editandoId=null, tipoAtual="outro", fasesForm=[];
 const $=id=>document.getElementById(id);
 
-function carregar(){ try{ itens=JSON.parse(localStorage.getItem(CHAVE))||[]; }catch(e){ itens=[]; } }
+// ---------- Dados ----------
+function normalizar(x){
+  if(!Array.isArray(x.fases)){
+    x.fases = (x.data||x.horario||x.local) ? [{nome:"Prova",carater:"EC",data:x.data||"",horario:x.horario||"",portoes:x.portoes||"",local:x.local||"",situacao:"Aguardando"}] : [];
+  }
+  x.tipo = x.tipo && MODELOS[x.tipo] ? x.tipo : "outro";
+  return x;
+}
+function carregar(){ try{ itens=(JSON.parse(localStorage.getItem(CHAVE))||[]).map(normalizar); }catch(e){ itens=[]; } }
 function salvar(){
   try{ localStorage.setItem(CHAVE,JSON.stringify(itens)); return true; }
   catch(e){ toast("Não foi possível salvar neste navegador."); return false; }
 }
 function novoId(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function faseVazia(nome="",carater="EC"){ return {nome,carater,data:"",horario:"",portoes:"",local:"",situacao:"Aguardando"}; }
+function fasesDoModelo(tipo){ return (MODELOS[tipo]||MODELOS.outro).fases.map(f=>faseVazia(f.nome,f.carater)); }
 
+// ---------- Datas ----------
 function parseData(s){ if(!s) return null; const [y,m,d]=s.split("-").map(Number); return new Date(y,m-1,d); }
 function hoje(){ const t=new Date(); return new Date(t.getFullYear(),t.getMonth(),t.getDate()); }
 function diasAte(s){ const d=parseData(s); return d? Math.round((d-hoje())/86400000) : null; }
@@ -175,50 +232,79 @@ function fmtData(s){ const d=parseData(s); return d? d.toLocaleDateString("pt-BR
 function fmtCurta(s){ const d=parseData(s); return d? d.toLocaleDateString("pt-BR") : ""; }
 function esc(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function contagem(n){
-  if(n===null) return {t:"sem data",c:"past"};
+  if(n===null) return {t:"data a definir",c:"past"};
   if(n===0) return {t:"é hoje",c:"today"};
   if(n===1) return {t:"amanhã",c:""};
   if(n>1) return {t:`faltam ${n} dias`,c:""};
   return {t:"realizada",c:"past"};
 }
-function toast(msg){ const t=$("toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,2400); }
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,2600); }
 
+// Situação do concurso a partir das fases
+function andamento(x){
+  const fases=x.fases||[];
+  const eliminado = fases.some(f=>f.situacao==="Reprovado"||f.situacao==="Não fiz") || x.status==="Encerrado";
+  const futuras = fases.map((f,i)=>({f,i})).filter(o=>o.f.data && diasAte(o.f.data)>=0 && o.f.situacao==="Aguardando")
+                       .sort((a,b)=>a.f.data.localeCompare(b.f.data));
+  const semData = fases.map((f,i)=>({f,i})).filter(o=>!o.f.data && o.f.situacao==="Aguardando");
+  const prox = futuras[0] || null;
+  const ativo = !eliminado && x.status!=="Aprovado" && (prox || semData.length>0 || !fases.length);
+  return {prox, proxSemData: semData[0]||null, eliminado, ativo, total:fases.length};
+}
+
+// ---------- Lista ----------
 function cardHTML(x){
-  const d=parseData(x.data), c=contagem(diasAte(x.data));
+  const a=andamento(x), f=a.prox&&a.prox.f;
+  const d=f? parseData(f.data) : null;
+  const c = a.eliminado ? {t:"encerrado",c:"past"} : x.status==="Aprovado" ? {t:"aprovado",c:"ok"} : contagem(f? diasAte(f.data) : null);
+  const faseTxt = f ? `${f.nome}${f.horario?" · às "+f.horario:""}` : (a.ativo && a.proxSemData ? `${a.proxSemData.f.nome} · data a definir` : "");
   const sub=[x.cargo,x.banca].filter(Boolean).join(" · ");
-  const loc=[x.horario && ("às "+x.horario), x.cidade].filter(Boolean).join(" · ");
+  const passo = (a.ativo && a.total>1) ? `<span class="chip">fase ${(f?a.prox.i:a.proxSemData?a.proxSemData.i:0)+1} de ${a.total}</span>` : (x.status?`<span class="chip">${esc(x.status)}</span>`:"");
   return `<button class="card" type="button" data-id="${esc(x.id)}">
     <div class="date">${d?`<span class="d">${String(d.getDate()).padStart(2,"0")}</span><span class="m">${MESES[d.getMonth()]} ${String(d.getFullYear()).slice(2)}</span>`:`<span class="m">a definir</span>`}</div>
-    <div class="info"><h3>${esc(x.nome)}</h3>${sub?`<p>${esc(sub)}</p>`:""}${loc?`<p>${esc(loc)}</p>`:""}</div>
-    <div class="right"><span class="count ${c.c}">${c.t}</span>${x.status?`<span class="chip">${esc(x.status)}</span>`:""}</div>
+    <div class="info"><h3>${esc(x.nome)}</h3>${sub?`<p>${esc(sub)}</p>`:""}${faseTxt?`<p class="fase-prox">${esc(faseTxt)}</p>`:""}</div>
+    <div class="right"><span class="count ${c.c}">${c.t}</span>${passo}</div>
   </button>`;
 }
 
 function render(){
-  const fut=[], pas=[];
-  for(const x of itens){ const n=diasAte(x.data); (n===null||n>=0?fut:pas).push(x); }
-  fut.sort((a,b)=>(a.data||"9999").localeCompare(b.data||"9999"));
-  pas.sort((a,b)=>b.data.localeCompare(a.data));
-  $("proximos").innerHTML = fut.length? fut.map(cardHTML).join("") :
-    `<div class="empty">Nenhuma prova agendada.<br>Clique em <b>+ Novo concurso</b> para cadastrar a primeira.</div>`;
-  $("passados").innerHTML = pas.map(cardHTML).join("");
-  $("lblProx").hidden=false; $("lblPass").hidden=!pas.length;
-  const prox=fut.find(x=>x.data);
-  $("resumo").textContent = prox
-    ? `Próxima prova: ${prox.nome}, ${contagem(diasAte(prox.data)).t}.`
+  const ativos=[], fim=[];
+  for(const x of itens) (andamento(x).ativo?ativos:fim).push(x);
+  const chave=x=>{ const a=andamento(x); return a.prox? a.prox.f.data : "9999"; };
+  ativos.sort((a,b)=>chave(a).localeCompare(chave(b)));
+  fim.sort((a,b)=>(b.atualizado||"").localeCompare(a.atualizado||""));
+  $("proximos").innerHTML = ativos.length? ativos.map(cardHTML).join("") :
+    `<div class="empty">Nenhum concurso em andamento.<br>Clique em <b>+ Novo concurso</b> para cadastrar o primeiro.</div>`;
+  $("passados").innerHTML = fim.map(cardHTML).join("");
+  $("lblProx").hidden=false; $("lblPass").hidden=!fim.length;
+  const comData=ativos.map(x=>({x,a:andamento(x)})).filter(o=>o.a.prox);
+  $("resumo").textContent = comData.length
+    ? `Próxima prova: ${comData[0].x.nome} (${comData[0].a.prox.f.nome}), ${contagem(diasAte(comData[0].a.prox.f.data)).t}.`
     : (itens.length? "Nenhuma prova com data marcada." : "Cadastre os concursos que você vai fazer.");
 }
 
+// ---------- Detalhes ----------
 function abrirVer(id){
   const x=itens.find(i=>i.id===id); if(!x) return;
   const linha=(k,v)=>v?`<dt>${k}</dt><dd>${esc(v)}</dd>`:"";
-  const prova=linha("Data",fmtData(x.data))+linha("Horário",x.horario)+linha("Portões abrem",x.portoes)+linha("Local",x.local)+linha("Cidade",x.cidade);
+  const a=andamento(x);
   const hosp=linha("Hotel",x.hosp_nome)+linha("Endereço",x.hosp_end)+linha("Check-in",fmtCurta(x.checkin))+linha("Check-out",fmtCurta(x.checkout))+linha("Reserva",x.reserva);
-  const c=contagem(diasAte(x.data));
+  const fasesHTML=(x.fases||[]).map((f,i)=>{
+    const atual = a.prox && a.prox.i===i;
+    const sit = f.situacao||"Aguardando";
+    const cls = sit==="Aprovado"?"ok":(sit==="Reprovado"||sit==="Não fiz")?"bad":"";
+    const quando=[f.data?fmtData(f.data):"data a definir", f.horario&&("às "+f.horario), f.portoes&&("portões fecham "+f.portoes)].filter(Boolean).join(" · ");
+    return `<li class="tl ${atual?"atual":""} ${cls}">
+      <div class="tl-head"><b>${esc(f.nome||"Fase "+(i+1))}</b><span class="chip ${cls}">${esc(sit)}</span></div>
+      <div class="note">${esc(quando)}${f.local?"<br>"+esc(f.local):""}</div>
+      <div class="note">${esc(CARATER[f.carater]||"")}</div></li>`;
+  }).join("");
+  const c = a.eliminado ? {t:"encerrado",c:"past"} : contagem(a.prox? diasAte(a.prox.f.data) : null);
   $("verConteudo").innerHTML=`
     <div class="dlg-head"><div><h2>${esc(x.nome)}</h2><p class="sub">${esc([x.cargo,x.banca].filter(Boolean).join(" · "))}</p></div><button type="button" class="close" data-close aria-label="Fechar">×</button></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="count ${c.c}">${c.t}</span>${x.status?`<span class="chip">${esc(x.status)}</span>`:""}</div>
-    ${prova?`<div class="block"><h4>Prova</h4><dl class="kv">${prova}</dl></div>`:""}
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="count ${c.c}">${c.t}</span>${x.status?`<span class="chip">${esc(x.status)}</span>`:""}<span class="chip">${esc(MODELOS[x.tipo].rotulo)}</span></div>
+    ${fasesHTML?`<div class="block"><h4>Fases</h4><ol class="timeline">${fasesHTML}</ol></div>`:""}
+    ${x.cidade?`<div class="block"><h4>Cidade das provas</h4><p class="pre">${esc(x.cidade)}</p></div>`:""}
     ${x.instrucoes?`<div class="block"><h4>Instruções gerais</h4><p class="pre">${esc(x.instrucoes)}</p></div>`:""}
     ${hosp?`<div class="block"><h4>Hospedagem</h4><dl class="kv">${hosp}</dl></div>`:""}
     ${x.obs?`<div class="block"><h4>Transporte e observações</h4><p class="pre">${esc(x.obs)}</p></div>`:""}
@@ -233,16 +319,81 @@ function abrirVer(id){
   $("dlgVer").showModal();
 }
 
+// ---------- Formulário: tipo de cargo e fases ----------
+function montarSeletor(){
+  $("tipoSel").innerHTML = Object.entries(MODELOS).map(([k,m])=>
+    `<label class="seg-opt"><input type="radio" name="tipo" value="${k}" id="tipo_${k}"><span>${esc(m.rotulo)}</span></label>`).join("");
+  $("tipoSel").addEventListener("change", e=>{ if(e.target.name==="tipo") trocarTipo(e.target.value); });
+}
+function marcarTipo(tipo){
+  tipoAtual=tipo;
+  const r=$("tipo_"+tipo); if(r) r.checked=true;
+  const m=MODELOS[tipo];
+  $("tipoBase").textContent = m.base ? `${m.fases.length} fases, conforme o ${m.base}. Você pode renomear, apagar ou acrescentar fases.` : "Monte as fases do seu concurso: renomeie, apague ou acrescente quantas precisar.";
+}
+function lerFasesDoForm(){
+  return [...$("fasesBox").querySelectorAll(".fase")].map(el=>({
+    nome: el.querySelector(".f-nome").value.trim(),
+    carater: el.querySelector(".f-carater").value,
+    data: el.querySelector(".f-data").value,
+    horario: el.querySelector(".f-horario").value,
+    portoes: el.querySelector(".f-portoes").value,
+    local: el.querySelector(".f-local").value.trim(),
+    situacao: el.querySelector(".f-situacao").value
+  }));
+}
+function temDados(f){ return !!(f.data||f.horario||f.portoes||f.local||(f.situacao&&f.situacao!=="Aguardando")); }
+function trocarTipo(tipo){
+  const atuais=lerFasesDoForm();
+  const novas=fasesDoModelo(tipo).map(n=>{ const igual=atuais.find(f=>f.nome===n.nome); return igual? igual : n; });
+  // fases com dados que não existem no novo modelo são mantidas no fim, para não perder nada
+  const sobras=atuais.filter(f=>temDados(f) && !novas.some(n=>n.nome===f.nome));
+  fasesForm=[...novas,...sobras];
+  marcarTipo(tipo); renderFases();
+  if(sobras.length) toast("Mantive no fim as fases que já tinham dados.");
+}
+function renderFases(){
+  $("fasesBox").innerHTML = fasesForm.map((f,i)=>`
+    <div class="fase" data-i="${i}">
+      <div class="fase-top">
+        <span class="fase-n">${i+1}</span>
+        <input class="f-nome" value="${esc(f.nome)}" placeholder="Nome da fase" aria-label="Nome da fase ${i+1}">
+        <button type="button" class="fase-x" data-rem="${i}" aria-label="Remover fase ${i+1}">×</button>
+      </div>
+      <div class="fase-grid">
+        <label>Data<input class="f-data" type="date" value="${esc(f.data)}"></label>
+        <label>Horário<input class="f-horario" type="time" value="${esc(f.horario)}"></label>
+        <label>Portões fecham<input class="f-portoes" type="time" value="${esc(f.portoes)}"></label>
+        <label>Situação<select class="f-situacao">${SITUACOES.map(s=>`<option${s===(f.situacao||"Aguardando")?" selected":""}>${s}</option>`).join("")}</select></label>
+        <label class="w2">Caráter<select class="f-carater">${Object.entries(CARATER).map(([k,v])=>`<option value="${k}"${k===f.carater?" selected":""}>${v}</option>`).join("")}</select></label>
+        <label class="w2">Local (endereço, sala)<input class="f-local" value="${esc(f.local)}"></label>
+      </div>
+    </div>`).join("") || `<p class="note">Nenhuma fase. Clique em “Adicionar fase”.</p>`;
+}
+$("fasesBox").addEventListener("click", e=>{
+  const b=e.target.closest("[data-rem]"); if(!b) return;
+  fasesForm=lerFasesDoForm(); fasesForm.splice(+b.dataset.rem,1); renderFases();
+});
+$("btnAddFase").onclick=()=>{ fasesForm=lerFasesDoForm(); fasesForm.push(faseVazia(`${fasesForm.length+1}ª fase`)); renderFases();
+  const ult=$("fasesBox").querySelector(".fase:last-child .f-nome"); if(ult){ ult.focus(); ult.select(); } };
+
 function abrirForm(x){
   editandoId = x? x.id : null;
   $("formTitulo").textContent = x? "Editar concurso" : "Novo concurso";
   for(const k of CAMPOS){ const el=$("f_"+k); if(el) el.value = x? (x[k]??"") : (k==="status"?"Inscrição a fazer":""); }
+  const tipo = x? x.tipo : "outro";
+  fasesForm = x? JSON.parse(JSON.stringify(x.fases||[])) : fasesDoModelo(tipo);
+  marcarTipo(tipo); renderFases();
+  document.querySelectorAll("#form .auto").forEach(el=>el.classList.remove("auto"));
+  $("editalStatus").textContent="Envie o PDF do edital e o app tenta preencher os campos e as fases. Confira antes de salvar.";
   $("dlgForm").showModal(); $("f_nome").focus();
 }
 
 $("form").addEventListener("submit", e=>{
   e.preventDefault();
   const dados={}; for(const k of CAMPOS){ const el=$("f_"+k); dados[k]=el? el.value.trim() : ""; }
+  dados.tipo=tipoAtual;
+  dados.fases=lerFasesDoForm().map((f,i)=>({...f, nome:f.nome||`Fase ${i+1}`}));
   dados.atualizado=new Date().toISOString();
   if(editandoId){ const i=itens.findIndex(x=>x.id===editandoId); if(i>=0) itens[i]={...itens[i],...dados}; }
   else itens.push({id:novoId(),...dados});
@@ -255,9 +406,9 @@ document.addEventListener("click", e=>{
 });
 $("btnNovo").onclick=()=>abrirForm(null);
 
-// Backup
+// ---------- Backup ----------
 $("btnExportar").onclick=()=>{
-  const blob=new Blob([JSON.stringify({app:"meus-concursos",versao:1,itens},null,2)],{type:"application/json"});
+  const blob=new Blob([JSON.stringify({app:"meus-concursos",versao:2,itens},null,2)],{type:"application/json"});
   const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
   a.download=`backup-concursos-${new Date().toISOString().slice(0,10)}.json`;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
@@ -270,12 +421,56 @@ $("arqBackup").onchange=async e=>{
     const j=JSON.parse(await f.text()); const lista=Array.isArray(j)? j : j.itens;
     if(!Array.isArray(lista)) throw 0;
     const ids=new Set(itens.map(i=>i.id)); let n=0;
-    for(const x of lista){ if(x && x.nome){ if(!x.id||ids.has(x.id)) x.id=novoId(); itens.push(x); n++; } }
+    for(const x of lista){ if(x && x.nome){ if(!x.id||ids.has(x.id)) x.id=novoId(); itens.push(normalizar(x)); n++; } }
     salvar(); render(); toast(`${n} concurso(s) restaurado(s)`);
   }catch(err){ toast("Esse arquivo não é um backup válido do app."); }
   e.target.value="";
 };
 
+// ---------- Edital em PDF ----------
+const NOMES_CAMPO={nome:"concurso",cargo:"cargo",banca:"banca",cidade:"cidade",instrucoes:"instruções"};
+$("btnEdital").onclick=()=>$("arqEdital").click();
+$("arqEdital").onchange=async e=>{
+  const f=e.target.files[0]; e.target.value=""; if(!f) return;
+  const st=$("editalStatus"), btn=$("btnEdital");
+  btn.disabled=true; st.textContent="Lendo o edital…";
+  try{
+    const texto=await textoDoPdf(f);
+    if(texto.replace(/\s/g,"").length<300){ st.textContent="Não encontrei texto nesse PDF. Ele parece ser escaneado (imagem); preencha manualmente."; return; }
+    const r=interpretarEdital(texto);
+    const preenchidos=[];
+    for(const k of Object.keys(NOMES_CAMPO)){
+      const el=$("f_"+k), v=r[k]; if(!el||!v) continue;
+      if(el.value && k!=="instrucoes") continue;          // não apaga o que você já digitou
+      el.value = (k==="instrucoes" && el.value) ? el.value+"\n"+v : v;
+      el.classList.add("auto"); preenchidos.push(NOMES_CAMPO[k]);
+    }
+    // tipo de cargo e fases
+    const algumaFaseComDados = lerFasesDoForm().some(temDados);
+    if(!algumaFaseComDados){
+      fasesForm=fasesDoModelo(r.tipo);
+      (r.fasesDatas||[]).forEach((d,i)=>{ if(fasesForm[i]){ fasesForm[i].data=d.data||""; fasesForm[i].horario=d.horario||""; } });
+      const primeira=fasesForm.find(x=>x.data); if(primeira && r.portoes && !primeira.portoes) primeira.portoes=r.portoes;
+      marcarTipo(r.tipo); renderFases();
+      const comData=fasesForm.filter(x=>x.data).length;
+      $("fasesBox").querySelectorAll(".fase").forEach((el,i)=>{
+        if(fasesForm[i].data){ el.querySelector(".f-data").classList.add("auto"); if(fasesForm[i].horario) el.querySelector(".f-horario").classList.add("auto"); }
+      });
+      $("tipoSel").classList.add("auto");
+      preenchidos.push(`tipo de cargo (${MODELOS[r.tipo].rotulo})`, `${comData} de ${fasesForm.length} datas de fase`);
+    }
+    st.textContent = preenchidos.length
+      ? `Preenchi: ${preenchidos.join(", ")}. O que veio do edital está destacado em amarelo; confira antes de salvar.`
+      : "Não consegui identificar os dados nesse edital. Preencha manualmente.";
+  }catch(err){
+    st.textContent = err && err.message==="sem-internet"
+      ? "Para ler o primeiro edital é preciso internet (o app baixa o leitor de PDF uma vez)."
+      : "Não consegui abrir esse PDF. Verifique se o arquivo não está protegido por senha.";
+  }finally{ btn.disabled=false; }
+};
+$("form").addEventListener("input",e=>{ e.target.classList.remove("auto"); if(e.target.name==="tipo") $("tipoSel").classList.remove("auto"); });
+
+montarSeletor();
 carregar(); render();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
