@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Meus Concursos</title>
+<meta name="theme-color" content="#14213d">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: uma coluna de "cartões de inscrição" ordenados pela data da prova; detalhes e edição em diálogo */
+:root{
+  --bg:#f3f5f9; --surface:#ffffff; --ink:#14213d; --muted:#5b6782; --line:#dde2ec;
+  --accent:#ffd23f; --accent-ink:#14213d; --brand:#1d3a8a; --danger:#b42318; --ok:#1a7f4b;
+  --chip:#e8ecf6;
+  --f-display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --f-body:"Figtree",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1524; --surface:#172036; --ink:#e8ecf6; --muted:#9aa6c2; --line:#273350;
+  --accent:#ffd23f; --accent-ink:#14213d; --brand:#8fb0ff; --danger:#ff8a80; --ok:#5fd39a; --chip:#222d48; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1524; --surface:#172036; --ink:#e8ecf6; --muted:#9aa6c2; --line:#273350;
+  --accent:#ffd23f; --accent-ink:#14213d; --brand:#8fb0ff; --danger:#ff8a80; --ok:#5fd39a; --chip:#222d48; color-scheme:dark}
+
+*{box-sizing:border-box}
+html{color-scheme:light}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 48px}
+.wrap{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:24px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px}
+h1{font-family:var(--f-display);font-weight:800;font-size:clamp(28px,6vw,40px);line-height:1;margin:0;letter-spacing:-.02em}
+h1 mark{background:linear-gradient(transparent 55%,var(--accent) 55%);color:inherit;padding:0 .05em}
+.sub{color:var(--muted);margin:6px 0 0}
+button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:9px 14px}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,.card:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.primary{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:600}
+.danger{color:var(--danger)}
+.section-label{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;margin:0 0 -12px}
+.list{display:flex;flex-direction:column;gap:12px}
+.card{display:grid;grid-template-columns:72px 1fr auto;gap:16px;align-items:center;background:var(--surface);border:1px solid var(--line);
+  border-radius:14px;padding:14px 16px;cursor:pointer;text-align:left;width:100%}
+.card:hover{border-color:var(--brand)}
+.date{display:flex;flex-direction:column;align-items:center;justify-content:center;border-right:1px dashed var(--line);padding-right:14px;font-family:var(--f-mono)}
+.date .d{font-size:26px;line-height:1;font-weight:500}
+.date .m{font-size:12px;text-transform:uppercase;color:var(--muted);letter-spacing:.06em}
+.info{min-width:0}
+.info h3{font-family:var(--f-display);font-weight:600;font-size:18px;margin:0;line-height:1.2;overflow-wrap:anywhere}
+.info p{margin:2px 0 0;color:var(--muted);font-size:14px;overflow-wrap:anywhere}
+.right{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.count{font-family:var(--f-mono);font-size:13px;background:var(--accent);color:var(--accent-ink);padding:2px 8px;border-radius:6px;white-space:nowrap}
+.count.today{background:var(--danger);color:#fff}
+.count.past{background:var(--chip);color:var(--muted)}
+.chip{font-size:12px;background:var(--chip);color:var(--ink);padding:2px 8px;border-radius:999px;white-space:nowrap}
+.past-list .card{opacity:.75}
+.empty{background:var(--surface);border:1px dashed var(--line);border-radius:14px;padding:28px;text-align:center;color:var(--muted)}
+.note{color:var(--muted);font-size:13px}
+@media (max-width:520px){.card{grid-template-columns:60px 1fr}.right{grid-column:2;flex-direction:row;align-items:center;justify-content:flex-start}}
+
+dialog{border:none;border-radius:16px;padding:0;background:var(--surface);color:var(--ink);width:min(640px,calc(100vw - 32px));max-height:calc(100vh - 32px)}
+dialog::backdrop{background:rgba(10,15,30,.5)}
+.dlg{padding:20px;display:flex;flex-direction:column;gap:18px}
+.dlg h2{font-family:var(--f-display);font-size:24px;margin:0;line-height:1.15}
+.dlg-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.close{border:none;background:transparent;font-size:22px;line-height:1;padding:4px 8px;color:var(--muted)}
+.block{border-top:1px solid var(--line);padding-top:14px;display:flex;flex-direction:column;gap:8px}
+.block h4{margin:0;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.kv{display:grid;grid-template-columns:140px 1fr;gap:4px 12px;font-size:14px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;overflow-wrap:anywhere}
+.pre{white-space:pre-wrap;margin:0;overflow-wrap:anywhere}
+.actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+a{color:var(--brand)}
+@media (max-width:520px){.kv{grid-template-columns:1fr}.kv dt{margin-top:6px}}
+
+form .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+form .full{grid-column:1/-1}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);font-weight:500}
+input,select,textarea{font:inherit;font-size:15px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+textarea{min-height:90px;resize:vertical}
+fieldset{border:none;padding:0;margin:0;display:contents}
+.legend{grid-column:1/-1;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink);font-weight:600;border-top:1px solid var(--line);padding-top:12px;margin-top:4px}
+@media (max-width:520px){form .grid{grid-template-columns:1fr}}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px}
+@media (prefers-reduced-motion:no-preference){.card{transition:border-color .15s}}
+.tools{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;border-top:1px solid var(--line);padding-top:16px}
+.tools button{font-size:13px;padding:7px 12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Meus <mark>Concursos</mark></h1>
+      <p class="sub" id="resumo">Carregando seus concursos…</p>
+    </div>
+    <button class="primary" id="btnNovo" type="button">+ Novo concurso</button>
+  </header>
+
+  <p class="section-label" id="lblProx" hidden>Próximas provas</p>
+  <div class="list" id="proximos"></div>
+  <p class="section-label" id="lblPass" hidden>Já realizados</p>
+  <div class="list past-list" id="passados"></div>
+  <p class="note" id="aviso" hidden></p>
+  <div class="tools">
+    <button type="button" id="btnExportar">Fazer backup (baixar arquivo)</button>
+    <button type="button" id="btnImportar">Restaurar backup</button>
+    <input type="file" id="arqBackup" accept=".json,application/json" hidden>
+  </div>
+  <p class="note" style="text-align:center;margin:0">Seus dados ficam salvos neste navegador. Faça backup de vez em quando.</p>
+</div>
+
+<dialog id="dlgVer"><div class="dlg" id="verConteudo"></div></dialog>
+
+<dialog id="dlgForm">
+  <form class="dlg" id="form">
+    <div class="dlg-head"><h2 id="formTitulo">Novo concurso</h2><button type="button" class="close" data-close aria-label="Fechar">×</button></div>
+    <div class="grid">
+      <label class="full">Concurso / órgão *<input id="f_nome" name="nome" required placeholder="Ex.: TRF 5ª Região"></label>
+      <label>Cargo<input id="f_cargo" name="cargo" placeholder="Ex.: Analista Judiciário"></label>
+      <label>Banca<input id="f_banca" name="banca" placeholder="Ex.: FCC"></label>
+      <label>Situação
+        <select id="f_status" name="status">
+          <option>Inscrição a fazer</option><option>Inscrito</option><option>Boleto pago</option>
+          <option>Prova feita</option><option>Aguardando resultado</option><option>Aprovado</option>
+        </select></label>
+      <label>Link do edital<input id="f_edital" name="edital" type="url" placeholder="https://"></label>
+
+      <div class="legend">Prova</div>
+      <label>Data da prova<input id="f_data" name="data" type="date"></label>
+      <label>Horário da prova<input id="f_horario" name="horario" type="time"></label>
+      <label>Abertura dos portões<input id="f_portoes" name="portoes" type="time"></label>
+      <label>Cidade<input id="f_cidade" name="cidade" placeholder="Ex.: Recife/PE"></label>
+      <label class="full">Local de prova (endereço, sala)<input id="f_local" name="local"></label>
+      <label class="full">Instruções gerais<textarea id="f_instrucoes" name="instrucoes" placeholder="Documento com foto, caneta preta de corpo transparente, proibido relógio…"></textarea></label>
+
+      <div class="legend">Hospedagem</div>
+      <label class="full">Hotel / pousada<input id="f_hosp_nome" name="hosp_nome"></label>
+      <label class="full">Endereço<input id="f_hosp_end" name="hosp_end"></label>
+      <label>Check-in<input id="f_checkin" name="checkin" type="date"></label>
+      <label>Check-out<input id="f_checkout" name="checkout" type="date"></label>
+      <label class="full">Reserva (código, valor, contato)<input id="f_reserva" name="reserva"></label>
+
+      <div class="legend">Outros</div>
+      <label class="full">Transporte e observações<textarea id="f_obs" name="obs" placeholder="Voo, ônibus, horário de saída, quem vai junto…"></textarea></label>
+    </div>
+    <div class="actions"><button type="button" data-close>Cancelar</button><button class="primary" type="submit" id="btnSalvar">Salvar</button></div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const CHAVE="meus-concursos-dados";
+const MESES=["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
+const CAMPOS=["nome","cargo","banca","status","edital","data","horario","portoes","cidade","local","instrucoes","hosp_nome","hosp_end","checkin","checkout","reserva","obs"];
+let itens=[], editandoId=null;
+const $=id=>document.getElementById(id);
+
+function carregar(){ try{ itens=JSON.parse(localStorage.getItem(CHAVE))||[]; }catch(e){ itens=[]; } }
+function salvar(){
+  try{ localStorage.setItem(CHAVE,JSON.stringify(itens)); return true; }
+  catch(e){ toast("Não foi possível salvar neste navegador."); return false; }
+}
+function novoId(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+
+function parseData(s){ if(!s) return null; const [y,m,d]=s.split("-").map(Number); return new Date(y,m-1,d); }
+function hoje(){ const t=new Date(); return new Date(t.getFullYear(),t.getMonth(),t.getDate()); }
+function diasAte(s){ const d=parseData(s); return d? Math.round((d-hoje())/86400000) : null; }
+function fmtData(s){ const d=parseData(s); return d? d.toLocaleDateString("pt-BR",{weekday:"short",day:"2-digit",month:"long",year:"numeric"}) : ""; }
+function fmtCurta(s){ const d=parseData(s); return d? d.toLocaleDateString("pt-BR") : ""; }
+function esc(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function contagem(n){
+  if(n===null) return {t:"sem data",c:"past"};
+  if(n===0) return {t:"é hoje",c:"today"};
+  if(n===1) return {t:"amanhã",c:""};
+  if(n>1) return {t:`faltam ${n} dias`,c:""};
+  return {t:"realizada",c:"past"};
+}
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,2400); }
+
+function cardHTML(x){
+  const d=parseData(x.data), c=contagem(diasAte(x.data));
+  const sub=[x.cargo,x.banca].filter(Boolean).join(" · ");
+  const loc=[x.horario && ("às "+x.horario), x.cidade].filter(Boolean).join(" · ");
+  return `<button class="card" type="button" data-id="${esc(x.id)}">
+    <div class="date">${d?`<span class="d">${String(d.getDate()).padStart(2,"0")}</span><span class="m">${MESES[d.getMonth()]} ${String(d.getFullYear()).slice(2)}</span>`:`<span class="m">a definir</span>`}</div>
+    <div class="info"><h3>${esc(x.nome)}</h3>${sub?`<p>${esc(sub)}</p>`:""}${loc?`<p>${esc(loc)}</p>`:""}</div>
+    <div class="right"><span class="count ${c.c}">${c.t}</span>${x.status?`<span class="chip">${esc(x.status)}</span>`:""}</div>
+  </button>`;
+}
+
+function render(){
+  const fut=[], pas=[];
+  for(const x of itens){ const n=diasAte(x.data); (n===null||n>=0?fut:pas).push(x); }
+  fut.sort((a,b)=>(a.data||"9999").localeCompare(b.data||"9999"));
+  pas.sort((a,b)=>b.data.localeCompare(a.data));
+  $("proximos").innerHTML = fut.length? fut.map(cardHTML).join("") :
+    `<div class="empty">Nenhuma prova agendada.<br>Clique em <b>+ Novo concurso</b> para cadastrar a primeira.</div>`;
+  $("passados").innerHTML = pas.map(cardHTML).join("");
+  $("lblProx").hidden=false; $("lblPass").hidden=!pas.length;
+  const prox=fut.find(x=>x.data);
+  $("resumo").textContent = prox
+    ? `Próxima prova: ${prox.nome}, ${contagem(diasAte(prox.data)).t}.`
+    : (itens.length? "Nenhuma prova com data marcada." : "Cadastre os concursos que você vai fazer.");
+}
+
+function abrirVer(id){
+  const x=itens.find(i=>i.id===id); if(!x) return;
+  const linha=(k,v)=>v?`<dt>${k}</dt><dd>${esc(v)}</dd>`:"";
+  const prova=linha("Data",fmtData(x.data))+linha("Horário",x.horario)+linha("Portões abrem",x.portoes)+linha("Local",x.local)+linha("Cidade",x.cidade);
+  const hosp=linha("Hotel",x.hosp_nome)+linha("Endereço",x.hosp_end)+linha("Check-in",fmtCurta(x.checkin))+linha("Check-out",fmtCurta(x.checkout))+linha("Reserva",x.reserva);
+  const c=contagem(diasAte(x.data));
+  $("verConteudo").innerHTML=`
+    <div class="dlg-head"><div><h2>${esc(x.nome)}</h2><p class="sub">${esc([x.cargo,x.banca].filter(Boolean).join(" · "))}</p></div><button type="button" class="close" data-close aria-label="Fechar">×</button></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="count ${c.c}">${c.t}</span>${x.status?`<span class="chip">${esc(x.status)}</span>`:""}</div>
+    ${prova?`<div class="block"><h4>Prova</h4><dl class="kv">${prova}</dl></div>`:""}
+    ${x.instrucoes?`<div class="block"><h4>Instruções gerais</h4><p class="pre">${esc(x.instrucoes)}</p></div>`:""}
+    ${hosp?`<div class="block"><h4>Hospedagem</h4><dl class="kv">${hosp}</dl></div>`:""}
+    ${x.obs?`<div class="block"><h4>Transporte e observações</h4><p class="pre">${esc(x.obs)}</p></div>`:""}
+    ${x.edital && /^https?:\/\//.test(x.edital)?`<div class="block"><h4>Edital</h4><a href="${esc(x.edital)}" target="_blank" rel="noopener">${esc(x.edital)}</a></div>`:""}
+    <div class="actions" id="verAcoes"><button type="button" class="danger" id="btnExcluir">Excluir</button><button type="button" class="primary" id="btnEditar">Editar</button></div>`;
+  $("btnEditar").onclick=()=>{ $("dlgVer").close(); abrirForm(x); };
+  $("btnExcluir").onclick=()=>{
+    $("verAcoes").innerHTML=`<span class="note" style="margin-right:auto">Excluir este concurso?</span><button type="button" id="nao">Cancelar</button><button type="button" class="primary" id="sim" style="background:var(--danger);border-color:var(--danger)">Excluir</button>`;
+    $("nao").onclick=()=>abrirVer(id);
+    $("sim").onclick=()=>{ itens=itens.filter(i=>i.id!==id); salvar(); render(); $("dlgVer").close(); toast("Concurso excluído"); };
+  };
+  $("dlgVer").showModal();
+}
+
+function abrirForm(x){
+  editandoId = x? x.id : null;
+  $("formTitulo").textContent = x? "Editar concurso" : "Novo concurso";
+  for(const k of CAMPOS){ const el=$("f_"+k); if(el) el.value = x? (x[k]??"") : (k==="status"?"Inscrição a fazer":""); }
+  $("dlgForm").showModal(); $("f_nome").focus();
+}
+
+$("form").addEventListener("submit", e=>{
+  e.preventDefault();
+  const dados={}; for(const k of CAMPOS){ const el=$("f_"+k); dados[k]=el? el.value.trim() : ""; }
+  dados.atualizado=new Date().toISOString();
+  if(editandoId){ const i=itens.findIndex(x=>x.id===editandoId); if(i>=0) itens[i]={...itens[i],...dados}; }
+  else itens.push({id:novoId(),...dados});
+  if(salvar()){ $("dlgForm").close(); render(); toast(editandoId? "Alterações salvas" : "Concurso adicionado"); }
+});
+
+document.addEventListener("click", e=>{
+  const card=e.target.closest(".card"); if(card){ abrirVer(card.dataset.id); return; }
+  if(e.target.closest("[data-close]")){ e.target.closest("dialog").close(); }
+});
+$("btnNovo").onclick=()=>abrirForm(null);
+
+// Backup
+$("btnExportar").onclick=()=>{
+  const blob=new Blob([JSON.stringify({app:"meus-concursos",versao:1,itens},null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download=`backup-concursos-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  toast("Backup baixado");
+};
+$("btnImportar").onclick=()=>$("arqBackup").click();
+$("arqBackup").onchange=async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  try{
+    const j=JSON.parse(await f.text()); const lista=Array.isArray(j)? j : j.itens;
+    if(!Array.isArray(lista)) throw 0;
+    const ids=new Set(itens.map(i=>i.id)); let n=0;
+    for(const x of lista){ if(x && x.nome){ if(!x.id||ids.has(x.id)) x.id=novoId(); itens.push(x); n++; } }
+    salvar(); render(); toast(`${n} concurso(s) restaurado(s)`);
+  }catch(err){ toast("Esse arquivo não é um backup válido do app."); }
+  e.target.value="";
+};
+
+carregar(); render();
+setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
+
+if("serviceWorker" in navigator && location.protocol.startsWith("http")){
+  navigator.serviceWorker.register("sw.js").catch(()=>{});
+}
+</script>
+</body>
+</html>
