@@ -16,27 +16,43 @@ function carregarPdfJs() {
 }
 
 // Remonta as linhas pela posição na página, para que tabelas (cronogramas)
-// fiquem com o evento e a data na mesma linha.
+// fiquem com o evento e a data na mesma linha. Funciona também em páginas
+// e tabelas giradas (listas de resultado em "paisagem").
+// Além do texto, guarda a estrutura de células (textoDoPdf.estrutura) para ler quadros em colunas.
 async function textoDoPdf(arquivo, maxPaginas = 90) {
   const pdfjs = await carregarPdfJs();
   const pdf = await pdfjs.getDocument({ data: await arquivo.arrayBuffer() }).promise;
   const n = Math.min(pdf.numPages, maxPaginas);
   let texto = "";
+  const estrutura = [];
   for (let i = 1; i <= n; i++) {
     const pag = await pdf.getPage(i);
+    const vp = pag.getViewport({ scale: 1 });
     const c = await pag.getTextContent();
-    const linhas = [];
+    const itens = [];
     for (const it of c.items) {
       if (!it.str) continue;
-      const y = it.transform[5], x = it.transform[4];
-      const h = Math.abs(it.transform[3]) || it.height || 10;
-      let l = linhas.find(l => Math.abs(l.y - y) < 3);
-      if (!l) { l = { y, partes: [] }; linhas.push(l); }
-      l.partes.push({ x, w: it.width || 0, h, s: it.str });
+      const t = pdfjs.Util.transform(vp.transform, it.transform);
+      const ang = Math.atan2(t[1], t[0]);
+      const h = Math.hypot(t[2], t[3]) || it.height || 10;
+      itens.push({ t, ang, h, w: it.width || 0, s: it.str });
     }
-    linhas.sort((a, b) => b.y - a.y);
-    // Junta os pedaços da linha: só põe espaço quando há um vão de verdade entre eles
-    // (o PDF costuma partir palavras e números em vários pedaços, como "202" + "7").
+    // direção predominante do texto na página (0° normal; ±90° girado)
+    const contagem = {};
+    for (const it of itens) { const k = Math.round(it.ang / (Math.PI / 2)); contagem[k] = (contagem[k] || 0) + it.s.length; }
+    const dom = +Object.entries(contagem).sort((a, b) => b[1] - a[1])[0]?.[0] || 0;
+    const ang = dom * Math.PI / 2, cos = Math.cos(ang), sin = Math.sin(ang);
+    const linhas = [];
+    for (const it of itens) {
+      const x = it.t[4], y = it.t[5];
+      const ao = x * cos + y * sin;          // posição ao longo da linha
+      const tr = -x * sin + y * cos;         // posição entre linhas
+      let l = linhas.find(l => Math.abs(l.tr - tr) < Math.max(2, it.h * 0.45));
+      if (!l) { l = { tr, partes: [] }; linhas.push(l); }
+      l.partes.push({ x: ao, w: it.w, h: it.h, s: it.s });
+    }
+    linhas.sort((a, b) => a.tr - b.tr);
+    // Junta os pedaços: só põe espaço quando há um vão de verdade (o PDF parte palavras e números, como "202" + "7")
     const juntar = partes => {
       let out = "", ant = null;
       for (const p of partes.sort((a, b) => a.x - b.x)) {
@@ -45,8 +61,21 @@ async function textoDoPdf(arquivo, maxPaginas = 90) {
       }
       return out.replace(/\s+/g, " ").trim();
     };
-    texto += linhas.map(l => juntar(l.partes)).filter(Boolean).join("\n") + "\n";
+    for (const l of linhas) {
+      const ordenadas = l.partes.sort((a, b) => a.x - b.x);
+      // células: pedaços separados por um vão grande (coluna de tabela)
+      const celulas = []; let atual = null;
+      for (const p of ordenadas) {
+        if (!atual || p.x - (atual.fim) > p.h * 1.2) { atual = { x: p.x, partes: [], fim: p.x }; celulas.push(atual); }
+        atual.partes.push(p); atual.fim = Math.max(atual.fim, p.x + p.w);
+      }
+      const textoLinha = juntar(ordenadas);
+      if (!textoLinha) continue;
+      texto += textoLinha + "\n";
+      estrutura.push({ pagina: i, celulas: celulas.map(c => ({ x: Math.round(c.x), s: juntar(c.partes) })).filter(c => c.s) });
+    }
   }
+  textoDoPdf.estrutura = estrutura;
   return texto;
 }
 
@@ -107,9 +136,9 @@ const MODELOS = {
     detectar: /magistratura|juiz substituto/i,
     fases: [
       { nome: "1ª etapa – Prova objetiva seletiva", carater: "EC", chave: /prova objetiva seletiva/i },
-      { nome: "2ª etapa – Prova discursiva", carater: "EC", chave: /prova\s+discursiva/i },
-      { nome: "2ª etapa – Sentença cível", carater: "EC", chave: /senten[cç]a c[ií]vel/i },
-      { nome: "2ª etapa – Sentença criminal", carater: "EC", chave: /senten[cç]a criminal/i },
+      { nome: "2ª etapa – Prova discursiva", carater: "EC", chave: /prova\s+discursiva|prova escrita ser[aá] discursiva/i },
+      { nome: "2ª etapa – Sentença cível", carater: "EC", chave: /senten[cç]a (?:de natureza )?c[ií]vel/i, chaveDur: /senten[cç]as?[^.]{0,60}natureza c[ií]vel/i },
+      { nome: "2ª etapa – Sentença criminal", carater: "EC", chave: /senten[cç]a (?:de natureza )?criminal/i, chaveDur: /senten[cç]as?[^.]{0,90}natureza criminal/i },
       { nome: "3ª etapa – Inscrição definitiva (sindicância, exame médico e psicotécnico)", carater: "E", chave: /inscri[cç][aã]o definitiva/i },
       { nome: "4ª etapa – Prova oral", carater: "EC", chave: /prova oral/i },
       { nome: "5ª etapa – Avaliação de títulos", carater: "C", chave: /avalia[cç][aã]o de t[ií]tulos/i, nota: /(?:comprova[cç][aã]o|apresenta[cç][aã]o|entrega|envio|anexar) d[oe]s (?:documentos? (?:pertinentes|referentes) [àa] prova de )?t[ií]tulos|t[ií]tulos/i }
@@ -165,7 +194,7 @@ function detectarTipo(plano) {
 // Para cada fase, procura uma data ligada à fase: no corpo do edital
 // ("será realizada na data provável de...") ou numa linha do cronograma.
 const INTENCAO = /(aplica|realiza|prevista|ser[aá]|ser[aã]o|no dia|data)/i;
-const RUIDO = /(gabarito|resultado|recurso|divulga[cç][aã]o|convoca[cç][aã]o|publica[cç][aã]o|pedido|\bvista\b|edital de|inscri[cç][oõ]es|isen[cç][aã]o|parecer|homologa)/i;
+const RUIDO = /(gabarito|resultado|recurso|divulga[cç][aã]o|convoca[cç][aã]o|publica[cç][aã]o|pedido|\bvista\b|edital de|inscri[cç][oõ]es|isen[cç][aã]o|parecer|homologa|assinad|autenticidade|adiamento|cancelad)/i;
 
 const ITEM = String.raw`\s\d{1,2}(?:\.\d{1,2})+\.?\s`;
 const CORTE_ESTRITO = new RegExp(String.raw`;|\.\s+(?=[A-ZÀ-Ú])|` + ITEM);
@@ -236,7 +265,8 @@ const INSTRUCOES_CHAVE = [
 ];
 const INSTRUCOES_FORA = /divulgad|gabarito|posse|requisitos|inscri[cç][aã]o|isen[cç][aã]o|laudo|recurso|t[ií]tulos|heteroidentifica/i;
 
-function interpretarEdital(textoBruto, tipoForcado) {
+function interpretarEdital(textoBruto, tipoForcado, estrutura) {
+  if (estrutura === undefined && typeof textoDoPdf !== "undefined") estrutura = textoDoPdf.estrutura;
   // remove cabeçalhos e rodapés que se repetem em todas as páginas
   const linhas = textoBruto.split("\n"), conta = {};
   const chaveLinha = l => l.replace(/\d+\s*$/, "").trim();
@@ -256,7 +286,7 @@ function interpretarEdital(textoBruto, tipoForcado) {
   for (const re of ORGAOS) {
     const m = inicio.match(re);
     if (!m) continue;
-    let nome = limpar(m[0].split(/\s+(?:torna|faz|fazem|comunica|no uso|resolve|EDITAL|CONCURSO|-\s|–\s|\|)/i)[0]);
+    let nome = limpar(m[0].split(/\s+(?:torna|faz|fazem|comunica|no uso|resolve|EDITAL|CONCURSO|-\s|–\s|\|)|\s+(?:Avenida|Av\.|Rua|R\.|Pra[cç]a|P[cç]a\.|Rodovia|Alameda|Travessa|Setor|SAF|SAS|Quadra|Bairro|CEP|Endere[cç]o|Telefone|www\.)\b/i)[0]);
     if (nome.length > 6) { r.nome = nome === nome.toUpperCase() ? titulo(nome) : nome; break; }
   }
 
@@ -278,7 +308,12 @@ function interpretarEdital(textoBruto, tipoForcado) {
   r.fasesDatas = datasDasFases(plano, r.tipo);
   r.notas = notasDasFases(plano, r.tipo);
   r.portoesMin = regraPortoes(plano);
-  r.composicao = composicaoDasFases(plano, textoBruto.split("\n"), r.tipo);
+  r.composicao = composicaoDasFases(plano, textoBruto.split("\n"), r.tipo, estrutura);
+  r.previsoes = previsoesDasFases(plano, r.tipo);
+  // valor de cada questão objetiva ("atribuído 0,1 ponto a cada resposta correta") — usado para calcular acertos pela nota
+  const ppq = plano.match(/atribu[ií]d[oa]s?\s+(?:o valor de\s+)?(\d+(?:,\d+)?)\s*(?:\([^)]*\)\s*)?pontos?\s+(?:a|para|por)\s+cada\s+(?:resposta|quest)/i)
+           || plano.match(/cada (?:resposta correta|quest[aã]o)[^.]{0,30}?valer[aá]\s+(\d+(?:,\d+)?)\s*(?:\([^)]*\)\s*)?pontos?/i);
+  if (ppq) r.pontosQuestao = parseFloat(ppq[1].replace(",", "."));
   r.duracoes = duracoesDasFases(plano, r.tipo);
   return r;
 }
@@ -353,9 +388,41 @@ function itensEscritos(janela) {
   return itens.map(({ chave, ...i }) => i);
 }
 
-function composicaoDasFases(plano, linhasTexto, tipo) {
+// Quadro em colunas: a célula "Bloco I: ..." marca a coluna das matérias; a quantidade fica numa coluna à direita.
+function blocosDaTabela(estrutura) {
+  if (!estrutura || !estrutura.length) return [];
+  const blocos = []; let atual = null;
+  const ehNumero = s => /^\d{1,3}(?:\s*\(|$)/.test(s);
+  for (const linha of estrutura) {
+    const cels = linha.celulas || [];
+    const ini = cels.find(c => /^(bloco|grupo|m[óo]dulo)\s+([ivx\d]+)\s*:?/i.test(c.s));
+    if (ini) {
+      const m = ini.s.match(/^(bloco|grupo|m[óo]dulo)\s+([ivx\d]+)\s*:?\s*(.*)$/i);
+      atual = { nome: `${m[1][0].toUpperCase()}${m[1].slice(1).toLowerCase()} ${m[2].toUpperCase()}`, x: ini.x, textos: m[3] ? [m[3]] : [], qtd: 0, linhas: 0 };
+      blocos.push(atual);
+      cels.filter(c => c !== ini && ehNumero(c.s) && c.x > ini.x + 50).slice(0, 1).forEach(c => { if (!atual.qtd) atual.qtd = parseInt(c.s, 10); });
+      continue;
+    }
+    if (!atual) continue;
+    if (cels.some(c => /^(prova\/tipo|total\b|disciplinas?\s|[áa]rea de)/i.test(c.s)) || ++atual.linhas > 25) { atual = null; continue; }
+    for (const c of cels) {
+      if (ehNumero(c.s) && c.x > atual.x + 50) { if (!atual.qtd) atual.qtd = parseInt(c.s, 10); }
+      else if (Math.abs(c.x - atual.x) < 45 && !ehNumero(c.s)) atual.textos.push(c.s);
+    }
+  }
+  return blocos.filter(b => b.qtd > 0 && b.textos.length).map(b => {
+    let t = b.textos.join(" ").replace(/\(?\s*anexo\s+[ivx\d]+[^)]*\)?/gi, "").replace(/-\s+(?=[a-zà-ú])/g, "").replace(/\s+/g, " ").trim();
+    const disciplinas = t.replace(/\s+e\s+(?=(?:Direito|Direitos|No[cç][oõ]es|L[ií]ngua|Legisla|Teoria|Tutela|Racioc|Inform)\b)/g, ", ").split(/\s*,\s*/).map(x => x.trim()).filter(x => x.length > 2);
+    return { nome: b.nome, qtd: b.qtd, disciplinas };
+  });
+}
+
+function composicaoDasFases(plano, linhasTexto, tipo, estrutura) {
   const modelo = MODELOS[tipo] || MODELOS.outro;
-  const blocos = blocosDoQuadro(linhasTexto);
+  let blocos = blocosDoQuadro(linhasTexto);
+  const daTabela = blocosDaTabela(estrutura);
+  // o quadro em colunas é mais confiável quando ele existe e fecha a conta
+  if (daTabela.length >= 2 && (!blocos.length || blocos.some(b => /\d/.test(b.disciplinas.join(" "))) || daTabela.reduce((s, b) => s + b.qtd, 0) !== blocos.reduce((s, b) => s + b.qtd, 0))) blocos = daTabela;
   let objetivaUsada = false;
   return modelo.fases.map(f => {
     const c = { objetivas: null, escritas: [] };
@@ -373,7 +440,7 @@ function composicaoDasFases(plano, linhasTexto, tipo) {
     } else if (f.formato === "escrita") {
       const re = new RegExp("(?:" + f.chave.source + ")[\\s\\S]{0,450}?(?:consistir|compost|constitu[ií]d)", "gi");
       let m, janela = "";
-      while ((m = re.exec(plano))) { janela = plano.slice(m.index, m.index + 1600).split(/\s\d{1,2}(?:\.\d{1,2})*\.?\s+(?:DA|DAS|DO|DOS)\s+[A-ZÀ-Ú]{3}/)[0]; if (RE_ITEM.test(janela) || /linhas/i.test(janela)) break; janela = ""; }
+      while ((m = re.exec(plano))) { janela = plano.slice(m.index, m.index + 1600).split(/\s\d{1,2}(?:\.\d{1,2})*\.?\s+(?:DA|DAS|DO|DOS)\s+[A-ZÀ-Ú]{3}|\b(?:segunda|terceira) prova (?:escrita|pr[áa]tica)/i)[0]; if (RE_ITEM.test(janela) || /linhas/i.test(janela)) break; janela = ""; }
       RE_ITEM.lastIndex = 0;
       c.escritas = janela ? itensEscritos(janela) : [];
       if (!c.escritas.length && /senten[cç]a/i.test(f.nome)) c.escritas = [{ qtd: 1, tipo: f.nome.replace(/^.*?–\s*/, "").toLowerCase(), linhas: "" }];
@@ -393,7 +460,7 @@ function duracoesDasFases(plano, tipo) {
   const modelo = MODELOS[tipo] || MODELOS.outro;
   return modelo.fases.map(f => {
     if (f.formato === "nenhum") return {};
-    const re = new RegExp("(?:" + f.chave.source + ")", "gi");
+    const re = new RegExp("(?:" + (f.chaveDur || f.chave).source + ")", "gi");
     let m;
     while ((m = re.exec(plano))) {
       const depois = plano.slice(m.index, m.index + 260).split(/;|\.\s+(?=[A-ZÀ-Ú])/)[0];
@@ -408,6 +475,84 @@ function duracoesDasFases(plano, tipo) {
     }
     return {};
   });
+}
+
+// Cronograma estimado por mês ("Prova Discursiva Setembro 2026")
+const RE_MES = "(janeiro|fevereiro|mar[cç]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\\s*(?:de\\s*|\\/\\s*)?(20\\d\\d)";
+function previsoesDasFases(plano, tipo) {
+  const modelo = MODELOS[tipo] || MODELOS.outro;
+  return modelo.fases.map(f => {
+    const fonte = f.chave.source.replace(/c\[ií\]vel/g, "(?:de natureza )?c[ií]vel");
+    const re = new RegExp("(?:prova pr[áa]tica de )?(?:" + fonte + ")\\s*(?:\\([^)]*\\)\\s*)?[–-]?\\s*" + RE_MES + "(?!\\s*\\d)", "i");
+    const m = plano.match(re);
+    if (!m) return "";
+    const ms = m.slice(-2);
+    return `${ms[0].toLowerCase()} de ${ms[1]}`;
+  });
+}
+
+// ---------- Listas de editais complementares (inscrições homologadas, resultados) ----------
+const semAcentoE = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/\s+/g, " ").trim();
+function acharCandidato(texto, { nome, inscricao }) {
+  const linhas = texto.split("\n");
+  const insc = String(inscricao || "").replace(/\D/g, "");
+  let idx = -1;
+  if (insc.length >= 4) idx = linhas.findIndex(l => new RegExp("(^|\\D)" + insc + "(\\D|$)").test(l.replace(/[.\-\/]/g, "")));
+  if (idx < 0 && nome) {
+    const partes = semAcentoE(nome).split(" ").filter(p => p.length > 2);
+    if (partes.length >= 2) {
+      const re = new RegExp("\\b" + partes.join("\\b.{0,40}?\\b") + "\\b");
+      idx = linhas.findIndex(l => re.test(semAcentoE(l)));
+    }
+  }
+  return idx;
+}
+function lerListaDoCandidato(texto, candidato, tipo) {
+  const plano = texto.replace(/\s+/g, " ");
+  const ehResultado = /resultado|habilitad[oa]s|aprovad[oa]s|classifica[cç][aã]o (?:final|preliminar)/i.test(plano) && /\b\d{1,2},\d\b/.test(plano);
+  const ehHomologacao = /inscri[cç][oõ]es?[^.]{0,80}(?:homologad|deferid)|(?:homologa[cç][aã]o|deferimento)[^.]{0,40}inscri[cç]/i.test(plano);
+  // só é lista se tiver muitas linhas do tipo "nº de inscrição + nome" (evita confundir com o edital de abertura)
+  const linhasDeLista = (texto.match(/^\s*\d{5,}[\s,;-]+[A-Za-zÀ-ú]{2,}/gm) || []).length;
+  const ehLista = linhasDeLista >= 15;
+  const r = { tipoLista: !ehLista ? null : ehResultado ? "resultado" : ehHomologacao ? "homologacao" : null };
+  if (!r.tipoLista) return r;
+  const linhas = texto.split("\n");
+  const idx = acharCandidato(texto, candidato);
+  r.encontrado = idx >= 0;
+  if (idx >= 0) {
+    const linha = linhas[idx].replace(/\s+/g, " ").trim();
+    r.linha = linha.slice(0, 220);
+    const insc = linha.match(/(?:^|\s)(\d[\d.\-\/]{4,}\d)(?=\s)/);
+    if (insc) r.inscricao = insc[1].replace(/\D/g, "");
+  }
+  if (r.tipoLista === "resultado") {
+    // qual fase: a que aparece no título do resultado
+    const modelo = MODELOS[tipo] || MODELOS.outro;
+    const titulo = (plano.match(/resultado[^.]{0,140}/gi) || []).join(" ");
+    let fase = modelo.fases.findIndex(f => f.chave.test(titulo));
+    if (fase < 0) fase = modelo.fases.findIndex(f => (f.formato === "objetiva" && /objetiva/i.test(titulo)) || (f.formato === "escrita" && /discursiva|escrita|senten/i.test(titulo)) || (/oral/i.test(f.nome) && /oral/i.test(titulo)));
+    r.fase = fase;
+    r.aprovado = r.encontrado ? true : (/habilitad[oa]s|aprovad[oa]s|classificad[oa]s/i.test(titulo) ? false : null);
+    if (idx >= 0) {
+      const notaDe = l => { const ns = (l.replace(/^\s*\d{6,}\s/, "").match(/\b\d{1,3}(?:,\d{1,3})?\b/g) || []); return ns.length ? ns[ns.length - 1] : ""; };
+      r.nota = notaDe(linhas[idx]);
+      // classificação: 1 + quantos da MESMA lista (mesmo título, ex.: "Ampla Concorrência") tiveram nota maior
+      const formato = linhas[idx].match(/^\s*(\d{6,})\s/);
+      if (formato && r.nota) {
+        const tam = formato[1].length, v = parseFloat(r.nota.replace(",", "."));
+        const ehLinha = l => new RegExp("^\\s*\\d{" + tam + "}\\s+[A-Za-zÀ-ú]").test(l);
+        const ehTitulo = l => /^\s*(resultado|rela[cç][aã]o|classifica[cç][aã]o)\b/i.test(l);
+        let titulo = "", tituloDoCandidato = "";
+        const porTitulo = [];
+        linhas.forEach((l, k) => { if (ehTitulo(l)) titulo = l.trim(); else if (ehLinha(l)) porTitulo.push([titulo, l]); if (k === idx) tituloDoCandidato = titulo; });
+        let maiores = 0, total = 0;
+        for (const [t, l] of porTitulo) if (t === tituloDoCandidato) { total++; const n = parseFloat(notaDe(l).replace(",", ".")); if (n > v) maiores++; }
+        r.classificacao = maiores + 1; r.totalLista = total;
+        const lista = tituloDoCandidato.match(/[-–]\s*([^-–]+)$/); if (lista) r.lista = lista[1].trim();
+      }
+    }
+  }
+  return r;
 }
 
 // Quando o edital não traz a data de uma fase, guarda a regra que ele dá
@@ -463,4 +608,4 @@ function instrucoesDeIdentificacao(plano) {
   return partes.join("\n\n");
 }
 
-if (typeof module !== "undefined") module.exports = { duracoesDasFases, composicaoDasFases, instrucoesDeIdentificacao, notasDasFases, regraPortoes, interpretarEdital, datasNoTrecho, MODELOS, detectarTipo, datasDasFases };
+if (typeof module !== "undefined") module.exports = { lerListaDoCandidato, acharCandidato, previsoesDasFases, blocosDaTabela, duracoesDasFases, composicaoDasFases, instrucoesDeIdentificacao, notasDasFases, regraPortoes, interpretarEdital, datasNoTrecho, MODELOS, detectarTipo, datasDasFases };

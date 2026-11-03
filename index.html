@@ -437,7 +437,7 @@ function cardHTML(x){
   const vb = x.status===STATUS[1] && x.boleto_venc ? diasAte(x.boleto_venc) : null;
   const chipBoleto = vb===null ? "" : `<span class="count ${vb<=2?"warn":""}">${vb<0?"boleto vencido":vb===0?"boleto vence hoje":"boleto vence em "+vb+(vb===1?" dia":" dias")}</span>`;
   const grupoProx = f ? (gruposDeFases(x.fases).find(g=>g.includes(a.prox.i))||[a.prox.i]) : [];
-  const faseTxt = f ? `${grupoProx.map(k=>x.fases[k].nome).join(" + ")}${f.horario?" · "+f.horario+(f.fim?"–"+f.fim:""):""}` : (a.ativo && a.proxSemData ? `${a.proxSemData.f.nome} · data a definir` : "");
+  const faseTxt = f ? `${grupoProx.map(k=>x.fases[k].nome).join(" + ")}${f.horario?" · "+f.horario+(f.fim?"–"+f.fim:""):""}` : (a.ativo && a.proxSemData ? `${a.proxSemData.f.nome} · data a definir${a.proxSemData.f.previsao?" (previsão: "+a.proxSemData.f.previsao+")":""}` : "");
   const sub=[x.cargo,x.banca].filter(Boolean).join(" · ");
   const passo = (a.ativo && a.total>1) ? `<span class="chip">fase ${(f?a.prox.i:a.proxSemData?a.proxSemData.i:0)+1} de ${a.total}</span>` : "";
   const stIdx=STATUS.indexOf(x.status), stChip = stIdx>=0 && a.ativo ? `<span class="chip">${esc(STATUS_CURTO[stIdx])}</span>` : "";
@@ -484,7 +484,7 @@ function abrirVer(id){
     const blocosTxt = temObjetiva(f) && f.objetivas && f.objetivas.blocos && f.objetivas.blocos.length ? f.objetivas.blocos.map(bl=>`${bl.nome}: ${bl.qtd} questões${bl.disciplinas?" ("+bl.disciplinas+")":""}`).join("\n") : "";
     const res=[f.acertos!==""&&f.acertos!=null&&`${f.acertos} acertos`+(f.objetivas&&f.objetivas.total?` de ${f.objetivas.total}`:""), f.nota&&"nota "+f.nota, f.classificacao&&"classificação "+f.classificacao].filter(Boolean).join(" · ");
     return `<div class="tl-head"><b>${esc(f.nome||"Fase "+(i+1))}</b><span class="chip ${cls}">${esc(sit)}</span></div>
-      ${f.duracao?`<div class="note">${esc(textoTurno(f))}</div>`:""}
+      ${textoTurno(f)?`<div class="note">${esc(textoTurno(f))}</div>`:""}
       ${comp?`<div class="note"><b>Prova:</b> ${esc(comp)}</div>`:""}${blocosTxt?`<div class="note pre">${esc(blocosTxt)}</div>`:""}
       ${res?`<div class="note"><b>Resultado:</b> ${esc(res)}</div>`:""}
       ${f.obs?`<div class="note pre">${esc(f.obs)}</div>`:""}
@@ -546,7 +546,7 @@ function marcarTipo(tipo){
 // ---------- Editor de fases ----------
 function somarMinutos(hhmm,min){ const [h,m]=hhmm.split(":").map(Number), t=h*60+m+min; return t<24*60?`${String(Math.floor(t/60)).padStart(2,"0")}:${String(t%60).padStart(2,"0")}`:""; }
 function fmtDuracao(min){ const h=Math.floor(min/60), m=min%60; return `${h}h${m?String(m).padStart(2,"0"):""}`; }
-function textoTurno(f){ return f.duracao ? [f.turno&&`Período da ${f.turno}`, `duração de ${fmtDuracao(f.duracao)}`].filter(Boolean).join(" · ") : ""; }
+function textoTurno(f){ return [ !f.data && f.previsao && `Previsão do edital: ${f.previsao}`, f.duracao && f.turno && `Período da ${f.turno}`, f.duracao && `duração de ${fmtDuracao(f.duracao)}`].filter(Boolean).join(" · "); }
 const FORMATOS={objetiva:"Prova objetiva",escrita:"Prova escrita",ambas:"Objetiva e escrita",nenhum:"Sem prova (inscrição, títulos…)"};
 const temObjetiva=f=>f.formato==="objetiva"||f.formato==="ambas";
 const temEscrita=f=>f.formato==="escrita"||f.formato==="ambas";
@@ -669,7 +669,7 @@ function htmlEspecifico(f,i,emGrupo){
         <label>Situação<select class="f-situacao" data-f="situacao">${SITUACOES.map(s=>`<option${s===(f.situacao||"Aguardando")?" selected":""}>${s}</option>`).join("")}</select></label>
         <label>Caráter<select class="f-carater" data-f="carater">${Object.entries({EC:"Elimin. e classif.",E:"Eliminatória",C:"Classificatória"}).map(([k,v])=>`<option value="${k}"${k===f.carater?" selected":""}>${v}</option>`).join("")}</select></label>
         <label class="w2">Tipo de prova<select class="f-formato" data-f="formato" data-rerender="1">${Object.entries(FORMATOS).map(([k,v])=>`<option value="${k}"${k===(f.formato||"nenhum")?" selected":""}>${v}</option>`).join("")}</select></label>
-        ${f.duracao?`<p class="w4 note turno">${esc(textoTurno(f))}${f.horario||emGrupo?"":" — o horário exato sai no edital de convocação; ao informar o início, o término é calculado."}</p>`:""}
+        ${textoTurno(f)?`<p class="w4 note turno">${esc(textoTurno(f))}${f.horario||emGrupo||!f.duracao?"":" — o horário exato sai no edital de convocação; ao informar o início, o término é calculado."}</p>`:""}
       </div>
       ${f.formato!=="nenhum"?`<div class="sec sec-comp"><div class="sec-tit">Composição da prova <span class="note">${esc(comp)}</span></div>${htmlComposicao(f)}</div>`:""}
       <div class="sec sec-res"><div class="sec-tit">Resultado</div>${htmlResultado(f)}</div>
@@ -743,29 +743,21 @@ async function juntarResultado(i, input){
   renderFases();
   const card=()=>$("fasesBox").querySelector(`.fase[data-i="${i}"]`);
   const st=()=>card().querySelector(".f-resstatus");
-  const insc=String($("f_inscricao").value||"").replace(/\D/g,"");
-  if(insc.length<4){ st().textContent="Informe seu nº de inscrição (o campo aparece quando a situação for “Inscrição homologada”) para eu procurar sua classificação."; return; }
   st().textContent="Procurando você no resultado…";
   try{
-    const texto=await textoDoPdf(arquivo, 400);
-    const linhas=texto.split("\n");
-    let idx=-1;
-    if(insc.length>=4) idx=linhas.findIndex(l=>l.replace(/\D/g," ").split(" ").includes(insc) || l.replace(/[^\d]/g,"").includes(insc));
-    if(idx<0){ st().textContent="Não encontrei seu nº de inscrição nesse resultado. Confira os dados ou preencha manualmente."; return; }
-    const linha=linhas[idx].replace(/\s+/g," ").trim();
-    const resto=linha.replace(insc,"");
-    const ordinal=resto.match(/(\d{1,5})\s*[ºª°]/);
-    const nota=(resto.match(/\b\d{1,3},\d{1,3}\b/)||resto.match(/\b\d{1,3}\.\d{2,3}\b/)||[])[0]||"";
-    const inteiros=(resto.replace(/\b\d{1,3}[.,]\d{1,3}\b/g," ").match(/\b\d{1,5}\b/g)||[]);
-    const classif = ordinal ? ordinal[1] : (inteiros.length ? inteiros[inteiros.length-1] : "");
-    f.resultado_linha=linha.slice(0,200);
-    if(classif && !f.classificacao) f.classificacao=classif+"º";
-    if(nota && !f.nota) f.nota=nota;
+    const texto=await textoDoPdf(arquivo, 500);
+    const lista=lerListaDoCandidato(texto, { nome:(usuarioAtual&&usuarioAtual.nome)||"", inscricao:$("f_inscricao").value }, tipoAtual);
+    if(!lista.encontrado){ st().textContent="Não encontrei seu nome nem seu nº de inscrição nesse resultado. Se for a lista de aprovados, você não consta nela; confira o PDF."; return; }
+    if(lista.inscricao && !$("f_inscricao").value) $("f_inscricao").value=lista.inscricao;
+    f.situacao="Aprovado";
+    if(lista.nota) f.nota=lista.nota;
+    const ppq=f.pontosQuestao;
+    if(lista.nota && ppq && temObjetiva(f)) f.acertos=Math.round(parseFloat(lista.nota.replace(",","."))/ppq);
+    if(lista.classificacao) f.classificacao=`${lista.classificacao}º${lista.lista?" – "+lista.lista:""}${lista.totalLista?" (de "+lista.totalLista+")":""}`;
+    f.resultado_linha=(lista.linha||"").slice(0,200);
     renderFases();
-    const c=card();
-    if(classif) c.querySelector(".f-classif").classList.add("auto");
-    if(nota) c.querySelector(".f-nota").classList.add("auto");
-    c.querySelector(".f-resstatus").textContent=`Encontrei você: “${f.resultado_linha}”. `+(classif?`Classificação: ${classif}º. `:"")+"Confira com o PDF.";
+    ["f-situacao","f-nota","f-acertos","f-classif"].forEach(c=>{ const el=card().querySelector("."+c); if(el) el.classList.add("auto"); });
+    st().textContent=`Encontrei você: “${f.resultado_linha}”. `+(lista.classificacao?`Classificação: ${lista.classificacao}º${lista.lista?" na "+lista.lista:""}. `:"")+"Confira com o PDF e clique em Salvar.";
   }catch(err){
     st().textContent = err && err.message==="sem-internet" ? "Para ler o PDF é preciso internet na primeira vez." : "Não consegui abrir esse PDF.";
   }
@@ -868,14 +860,44 @@ $("compLista").addEventListener("click",e=>{ const b=e.target.closest("[data-rem
 $("btnComplementar").onclick=()=>$("arqComplementar").click();
 $("arqComplementar").onchange=async e=>{
   const f=e.target.files[0]; e.target.value=""; if(!f) return;
-  const st=$("compStatus"), btn=$("btnComplementar");
+  await aplicarComplementar(f, $("compStatus"), $("btnComplementar"));
+};
+// Edital complementar (retificação, convocação, inscrições homologadas, resultado): atualiza o concurso
+async function aplicarComplementar(f, st, btn){
   btn.disabled=true; st.textContent="Lendo o edital complementar…";
   try{
-    const texto=await textoDoPdf(f);
+    const texto=await textoDoPdf(f, 500);
     if(texto.replace(/\s/g,"").length<100){ st.textContent="Não encontrei texto nesse PDF (parece imagem). Atualize as fases manualmente."; return; }
     const r=interpretarEdital(texto, tipoAtual);
     const alteracoes=[], destaques=[];
     const fmtT=v=>v||"vazio", fmtD=v=>v?fmtCurta(v):"sem data";
+    // listas com o nome do candidato: inscrições homologadas e resultados
+    const lista=lerListaDoCandidato(texto, { nome:(usuarioAtual&&usuarioAtual.nome)||"", inscricao:$("f_inscricao").value }, tipoAtual);
+    if(lista.tipoLista==="homologacao"){
+      if(lista.encontrado){
+        if(lista.inscricao && lista.inscricao!==$("f_inscricao").value){ alteracoes.push(`Nº de inscrição: ${lista.inscricao} (encontrado na lista de inscrições homologadas)`); $("f_inscricao").value=lista.inscricao; $("f_inscricao").classList.add("auto"); }
+        if(STATUS.indexOf($("f_status").value)<3){ alteracoes.push(`Situação: ${STATUS[3]}`); $("f_status").value=STATUS[3]; $("f_status").classList.add("auto"); mostrarBoleto(); }
+      } else alteracoes.push("Atenção: não encontrei seu nome nesta lista de inscrições homologadas. Confira o edital.");
+    }
+    if(lista.tipoLista==="resultado" && lista.fase>=0){
+      const mf=MODELOS[tipoAtual].fases[lista.fase], alvo=fasesForm.find(x=>x.nome===mf.nome);
+      if(alvo){
+        const idx=fasesForm.indexOf(alvo);
+        if(lista.encontrado){
+          if(lista.inscricao && !$("f_inscricao").value){ $("f_inscricao").value=lista.inscricao; }
+          alvo.situacao="Aprovado"; destaques.push([idx,"f-situacao"]);
+          if(lista.nota){ alvo.nota=lista.nota; destaques.push([idx,"f-nota"]); }
+          const ppq=alvo.pontosQuestao||r.pontosQuestao;
+          if(lista.nota && ppq && temObjetiva(alvo)){ alvo.acertos=Math.round(parseFloat(lista.nota.replace(",","."))/ppq); destaques.push([idx,"f-acertos"]); }
+          if(lista.classificacao){ alvo.classificacao=`${lista.classificacao}º${lista.lista?" – "+lista.lista:""}${lista.totalLista?" (de "+lista.totalLista+")":""}`; destaques.push([idx,"f-classif"]); }
+          alvo.resultado_linha=lista.linha||"";
+          alteracoes.push(`${alvo.nome}: APROVADO(A)`+(lista.nota?` · nota ${lista.nota}`:"")+(alvo.acertos?` · ${alvo.acertos} acertos`:"")+(lista.classificacao?` · ${lista.classificacao}º lugar${lista.lista?" na "+lista.lista:""}`:""));
+        } else if(lista.aprovado===false){
+          alvo.situacao="Reprovado"; destaques.push([idx,"f-situacao"]);
+          alteracoes.push(`${alvo.nome}: seu nº de inscrição não consta na relação de aprovados/habilitados — situação marcada como Reprovado; confira o edital.`);
+        }
+      }
+    }
     MODELOS[tipoAtual].fases.forEach((mf,i)=>{
       const alvo=fasesForm.find(x=>x.nome===mf.nome); if(!alvo) return;
       const idx=fasesForm.indexOf(alvo), d=(r.fasesDatas||[])[i]||{}, c=(r.composicao||[])[i]||{};
@@ -885,9 +907,9 @@ $("arqComplementar").onchange=async e=>{
       const du=(r.duracoes||[])[i]||{};
       if(du.duracao && du.duracao!==alvo.duracao){ alteracoes.push(`${alvo.nome}: duração ${alvo.duracao?fmtDuracao(alvo.duracao):"não informada"} → ${fmtDuracao(du.duracao)}`); alvo.duracao=du.duracao; alvo.turno=du.turno||alvo.turno||""; }
       if(!mudar("fim",d.fim,"f-fim",fmtT,"término") && alvo.duracao && alvo.horario && d.horario){ mudar("fim",somarMinutos(alvo.horario,alvo.duracao),"f-fim",fmtT,"término"); }
-      if(c.objetivas && c.objetivas.total && (!alvo.objetivas || +alvo.objetivas.total!==+c.objetivas.total || (c.objetivas.blocos.length && JSON.stringify(c.objetivas.blocos)!==JSON.stringify(alvo.objetivas.blocos)))){
+      if(!lista.tipoLista && c.objetivas && c.objetivas.total && (!alvo.objetivas || +alvo.objetivas.total!==+c.objetivas.total || (c.objetivas.blocos.length && JSON.stringify(c.objetivas.blocos)!==JSON.stringify(alvo.objetivas.blocos)))){
         alteracoes.push(`${alvo.nome}: composição objetiva atualizada (${c.objetivas.total} questões)`); alvo.objetivas=c.objetivas; destaques.push([idx,"sec-comp"]); }
-      if(c.escritas && c.escritas.length && JSON.stringify(c.escritas)!==JSON.stringify(alvo.escritas||[])){
+      if(!lista.tipoLista && c.escritas && c.escritas.length && JSON.stringify(c.escritas)!==JSON.stringify(alvo.escritas||[])){
         alteracoes.push(`${alvo.nome}: composição escrita atualizada`); alvo.escritas=c.escritas; destaques.push([idx,"sec-comp"]); }
       if(mudouData && alvo.obs && !/Portões:/.test(alvo.obs) && /convoca|constar|oportunamente|edital espec/i.test(alvo.obs)) alvo.obs="";   // a regra provisória deixa de valer
     });
@@ -906,12 +928,12 @@ $("arqComplementar").onchange=async e=>{
     const els=$("fasesBox").querySelectorAll(".fase");
     destaques.forEach(([i,c])=>{ const el=campoDaFase(i,c); if(el) el.classList.add("auto"); });
     st.textContent = alteracoes.length
-      ? `Atualizei ${alteracoes.length} informação(ões) das fases (destacadas em amarelo). Confira e clique em Salvar.`
-      : "Juntei o edital, mas não encontrei mudanças de datas, horários ou composição das fases.";
+      ? `Atualizei: ${alteracoes.slice(0,4).join(" | ")}${alteracoes.length>4?" …":""}. O que mudou está destacado em amarelo; confira e clique em Salvar.`
+      : "Juntei o edital, mas não encontrei mudanças para o seu concurso (datas, horários, inscrição ou resultado).";
   }catch(err){
     st.textContent = err && err.message==="sem-internet" ? "Para ler o PDF é preciso internet na primeira vez." : "Não consegui abrir esse PDF.";
   }finally{ btn.disabled=false; }
-};
+}
 
 // ---------- Login com Google + confirmação de e-mail ----------
 const CHAVE_SESSAO="meus-concursos-sessao", CHAVE_APARELHO="meus-concursos-aparelho";
@@ -1146,6 +1168,13 @@ $("btnEdital").onclick=()=>$("arqEdital").click();
 $("arqEdital").onchange=async e=>{
   const f=e.target.files[0]; e.target.value=""; if(!f) return;
   const st=$("editalStatus"), btn=$("btnEdital");
+  if(lerFasesDoForm().some(f=>f.data||f.horario||f.situacao!=="Aguardando")){
+    // concurso já preenchido: o novo PDF é tratado como edital complementar (atualiza em vez de só preencher vazios)
+    st.textContent="Este concurso já tem fases preenchidas: tratei o PDF como edital complementar (veja a seção Editais complementares).";
+    await aplicarComplementar(f, $("compStatus"), $("btnComplementar"));
+    $("compStatus").scrollIntoView({block:"center",behavior:"smooth"});
+    return;
+  }
   btn.disabled=true; st.textContent="Lendo o edital…";
   pendentes.edital=f; mostrarAnexo("edital", f.name);
   try{
@@ -1179,6 +1208,8 @@ $("arqEdital").onchange=async e=>{
       if(d.fim && !alvo.fim){ alvo.fim=d.fim; destaques.push([idx,"f-fim"]); }
       const du=(r.duracoes||[])[i]||{};
       if(du.duracao && !alvo.duracao){ alvo.duracao=du.duracao; alvo.turno=du.turno||""; }
+      if((r.previsoes||[])[i] && !alvo.data) alvo.previsao=r.previsoes[i];
+      if(r.pontosQuestao && mf.formato==="objetiva") alvo.pontosQuestao=r.pontosQuestao;
       if(alvo.duracao && alvo.horario && !alvo.fim){ alvo.fim=somarMinutos(alvo.horario,alvo.duracao); destaques.push([idx,"f-fim"]); }
       const c=(r.composicao||[])[i];
       if(c){

@@ -31,7 +31,7 @@ Ao cadastrar um concurso, clique em **Preencher com o edital (PDF)** e escolha o
 
 ## Editais complementares
 
-Junte retificações e editais de convocação no campo **Editais complementares**. O app atualiza datas, horários, portões e composição das fases conforme o novo edital, destaca o que mudou e guarda a lista de alterações de cada edital.
+Junte retificações, editais de convocação, listas de inscrições homologadas e resultados no campo **Editais complementares**. Nas listas, o app procura você pelo nome da conta Google ou pelo nº de inscrição: na de homologação, preenche o nº de inscrição e a situação; no resultado, marca a fase como aprovada (ou reprovada, se você não constar na lista de habilitados) e preenche nota, acertos e classificação na sua lista (ex.: ampla concorrência). O app atualiza datas, horários, portões e composição das fases conforme o novo edital, destaca o que mudou e guarda a lista de alterações de cada edital.
 
 ## Situação e boleto
 
