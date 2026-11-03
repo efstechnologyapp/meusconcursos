@@ -40,6 +40,10 @@ Ficam fora do formulário do concurso. Ao abrir o concurso na tela inicial, cada
 
 **Deslocamentos:** com o voo (aeroporto de chegada), a hospedagem e o local de prova preenchidos, o app mostra a distância e o tempo de carro do aeroporto até a hospedagem e da hospedagem até o local de prova, além do horário sugerido de saída em cada dia de prova (trajeto + 30 min de folga antes dos portões). Os endereços são localizados no OpenStreetMap (Nominatim) e a rota é calculada pelo OSRM, gratuitos e sem trânsito em tempo real; os links **Trânsito agora (Google Maps)**, **Waze** e **Pedir Uber** abrem a rota com o trânsito do momento.
 
+## Imprimir uma fase
+
+Nos detalhes do concurso, o ícone de impressora ao lado de cada fase gera um documento só daquela fase (ou das fases do mesmo dia): data, horários, portões, composição da prova, local de prova com sala, transporte (voos e conexões), hospedagem, deslocamentos com horário sugerido de saída e instruções gerais. Na janela de impressão, escolha a impressora ou **Salvar como PDF**.
+
 ## Preencher com o edital
 
 Ao cadastrar um concurso, clique em **Preencher com o edital (PDF)** e escolha o arquivo do edital. O app lê o texto no próprio navegador e identifica o tipo de cargo, monta as fases e tenta preencher concurso, cargo, banca, datas e horários das fases, fechamento dos portões, cidade e instruções gerais. Quando o edital não traz a data de uma fase (prova oral, inscrição definitiva etc.), o app guarda a regra do edital nas observações da fase. Os portões são preenchidos pelo horário informado ou calculados pela regra geral do edital (ex.: fecham 30 minutos antes do início). Para completar as datas depois, abra o concurso, clique em Editar e envie o edital de convocação: o app preenche só o que estiver vazio. Os campos preenchidos ficam destacados para conferência. PDFs escaneados (imagem) não funcionam.

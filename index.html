@@ -161,6 +161,26 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .copy-end{font-size:11.5px!important;padding:3px 9px!important}
 .copy-end svg{width:12px!important;height:12px!important}
 .vr-ic svg{width:15px!important;height:15px!important}
+#impressao{display:none}
+@media print{
+  body>*:not(#impressao),dialog{display:none!important}
+  #impressao{display:block!important;color:#000;background:#fff;font:11pt/1.45 var(--f-body);padding:0}
+  body{background:#fff!important}
+  @page{margin:16mm 14mm}
+}
+.imp-cab{display:flex;gap:14px;align-items:center;border-bottom:2px solid #14213d;padding-bottom:10px;margin-bottom:12px}
+.imp-cab img{width:64px;height:64px;object-fit:contain}
+.imp-cab h1{font-family:var(--f-display);font-size:18pt;margin:0;line-height:1.15}
+.imp-cab p{margin:2px 0 0;color:#444}
+.imp-fase{font-family:var(--f-display);font-size:14pt;margin:4px 0 10px}
+.imp-sec{break-inside:avoid;border:1px solid #ccc;border-radius:8px;padding:8px 12px;margin:0 0 10px}
+.imp-sec h3{font-size:10pt;text-transform:uppercase;letter-spacing:.06em;margin:0 0 6px;color:#14213d}
+.imp-sec p,.imp-sec ul{margin:0 0 4px}
+.imp-sec ul{padding-left:18px}
+.imp-kv{display:grid;grid-template-columns:150px 1fr;gap:2px 10px}
+.imp-kv dt{color:#555} .imp-kv dd{margin:0}
+.imp-sub{font-weight:700;margin-top:6px!important}
+.imp-rod{color:#666;font-size:9pt;margin-top:12px}
 .chip.pend{background:transparent;border:1px dashed var(--muted);color:var(--muted)}
 .tl-dir{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}
 .viagem-btns{display:inline-flex;gap:4px}
@@ -404,6 +424,7 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 </dialog>
 
 <div class="toast" id="toast" hidden></div>
+<div id="impressao" aria-hidden="true"></div>
 
 <script src="config.js"></script>
 <script src="edital.js"></script>
@@ -616,7 +637,7 @@ function abrirVer(id){
   const linha=(k,v)=>v?`<dt>${k}</dt><dd>${esc(v)}</dd>`:"";
   const a=andamento(x);
   const raizesViagem=new Set(blocosDeViagem(x).map(b=>b.uid));
-  const botoes=f=>raizesViagem.has(f.uid)?htmlBotoesViagem(x,f.uid):"";
+  const botoes=(f,g)=>`<span class="viagem-btns"><button type="button" class="ic-btn" data-imprimir="${g.join(",")}" title="Imprimir / gerar PDF desta fase" aria-label="Imprimir esta fase">${SVG_IMPRESSORA}</button></span>`+(raizesViagem.has(f.uid)?htmlBotoesViagem(x,f.uid):"");
   const resumoV=f=>raizesViagem.has(f.uid)?htmlResumoViagem(x,f.uid):"";
   const blocosLocal=blocosDeLocal(x.fases||[]);
   const horasTxt=f=>[f.horario&&(f.fim?`das ${f.horario} às ${f.fim}`:"às "+f.horario), f.portoes&&("portões fecham "+f.portoes)].filter(Boolean).join(" · ");
@@ -647,10 +668,10 @@ function abrirVer(id){
     const i=g[0], f=x.fases[i];
     const atual = a.prox && g.includes(a.prox.i);
     const sitCls = g.some(k=>["Reprovado","Não fiz"].includes(x.fases[k].situacao)) ? "bad" : g.every(k=>x.fases[k].situacao==="Aprovado") ? "ok" : "";
-    if(g.length===1) return `<li class="tl ${atual?"atual":""} ${sitCls}">${especificoTxt(f,i,false,botoes(f)).replace("</span></div>","</span></div>"+comumTxt(f,i))}${resumoV(f)}</li>`;
+    if(g.length===1) return `<li class="tl ${atual?"atual":""} ${sitCls}">${especificoTxt(f,i,false,botoes(f,g)).replace("</span></div>","</span></div>"+comumTxt(f,i))}${resumoV(f)}</li>`;
     const tur=emTurnos(g,x.fases);
     return `<li class="tl ${atual?"atual":""} ${sitCls}">
-      <div class="tl-head"><b>Fases ${g.map(k=>k+1).join(" + ")} · ${tur?"mesmo dia, turnos diferentes":"mesmo dia e horário"}</b>${botoes(f)}</div>
+      <div class="tl-head"><b>Fases ${g.map(k=>k+1).join(" + ")} · ${tur?"mesmo dia, turnos diferentes":"mesmo dia e horário"}</b><span class="tl-dir">${botoes(f,g)}</span></div>
       ${comumTxt(f,i,tur)}
       ${g.map(k=>`<div class="tl-grupo">${especificoTxt(x.fases[k],k,tur)}</div>`).join("")}${resumoV(f)}</li>`;
   }).join("");
@@ -1468,7 +1489,7 @@ iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO=33;
+const APP_VERSAO=34;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{

@@ -20,6 +20,7 @@ const SVG_AVIAO = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="curre
 const SVG_HOTEL = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm12-6h-8v7H3V5H1v15h2v-3h18v3h2v-9a4 4 0 0 0-4-4z"/></svg>`;
 const SVG_LOCAL = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5.5C5 4.5 7.5 4.5 10 5.5v14c-2.5-1-5-1-7 0z"/><path d="M10 5.5c1.5-.6 3-.8 4.5-.7"/><path d="M10 19.5c1.2-.5 2.4-.7 3.6-.7"/><path d="M20.5 3.5l1 1-6.5 9.5-2.2 1 .3-2.4z"/></svg>`;
 const SVG_COPIAR = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>`;
+const SVG_IMPRESSORA = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M6 14h12v7H6z"/><path d="M17.5 12h.01"/></svg>`;
 const SVG_CARRO = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M18.9 6a1.5 1.5 0 0 0-1.4-1h-11a1.5 1.5 0 0 0-1.4 1L3 12v8a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-1h12v1a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-8zM6.5 16a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm11 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zM5 11l1.5-4.5h11L19 11z"/></svg>`;
 
 // ---------- Blocos de viagem ----------
@@ -668,3 +669,95 @@ document.addEventListener("change", e => {
   if (a) a.innerHTML = AEROPORTOS.map(([s, n]) => `<option value="${s} – ${n}">`).join("");
   if (c) c.innerHTML = CIAS.map(n => `<option value="${n}">`).join("");
 })();
+
+
+// ---------- Impressão / PDF de uma fase ----------
+// Monta um documento só com a fase escolhida (ou as fases do mesmo dia): prova, local, transporte, hospedagem e deslocamentos.
+function linhasTrajeto(tj, tipo) {
+  if (!tj) return [];
+  if (tipo === "carro") return [[tj.data && fmtData(tj.data), tj.hora && "saída às " + tj.hora, [tj.origem, tj.destino].filter(Boolean).join(" → ")].filter(Boolean).join(" · ")].filter(Boolean);
+  const tr = (tj.trechos || []).filter(t => t.de || t.para || t.partida_hora), out = [];
+  tr.forEach((t, k) => {
+    if (k) {
+      const a = minutosDe(tr[k - 1].chegada_data || tr[k - 1].partida_data, tr[k - 1].chegada_hora), b = minutosDe(t.partida_data, t.partida_hora);
+      out.push(`<i>Conexão em ${esc(t.de || tr[k - 1].para || "")}${a !== null && b !== null && b > a ? " · espera de " + fmtMin(b - a) : ""}</i>`);
+    }
+    out.push(esc([[t.cia, t.voo].filter(Boolean).join(" "), `${t.de || "?"} ${t.partida_data ? fmtCurta(t.partida_data) + " " : ""}${t.partida_hora || ""} → ${t.para || "?"} ${t.chegada_data && t.chegada_data !== t.partida_data ? fmtCurta(t.chegada_data) + " " : ""}${t.chegada_hora || ""}`].filter(Boolean).join(" · ")));
+  });
+  if (tj.localizador) out.push("Localizador: <b>" + esc(tj.localizador) + "</b>");
+  return out;
+}
+function imprimirFases(id, idx) {
+  const x = itens.find(i => i.id === id); if (!x) return;
+  const fases = idx.map(i => x.fases[i]).filter(Boolean); if (!fases.length) return;
+  const bl = blocosDeViagem(x).find(b => b.fases.includes(idx[0]));
+  const v = bl ? ((x.viagens || {})[bl.uid] || {}) : {};
+  const raiz = bl ? x.fases[bl.raizI] : fases[0];
+  const kv = pares => `<dl class="imp-kv">${pares.filter(([, val]) => val).map(([k, val]) => `<dt>${esc(k)}</dt><dd>${val}</dd>`).join("")}</dl>`;
+  const titulo = fases.length > 1 ? fases.map(f => f.nome).join(" + ") : fases[0].nome;
+
+  // prova(s)
+  const provas = fases.map(f => {
+    const comp = resumoComposicao(f);
+    const blocos = temObjetiva(f) && f.objetivas && (f.objetivas.blocos || []).length ? `<ul>${f.objetivas.blocos.map(b => `<li>${esc(b.nome)}: ${esc(b.qtd)} questões${b.disciplinas ? " – " + esc(b.disciplinas) : ""}</li>`).join("")}</ul>` : "";
+    const res = [f.acertos !== "" && f.acertos != null && `${f.acertos} acertos`, f.nota && "nota " + f.nota, f.classificacao && "classificação " + f.classificacao].filter(Boolean).join(" · ");
+    return `${fases.length > 1 ? `<p class="imp-sub">${esc(f.nome)}</p>` : ""}${kv([
+      ["Data", esc(f.data ? fmtData(f.data) : (f.previsao ? "a definir (previsão: " + f.previsao + ")" : "a definir"))],
+      ["Horário", esc(f.horario ? (f.fim ? `das ${f.horario} às ${f.fim}` : "às " + f.horario) : "")],
+      ["Portões fecham", esc(f.portoes || "")],
+      ["Turno / duração", esc(textoTurno(f))],
+      ["Caráter", esc(CARATER[f.carater] || "")],
+      ["Situação", esc(f.situacao || "")],
+      ["Composição", esc(comp)],
+      ["Resultado", esc(res)],
+      ["Observações", f.obs ? esc(f.obs).replace(/\n/g, "<br>") : ""]
+    ])}${blocos}`;
+  }).join("");
+
+  // local de prova
+  const lc = v.local;
+  const local = lc && resumoLocal(lc) ? kv([["Local", esc(lc.nome || "")], ["Endereço", esc(enderecoParaCopiar(lc))], ["Sala / bloco", esc(lc.sala || "")]]) : (raiz.local ? `<p>${esc(raiz.local)}</p>` : "<p>Ainda não informado.</p>");
+
+  // transporte
+  const tp = v.transporte || {};
+  const transp = tp.tipo ? [["ida", "Ida"], ["volta", "Volta"]].map(([k, n]) => { const l = linhasTrajeto(tp[k], tp.tipo); return l.length ? `<p class="imp-sub">${n} (${tp.tipo === "carro" ? "carro" : "avião"})</p><p>${l.join("<br>")}</p>` : ""; }).join("") : "<p>Ainda não informado.</p>";
+
+  // hospedagem
+  const h = v.hospedagem;
+  const hosp = h && resumoHospedagem(h) ? kv([
+    ["Hotel", esc(h.nome || "")], ["Endereço", esc(enderecoParaCopiar(h))],
+    ["Check-in", esc([h.checkin_data && fmtData(h.checkin_data), h.checkin_hora && "a partir das " + h.checkin_hora].filter(Boolean).join(", "))],
+    ["Check-out", esc([h.checkout_data && fmtData(h.checkout_data), h.checkout_hora && "até " + h.checkout_hora].filter(Boolean).join(", "))],
+    ["Reserva", esc([h.plataforma, h.codigo && "nº " + h.codigo].filter(Boolean).join(" · "))], ["Em nome de", esc(h.responsavel || "")]
+  ]) : "<p>Ainda não informada.</p>";
+
+  // deslocamentos (já calculados)
+  const desl = bl ? trechosDeslocamento(x, bl.uid).map(t => {
+    const r = (v.rotas || {})[t.id]; if (!r || r.chave !== t.chave || r.erro) return "";
+    let txt = `<b>${esc(t.de)} → ${esc(t.para)}:</b> ${fmtKm(r.km)} km · ~${fmtTempo(r.min)} de carro (sem trânsito)`;
+    if (t.id === "hospLocal") fases.filter(f => f.data && (f.portoes || f.horario)).forEach(f => { const lim = f.portoes || f.horario, s2 = hhmmMenos(lim, r.min + 30); if (s2) txt += `<br>${esc(fmtCurta(f.data))} – ${esc(f.nome)}: sair até <b>${s2}</b> (${f.portoes ? "portões fecham" : "prova começa"} ${lim})`; });
+    return `<p>${txt}</p>`;
+  }).filter(Boolean).join("") : "";
+
+  const tv = textoVagas(x.vagas);
+  $("impressao").innerHTML = `
+    <div class="imp-cab">${x.logo ? `<img src="${x.logo}" alt="">` : ""}<div><h1>${esc(x.nome)}</h1>
+      <p>${esc([x.cargo, x.banca].filter(Boolean).join(" · "))}</p>
+      <p>${esc([x.inscricao && "Inscrição nº " + x.inscricao, tv && tv.tot].filter(Boolean).join(" · "))}</p></div></div>
+    <div class="imp-fase">${esc(titulo)}</div>
+    <div class="imp-sec"><h3>Prova</h3>${provas}</div>
+    <div class="imp-sec"><h3>Local de prova</h3>${local}</div>
+    <div class="imp-sec"><h3>Transporte</h3>${transp}</div>
+    <div class="imp-sec"><h3>Hospedagem</h3>${hosp}</div>
+    ${desl ? `<div class="imp-sec"><h3>Deslocamentos</h3>${desl}</div>` : ""}
+    ${x.instrucoes ? `<div class="imp-sec"><h3>Instruções gerais</h3><p>${esc(x.instrucoes).replace(/\n/g, "<br>")}</p></div>` : ""}
+    <p class="imp-rod">Gerado pelo app Meus Concursos em ${esc(new Date().toLocaleString("pt-BR"))}.</p>`;
+  const tituloAntigo = document.title;
+  document.title = `${x.nome} – ${titulo}`.replace(/[\\/:*?"<>|]/g, "-");   // nome sugerido ao salvar em PDF
+  setTimeout(() => { window.print(); setTimeout(() => { document.title = tituloAntigo; }, 1000); }, 50);
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-imprimir]"); if (!b) return;
+  const id = $("verConteudo").dataset.id;
+  if (id) imprimirFases(id, b.dataset.imprimir.split(",").map(Number));
+});
