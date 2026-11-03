@@ -329,7 +329,7 @@ function interpretarEdital(textoBruto, tipoForcado, estrutura) {
   for (const re of ORGAOS) {
     const m = inicio.match(re);
     if (!m) continue;
-    let nome = limpar(m[0].split(/\s+(?:torna|faz|fazem|comunica|no uso|resolve|EDITAL|CONCURSO|-\s|–\s|\|)|\s+(?:Avenida|Av|Rua|Pra[cç]a|P[cç]a|Rodovia|Alameda|Travessa|Setor|SAF|SAS|Quadra|Bairro|CEP|Endere[cç]o|Telefone)(?![A-Za-zÀ-ú])|\s+www\./i)[0]);
+    let nome = limpar(m[0].split(/\s+(?:torna|faz|fazem|comunica|no uso|resolve|EDITAL|CONCURSO|-\s|–\s|\|)|\s+(?:Avenida|Av|Rua|Pra[cç]a|P[cç]a|Rodovia|Alameda|Travessa|Setor|SAF|SAS|Quadra|Bairro|CEP|Endere[cç]o|Telefone|O|A|Presidente|Presid[êe]ncia|Vice|Desembargador[a]?|Corregedor[a]?|Corregedoria|Procurador[a]?|Procuradoria|Defensor[a]?|Secret[áa]rio|Secret[áa]ria|Secretaria|Diretor[a]?|Diretoria|Comiss[ãa]o|Gabinete|Escola|Coordenadoria|Departamento|Ger[êe]ncia|N[úu]cleo|Juiz[a]?|Excelent[íi]ssim[oa])(?![A-Za-zÀ-ú])|\s+www\./i)[0]);
     // cabeçalhos que repetem o nome (em caixa alta e depois normal): fica uma vez só
     const pal = nome.split(" "), metade = Math.floor(pal.length / 2);
     for (let k = 3; k <= metade; k++) {

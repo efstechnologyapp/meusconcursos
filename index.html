@@ -474,7 +474,10 @@ function cardHTML(x){
   const vb = x.status===STATUS[1] && x.boleto_venc ? diasAte(x.boleto_venc) : null;
   const chipBoleto = vb===null ? "" : `<span class="count ${vb<=2?"warn":""}">${vb<0?"boleto vencido":vb===0?"boleto vence hoje":"boleto vence em "+vb+(vb===1?" dia":" dias")}</span>`;
   const grupoProx = f ? (gruposDeFases(x.fases).find(g=>g.includes(a.prox.i))||[a.prox.i]) : [];
-  const faseTxt = f ? `${grupoProx.map(k=>x.fases[k].nome).join(" + ")}${f.horario?" · "+f.horario+(f.fim?"–"+f.fim:""):""}` : (a.ativo && a.proxSemData ? `${a.proxSemData.f.nome} · data a definir${a.proxSemData.f.previsao?" (previsão: "+a.proxSemData.f.previsao+")":""}` : "");
+  const turProx = emTurnos(grupoProx,x.fases);
+  const faseTxt = f ? (turProx
+      ? grupoProx.map(k=>{ const z=x.fases[k], h=[rotuloTurno(z).toLowerCase(), z.horario&&z.horario+(z.fim?"–"+z.fim:"")].filter(Boolean).join(" "); return z.nome+(h?` (${h})`:""); }).join(" + ")
+      : `${grupoProx.map(k=>x.fases[k].nome).join(" + ")}${f.horario?" · "+f.horario+(f.fim?"–"+f.fim:""):""}`) : (a.ativo && a.proxSemData ? `${a.proxSemData.f.nome} · data a definir${a.proxSemData.f.previsao?" (previsão: "+a.proxSemData.f.previsao+")":""}` : "");
   const sub=[x.cargo,x.banca].filter(Boolean).join(" · ");
   const passo = (a.ativo && a.total>1) ? `<span class="chip">fase ${(f?a.prox.i:a.proxSemData?a.proxSemData.i:0)+1} de ${a.total}</span>` : "";
   const stChip = a.ativo ? `<span class="chip">${esc(situacaoDoCartao(x,a))}</span>` : "";
@@ -513,19 +516,21 @@ function abrirVer(id){
   const a=andamento(x);
   const hosp=linha("Hotel",x.hosp_nome)+linha("Endereço",x.hosp_end)+linha("Check-in",fmtCurta(x.checkin))+linha("Check-out",fmtCurta(x.checkout))+linha("Reserva",x.reserva);
   const blocosLocal=blocosDeLocal(x.fases||[]);
-  const comumTxt=(f,i)=>{
-    const quando=[f.data?fmtData(f.data):"data a definir", f.horario&&(f.fim?`das ${f.horario} às ${f.fim}`:"às "+f.horario), f.portoes&&("portões fecham "+f.portoes)].filter(Boolean).join(" · ");
+  const horasTxt=f=>[f.horario&&(f.fim?`das ${f.horario} às ${f.fim}`:"às "+f.horario), f.portoes&&("portões fecham "+f.portoes)].filter(Boolean).join(" · ");
+  const comumTxt=(f,i,soData)=>{
+    const quando=[f.data?fmtData(f.data):"data a definir", !soData&&horasTxt(f)].filter(Boolean).join(" · ");
     const b=blocosLocal[i];
     const raizDe = b.raiz && b.de!==undefined && b.de!==i ? b.de : (b.herda!==undefined ? b.herda : null);
     const local = raizDe===null ? f.local : (x.fases[raizDe].local ? x.fases[raizDe].local+" (mesmo local da fase "+(raizDe+1)+")" : "");
     return `<div class="note">${esc(quando)}${local?"<br>Local: "+esc(local):""}</div>`;
   };
-  const especificoTxt=(f,i)=>{
+  const especificoTxt=(f,i,tur)=>{
     const sit=f.situacao||"Aguardando", cls=sit==="Aprovado"?"ok":(sit==="Reprovado"||sit==="Não fiz")?"bad":"";
     const comp=resumoComposicao(f);
     const blocosTxt = temObjetiva(f) && f.objetivas && f.objetivas.blocos && f.objetivas.blocos.length ? f.objetivas.blocos.map(bl=>`${bl.nome}: ${bl.qtd} questões${bl.disciplinas?" ("+bl.disciplinas+")":""}`).join("\n") : "";
     const res=[f.acertos!==""&&f.acertos!=null&&`${f.acertos} acertos`+(f.objetivas&&f.objetivas.total?` de ${f.objetivas.total}`:""), f.nota&&"nota "+f.nota, f.classificacao&&"classificação "+f.classificacao].filter(Boolean).join(" · ");
     return `<div class="tl-head"><b>${esc(f.nome||"Fase "+(i+1))}</b><span class="chip ${cls}">${esc(sit)}</span></div>
+      ${tur?`<div class="note"><b>${esc(rotuloTurno(f)||"Horário")}:</b> ${esc(horasTxt(f)||"horário a definir")}</div>`:""}
       ${textoTurno(f)?`<div class="note">${esc(textoTurno(f))}</div>`:""}
       ${comp?`<div class="note"><b>Prova:</b> ${esc(comp)}</div>`:""}${blocosTxt?`<div class="note pre">${esc(blocosTxt)}</div>`:""}
       ${res?`<div class="note"><b>Resultado:</b> ${esc(res)}</div>`:""}
@@ -537,10 +542,11 @@ function abrirVer(id){
     const atual = a.prox && g.includes(a.prox.i);
     const sitCls = g.some(k=>["Reprovado","Não fiz"].includes(x.fases[k].situacao)) ? "bad" : g.every(k=>x.fases[k].situacao==="Aprovado") ? "ok" : "";
     if(g.length===1) return `<li class="tl ${atual?"atual":""} ${sitCls}">${especificoTxt(f,i).replace("</div>","</div>"+comumTxt(f,i))}</li>`;
+    const tur=emTurnos(g,x.fases);
     return `<li class="tl ${atual?"atual":""} ${sitCls}">
-      <div class="tl-head"><b>Fases ${g.map(k=>k+1).join(" + ")} · mesmo dia e horário</b></div>
-      ${comumTxt(f,i)}
-      ${g.map(k=>`<div class="tl-grupo">${especificoTxt(x.fases[k],k)}</div>`).join("")}</li>`;
+      <div class="tl-head"><b>Fases ${g.map(k=>k+1).join(" + ")} · ${tur?"mesmo dia, turnos diferentes":"mesmo dia e horário"}</b></div>
+      ${comumTxt(f,i,tur)}
+      ${g.map(k=>`<div class="tl-grupo">${especificoTxt(x.fases[k],k,tur)}</div>`).join("")}</li>`;
   }).join("");
   const c = a.eliminado ? {t:"encerrado",c:"past"} : contagem(a.prox? diasAte(a.prox.f.data) : null);
   $("verConteudo").innerHTML=`
@@ -677,22 +683,32 @@ function htmlResultado(f){
       <div class="anexo" ${f.resultado_arquivo?"":"hidden"}><a class="f-lnkres" target="_blank" rel="noopener">${esc(f.resultado_arquivo?f.resultado_arquivo.nome:"")}</a></div>
     </div>`;
 }
-// Fases no mesmo dia e com o mesmo horário de início formam um grupo:
-// os dados comuns (data, horários, portões, local) aparecem uma vez só.
+// Fases no mesmo dia formam um grupo: data e local aparecem uma vez só.
+// Com o mesmo horário de início, os horários também são comuns; com horários/turnos
+// diferentes (ex.: objetiva de manhã e discursiva à tarde), cada fase mostra o seu.
 function gruposDeFases(fases){
   const g=[];
   fases.forEach((f,i)=>{
     const ult=g[g.length-1], ant=ult&&fases[ult[ult.length-1]];
-    if(ant && f.data && f.horario && f.data===ant.data && f.horario===ant.horario) ult.push(i); else g.push([i]);
+    if(ant && f.data && f.data===ant.data) ult.push(i); else g.push([i]);
   });
   return g;
 }
-function htmlComum(f,i,bloco,idx){
+function emTurnos(g,fases){
+  if(g.length<2) return false;
+  const hs=new Set(g.map(k=>fases[k].horario||"")), ts=new Set(g.map(k=>fases[k].turno||"").filter(Boolean));
+  return hs.size>1 || ts.size>1;
+}
+const rotuloTurno=f=>{ const t=f.turno||(f.horario?(+f.horario.slice(0,2)<12?"manhã":+f.horario.slice(0,2)<18?"tarde":"noite"):""); return t?t[0].toUpperCase()+t.slice(1):""; };
+function camposHorario(f){
+  return `<label>Início<input class="f-horario" data-f="horario" type="time" value="${esc(f.horario)}"></label>
+        <label>Término<input class="f-fim" data-f="fim" type="time" value="${esc(f.fim)}"></label>
+        <label>Portões fecham<input class="f-portoes" data-f="portoes" type="time" value="${esc(f.portoes)}"></label>`;
+}
+function htmlComum(f,i,bloco,soDataLocal){
   return `<div class="fase-grid">
         <label>Data<input class="f-data" data-f="data" type="date" value="${esc(f.data)}"></label>
-        <label>Início<input class="f-horario" data-f="horario" type="time" value="${esc(f.horario)}"></label>
-        <label>Término<input class="f-fim" data-f="fim" type="time" value="${esc(f.fim)}"></label>
-        <label>Portões fecham<input class="f-portoes" data-f="portoes" type="time" value="${esc(f.portoes)}"></label>
+        ${soDataLocal?"":camposHorario(f)}
         <div class="w4 f-localbox">${htmlLocal(f,i,bloco)}</div>
       </div>`;
 }
@@ -704,14 +720,15 @@ function htmlTopo(f,i){
         <button type="button" class="fase-x" data-acao="rem-fase" aria-label="Remover fase ${i+1}">×</button>
       </div>`;
 }
-function htmlEspecifico(f,i,emGrupo){
+function htmlEspecifico(f,i,emGrupo,comHorario){
   const comp=resumoComposicao(f);
   return `
+      ${comHorario?`<div class="fase-grid turno-horas">${camposHorario(f)}</div>`:""}
       <div class="fase-grid">
         <label>Situação<select class="f-situacao" data-f="situacao">${SITUACOES.map(s=>`<option${s===(f.situacao||"Aguardando")?" selected":""}>${s}</option>`).join("")}</select></label>
         <label>Caráter<select class="f-carater" data-f="carater">${Object.entries({EC:"Elimin. e classif.",E:"Eliminatória",C:"Classificatória"}).map(([k,v])=>`<option value="${k}"${k===f.carater?" selected":""}>${v}</option>`).join("")}</select></label>
         <label class="w2">Tipo de prova<select class="f-formato" data-f="formato" data-rerender="1">${Object.entries(FORMATOS).map(([k,v])=>`<option value="${k}"${k===(f.formato||"nenhum")?" selected":""}>${v}</option>`).join("")}</select></label>
-        ${textoTurno(f)?`<p class="w4 note turno">${esc(textoTurno(f))}${f.horario||emGrupo||!f.duracao?"":" — o horário exato sai no edital de convocação; ao informar o início, o término é calculado."}</p>`:""}
+        ${textoTurno(f)?`<p class="w4 note turno">${esc(textoTurno(f))}${f.horario||(emGrupo&&!comHorario)||!f.duracao?"":" — o horário exato sai no edital de convocação; ao informar o início, o término é calculado."}</p>`:""}
       </div>
       ${f.formato!=="nenhum"?`<div class="sec sec-comp"><div class="sec-tit">Composição da prova <span class="note">${esc(comp)}</span></div>${htmlComposicao(f)}</div>`:""}
       <div class="sec sec-res"><div class="sec-tit">Resultado</div>${htmlResultado(f)}</div>
@@ -722,10 +739,11 @@ function renderFases(){
   $("fasesBox").innerHTML = gruposDeFases(fasesForm).map(g=>{
     const i=g[0], f=fasesForm[i];
     if(g.length===1) return `<div class="fase" data-i="${i}">${htmlTopo(f,i)}${htmlComum(f,i,blocos[i])}${htmlEspecifico(f,i,false)}</div>`;
+    const tur=emTurnos(g,fasesForm);
     return `<div class="grupo">
-      <div class="grupo-cab"><span class="fase-n">${g.map(k=>k+1).join(" + ")}</span><b>Mesmo dia e horário</b><span class="note">informações comuns às ${g.length} provas</span></div>
-      <div class="grupo-comum" data-idx="${g.join(",")}">${htmlComum(f,i,blocos[i])}</div>
-      ${g.map(k=>`<div class="fase sub" data-i="${k}"><div class="sub-tit">Específico da fase ${k+1}</div>${htmlTopo(fasesForm[k],k)}${htmlEspecifico(fasesForm[k],k,true)}</div>`).join("")}
+      <div class="grupo-cab"><span class="fase-n">${g.map(k=>k+1).join(" + ")}</span><b>${tur?"Mesmo dia, turnos diferentes":"Mesmo dia e horário"}</b><span class="note">${tur?"data e local comuns; horários de cada fase abaixo":`informações comuns às ${g.length} provas`}</span></div>
+      <div class="grupo-comum" data-idx="${g.join(",")}">${htmlComum(f,i,blocos[i],tur)}</div>
+      ${g.map(k=>`<div class="fase sub" data-i="${k}"><div class="sub-tit">${tur&&rotuloTurno(fasesForm[k])?esc(rotuloTurno(fasesForm[k]))+" · ":""}Específico da fase ${k+1}</div>${htmlTopo(fasesForm[k],k)}${htmlEspecifico(fasesForm[k],k,true,tur)}</div>`).join("")}
     </div>`;
   }).join("") || `<p class="note">Nenhuma fase. Clique em “Adicionar fase”.</p>`;
   // links dos resultados já anexados
@@ -1008,6 +1026,27 @@ function entrarNoApp(sessao){
   if(sessao.foto){ $("usuFoto").src=sessao.foto; $("usuFoto").hidden=false; } else $("usuFoto").hidden=true;
   render();
   iniciarSincronizacao();
+  setTimeout(consertarCadastros, 4000);
+}
+// Concursos cadastrados em versões anteriores: tira cargos/pessoas que vieram grudados no nome do órgão
+// e pega a logo do edital de abertura já juntado
+const CORTE_NOME=/\s+(?:O|A|Presidente|Presid[êe]ncia|Vice|Desembargador[a]?|Corregedor[a]?|Corregedoria|Procurador[a]?|Procuradoria|Defensor[a]?|Secret[áa]rio|Secret[áa]ria|Secretaria|Diretor[a]?|Diretoria|Comiss[ãa]o|Gabinete|Escola|Coordenadoria|Departamento|Ger[êe]ncia|N[úu]cleo|Juiz[a]?|Excelent[íi]ssim[oa])(?![A-Za-zÀ-ú]).*$/i;
+async function consertarCadastros(){
+  let mudou=false;
+  for(const x of itens){
+    if(/^(Tribunal|Minist[ée]rio|Pol[íi]cia|Defensoria|Procuradoria|Advocacia)\b/i.test(x.nome||"")){
+      const n=x.nome.replace(CORTE_NOME,"").trim();
+      if(n.length>6 && n!==x.nome){ x.nome=n; x.atualizado=new Date().toISOString(); mudou=true; }
+    }
+    if(!x.logo && x.edital_arquivo){
+      try{
+        const blob=await arq("ler",`${x.id}:edital`).catch(()=>null) || await baixarDaNuvem(`${x.id}:edital`);
+        const u=blob && await extrairLogo(blob);
+        if(u){ x.logo=u; x.atualizado=new Date().toISOString(); mudou=true; }
+      }catch(e){}
+    }
+  }
+  if(mudou){ salvar(); render(); }
 }
 function carregarGIS(){
   if(window.google&&google.accounts&&google.accounts.id) return Promise.resolve();

@@ -1,5 +1,5 @@
 // Guarda os arquivos do app para funcionar sem internet
-const CACHE = "meus-concursos-v17";
+const CACHE = "meus-concursos-v19";
 const ARQUIVOS = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png", "./edital.js", "./boleto.js", "./config.js"];
 
 self.addEventListener("install", e => {

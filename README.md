@@ -23,7 +23,7 @@ No cadastro, escolha o tipo de cargo e o formulário monta as fases daquela carr
 - Composição da prova: total de questões objetivas e os blocos/grupos com as disciplinas; nas provas escritas, a quantidade de questões, o tipo e o máximo de linhas.
 - Resultado: acertos (com aproveitamento), nota e classificação. Ao juntar o PDF do resultado, o app procura seu nº de inscrição (campo que aparece quando a situação passa a "Inscrição homologada") e preenche nota e classificação.
 
-- Fases no mesmo dia e com o mesmo horário de início aparecem unificadas: data, horários, portões e local uma vez só, e o que é específico de cada prova (nome, situação, caráter, composição, resultado, observações) em destaque logo abaixo.
+- Fases no mesmo dia aparecem unificadas: data e local uma vez só, e o que é específico de cada prova (nome, situação, caráter, composição, resultado, observações) em destaque logo abaixo. Se começam no mesmo horário, os horários também são comuns; se são em turnos diferentes (ex.: objetiva de manhã e discursiva à tarde), cada prova mostra seu turno, início, término e fechamento dos portões.
 
 ## Preencher com o edital
 
