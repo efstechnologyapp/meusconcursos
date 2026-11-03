@@ -150,6 +150,14 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .desl-tit{font-weight:600;color:var(--ink)}
 .desl-num{font-family:var(--f-mono);font-size:13px}
 .desl-links{display:flex;gap:12px;flex-wrap:wrap;font-size:13px}
+/* transporte, hospedagem, local e deslocamentos: menores que as informações da etapa (13px) */
+.viagem-res,.desl-it{font-size:12px!important;line-height:1.4}
+.viagem-res .pre,.desl-it .note,.desl-num,.desl-links,.end-acoes{font-size:12px!important}
+.desl-it .note{font-size:11.5px!important}
+.desl-tit{font-size:12px}
+.copy-end{font-size:11.5px!important;padding:3px 9px!important}
+.copy-end svg{width:12px!important;height:12px!important}
+.vr-ic svg{width:15px!important;height:15px!important}
 .chip.pend{background:transparent;border:1px dashed var(--muted);color:var(--muted)}
 .tl-dir{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}
 .viagem-btns{display:inline-flex;gap:4px}
@@ -1295,6 +1303,7 @@ function chavesDeAnexos(){
     if(x.boleto_arquivo) k.push(`${x.id}:boleto`);
     for(const f of x.fases||[]) if(f.resultado_arquivo) k.push(`${x.id}:res:${f.uid}`);
     for(const c of x.complementares||[]) k.push(`${x.id}:comp:${c.uid}`);
+    for(const [uid,v] of Object.entries(x.viagens||{})) if(v.local&&v.local.arquivo) k.push(`${x.id}:local:${uid}`);
   }
   return k;
 }

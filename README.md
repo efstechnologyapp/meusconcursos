@@ -33,7 +33,7 @@ No cadastro, escolha o tipo de cargo e o formulário monta as fases daquela carr
 
 Ficam fora do formulário do concurso. Ao abrir o concurso na tela inicial, cada viagem (fases no mesmo local: mesmo dia ou dia seguinte) tem três ícones ao lado das fases:
 
-- **Livro com caneta (local de prova):** nome do local, endereço com preenchimento pelo CEP e sala/bloco. Vale para todas as fases da viagem.
+- **Livro com caneta (local de prova):** nome do local, endereço com preenchimento pelo CEP e sala/bloco. Dá para juntar o PDF ou print do cartão de confirmação (ou do edital de locais): o arquivo fica guardado e sincronizado, e o app preenche nome, endereço, CEP, cidade e sala. Vale para todas as fases da viagem.
 
 - **Avião (transporte):** escolha avião ou carro. No carro, data, horário e locais de ida e de volta. No avião, a ida e a volta são montadas por trechos, como no Google Voos: cada trecho tem cia aérea, nº do voo, aeroportos e horários de partida e chegada; **+ Conexão** acrescenta o trecho seguinte, já partindo do aeroporto de chegada do anterior. O app mostra o resumo (ex.: "FOR 06:10 → MCP 13:15 · 1 parada: conexão de 1h35 em BSB (troca para LATAM)") e o localizador. As datas já vêm sugeridas (dia anterior à primeira prova e dia seguinte à última).
 - **Hotel (hospedagem):** nome, endereço com preenchimento pelo CEP (ViaCEP), check-in e check-out (data e horário), plataforma, código da reserva e responsável. O botão **Preencher com print ou PDF da reserva** lê a confirmação (Booking, Airbnb, Hoteis.com, e-mail…) e preenche o que encontrar, destacando os campos para conferência. Há um link para abrir o endereço no mapa e um botão **Copiar endereço** (também no local de prova), para colar no Uber.

@@ -91,7 +91,7 @@ const linkMapa = (h, end) => `https://www.google.com/maps/search/?api=1&query=${
 const botaoCopiar = t => t ? `<button type="button" class="copy-end" data-copiar="${esc(t)}" title="Copiar endereço" aria-label="Copiar endereço">${SVG_COPIAR}<span>Copiar endereço</span></button>` : "";
 function resumoLocal(l) {
   if (!l) return "";
-  return [l.nome, enderecoHosp(l), l.sala].filter(Boolean).join("\n");
+  return [l.nome, enderecoHosp(l), l.sala].filter(Boolean).join("\n") || (l.arquivo ? "documento juntado" : "");
 }
 function resumoHospedagem(h) {
   if (!h) return "";
@@ -119,7 +119,7 @@ function htmlResumoViagem(x, uid) {
   const v = (x.viagens || {})[uid] || {};
   const t = resumoTransporte(v.transporte), h = resumoHospedagem(v.hospedagem), l = resumoLocal(v.local);
   const mapa = v.hospedagem && enderecoHosp(v.hospedagem), mapaL = v.local && enderecoHosp(v.local);
-  return (l ? `<div class="viagem-res"><span class="vr-ic">${SVG_LOCAL}</span><div><p class="pre"><b>Local de prova:</b> ${esc(l)}</p><div class="end-acoes">${botaoCopiar(enderecoParaCopiar(v.local))}${mapaL ? `<a href="${linkMapa(v.local, mapaL)}" target="_blank" rel="noopener">Abrir no mapa</a>` : ""}</div></div></div>` : "") +
+  return (l ? `<div class="viagem-res"><span class="vr-ic">${SVG_LOCAL}</span><div><p class="pre"><b>Local de prova:</b> ${esc(l)}</p><div class="end-acoes">${botaoCopiar(enderecoParaCopiar(v.local))}${v.local.arquivo ? `<a data-arqlocal="${esc(uid)}" target="_blank" rel="noopener">${esc(v.local.arquivo.nome)}</a>` : ""}${mapaL ? `<a href="${linkMapa(v.local, mapaL)}" target="_blank" rel="noopener">Abrir no mapa</a>` : ""}</div></div></div>` : "") +
     (t ? `<div class="viagem-res"><span class="vr-ic">${v.transporte.tipo === "carro" ? SVG_CARRO : SVG_AVIAO}</span><p class="pre">${esc(t)}</p></div>` : "") +
     (h ? `<div class="viagem-res"><span class="vr-ic">${SVG_HOTEL}</span><div><p class="pre">${esc(h)}</p><div class="end-acoes">${mapa ? botaoCopiar(enderecoParaCopiar(v.hospedagem)) + `<a href="${linkMapa(v.hospedagem, mapa)}" target="_blank" rel="noopener">Abrir no mapa</a>` : ""}</div></div></div>` : "") +
     (trechosDeslocamento(x, uid).length ? `<div class="desl" id="desl-${esc(uid)}">${htmlDeslocamentos(x, uid)}</div>` : "");
@@ -215,6 +215,8 @@ function htmlDeslocamentos(x, uid) {
   }).join("");
 }
 async function atualizarDeslocamentos(x) {
+  // links dos documentos de local de prova juntados
+  document.querySelectorAll("#verConteudo [data-arqlocal]").forEach(a => urlDoArquivo(x.id, "local:" + a.dataset.arqlocal).then(u => { if (u) a.href = u; }));
   for (const b of blocosDeViagem(x)) {
     const uid = b.uid, tr = trechosDeslocamento(x, uid);
     for (const t of tr) {
@@ -252,7 +254,7 @@ function abrirViagem(id, uid, qual) {
   if (qual === "transporte") v.transporte = v.transporte || { tipo: "" };
   else if (qual === "local") v.local = v.local || { nome: localDaRaiz(x, uid), cidade: cid, uf };
   else v.hospedagem = v.hospedagem || { checkin_data: ida, checkout_data: volta, cidade: (x.cidade || "").split("/")[0].trim(), uf: ((x.cidade || "").split("/")[1] || "").trim() };
-  viagemAtual = { id, uid, qual, v, ida, volta, x, bloco };
+  viagemAtual = { id, uid, qual, v, ida, volta, x, bloco, arquivoNovo: null, removerArquivo: false };
   desenharViagem();
   const dlg = $("dlgViagem"); if (!dlg.open) dlg.showModal();
 }
@@ -272,6 +274,12 @@ function desenharViagem() {
     <div class="dlg-head"><div style="flex:1;min-width:0"><h2>${TITULOS_V[qual]}</h2><p class="sub">${tituloBloco()}</p></div><button type="button" class="close" data-close aria-label="Fechar">×</button></div>
     ${corpo}
     <div class="actions">${(qual === "transporte" ? v.transporte.tipo : qual === "local" ? resumoLocal(v.local) : resumoHospedagem(v.hospedagem)) ? `<button type="button" class="danger" id="vgLimpar" style="margin-right:auto">Apagar</button>` : ""}<button type="button" data-close>Cancelar</button><button type="button" class="primary" id="vgSalvar">Salvar</button></div>`;
+  if (qual === "local") ligarArquivoLocal();
+}
+function ligarArquivoLocal() {
+  const a = $("vgLnkLocal"); if (!a || !viagemAtual) return;
+  if (viagemAtual.arquivoNovo) a.href = URL.createObjectURL(viagemAtual.arquivoNovo);
+  else urlDoArquivo(viagemAtual.id, "local:" + viagemAtual.uid).then(u => { if (u && $("vgLnkLocal")) $("vgLnkLocal").href = u; });
 }
 function campo(rot, k, val, tipo = "text", extra = "") {
   return `<label${/w2|w4/.test(extra) ? ` class="${extra.match(/w\d/)[0]}"` : ""}>${rot}<input data-k="${k}" type="${tipo}" value="${esc(val || "")}" ${extra.replace(/w\d/, "")}></label>`;
@@ -346,7 +354,12 @@ function camposEndereco(h, dicaCompl) {
       <span></span>`;
 }
 function htmlFormLocal(l) {
-  return `<div class="fase-grid">
+  const novo = viagemAtual.arquivoNovo;
+  const nomeArq = novo ? novo.name : (l.arquivo && l.arquivo.nome);
+  return `<div class="auto-box"><button type="button" id="vgPrint">${typeof CLIP_SVG !== "undefined" ? CLIP_SVG : ""} Juntar PDF ou print do local de prova</button>
+      <input type="file" id="vgArq" accept="image/*,application/pdf,.pdf" hidden><span class="note" id="vgStatus">Cartão de confirmação da banca ou edital de locais: o app guarda o arquivo e preenche o endereço.</span>
+      ${nomeArq ? `<div class="anexo"><a id="vgLnkLocal" target="_blank" rel="noopener" data-ext="${esc(((nomeArq.match(/\.(\w+)$/) || [])[1] || "PDF").toUpperCase())}">${esc(nomeArq)}</a><button type="button" class="link-x" id="vgRemArq">remover</button></div>` : ""}</div>
+    <div class="fase-grid">
       ${campo("Nome do local", "nome", l.nome, "text", 'w4 placeholder="escola, faculdade, centro de convenções…"')}
       ${camposEndereco(l, "bloco, prédio…")}
       ${campo("Sala / bloco / portão de entrada", "sala", l.sala, "text", "w4")}
@@ -434,6 +447,53 @@ function lerReservaTexto(txt, anoBase) {
   for (const k in r) if (!r[k]) delete r[k];
   return r;
 }
+function maiusculasParaTitulo(t) {
+  if (!t || t !== t.toUpperCase()) return t;
+  const min = new Set(["de", "da", "do", "das", "dos", "e", "em", "a", "o"]);
+  return t.toLowerCase().split(" ").map((w, i) => (i && min.has(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1)).join(" ").replace(/\b(Ee|Eef|Eem|Emef|Uf|Ufpa|Unifap|Ifap|Senai|Sesi|Ceu|Ce|Ap|Ba|Mg|Rs|Sc|Pb)\b/g, w => w.toUpperCase());
+}
+// cartão de confirmação / edital de locais: "Local de prova: ESCOLA X", "Endereço: RUA Y, 123 - BAIRRO", "Sala: 05"
+function lerLocalTexto(txt) {
+  const t = txt.replace(/\r/g, ""), r = {};
+  let m = t.match(/local\s*(?:de\s+(?:prova|realiza[cç][aã]o(?:\s+da\s+prova)?|aplica[cç][aã]o))?\s*[:\-–]\s*([^\n]{4,100})/i);
+  if (m && !/divulgad|ser[aá]|consult/i.test(m[1])) r.nome = maiusculasParaTitulo(m[1].replace(/\s+(endere[cç]o|sala|bloco)\b.*$/i, "").trim());
+  m = t.match(/endere[cç]o\s*[:\-–]\s*([^\n]{5,140})/i);
+  if (m) {
+    let e = m[1].replace(/\s*CEP[:\s]*\d{5}-?\d{3}.*$/i, "").trim();
+    const p = e.match(/^(.+?),?\s*(?:n[º°o.]*\s*)?(\d{1,6}|s\/n)\b\s*[-–,]?\s*(.*)$/i);
+    if (p) { r.logradouro = maiusculasParaTitulo(p[1].replace(/,\s*$/, "").trim()); r.numero = p[2]; const resto = p[3].split(/\s*[-–,]\s*/).filter(Boolean); if (resto[0] && !/\d{5}/.test(resto[0])) r.bairro = maiusculasParaTitulo(resto[0]); }
+    else r.logradouro = maiusculasParaTitulo(e.split(/\s*[-–]\s*/)[0]);
+  }
+  if (!r.logradouro) { const h = lerReservaTexto(t, ""); if (h.logradouro) { r.logradouro = maiusculasParaTitulo(h.logradouro); if (h.numero) r.numero = h.numero; } }
+  m = t.match(/CEP[:\s]*(\d{5})[-.\s]?(\d{3})/i) || t.match(/\b(\d{5})-(\d{3})\b/);
+  if (m) r.cep = `${m[1]}-${m[2]}`;
+  m = t.match(/(?:cidade|munic[ií]pio)\s*[:\-–]\s*([A-Za-zÀ-ú' ]{3,40}?)\s*(?:[\/-]\s*([A-Z]{2}))?(?=\s*(?:\n|$|,|UF))/i);
+  if (m) { r.cidade = maiusculasParaTitulo(m[1].trim()); if (m[2]) r.uf = m[2]; }
+  const salas = [];
+  const reS = /\b(sala|bloco|pr[eé]dio|andar|pavimento|port[aã]o(?: de acesso)?)\s*(?:n[º°o.]*)?\s*[:\-–]?\s*([A-Z0-9][A-Za-z0-9-]{0,8})\b/gi;
+  while ((m = reS.exec(t))) { if (/^(sala|bloco|pr[eé]dio|andar|pavimento|port[aã]o)$/i.test(m[2])) { reS.lastIndex = m.index + m[1].length; continue; } const it = `${m[1][0].toUpperCase()}${m[1].slice(1).toLowerCase()} ${m[2]}`; if (!salas.includes(it) && !/^(de|da|do)$/i.test(m[2])) salas.push(it); }
+  if (salas.length) r.sala = salas.slice(0, 4).join(", ");
+  for (const k in r) if (!r[k]) delete r[k];
+  return r;
+}
+async function lerDocumentoLocal(arquivo) {
+  viagemAtual.arquivoNovo = arquivo; viagemAtual.removerArquivo = false;
+  desenharViagem();
+  const st = $("vgStatus"); st.textContent = "Lendo o documento…";
+  try {
+    let txt;
+    if (/pdf/i.test(arquivo.type) || /\.pdf$/i.test(arquivo.name)) txt = await textoDoPdf(arquivo, 10);
+    else txt = await textoDaImagem(arquivo, p => { st.textContent = `Lendo a imagem… ${p}%`; });
+    const r = lerLocalTexto(txt), l = viagemAtual.v.local;
+    const nomes = { nome: "nome do local", logradouro: "endereço", numero: "número", bairro: "bairro", cep: "CEP", cidade: "cidade", uf: "UF", sala: "sala/bloco" };
+    for (const k in r) l[k] = r[k];
+    if (r.cep) { await buscarCep(r.cep); for (const k of ["logradouro", "numero", "bairro"]) if (r[k]) l[k] = r[k]; }
+    desenharViagem();
+    for (const k in r) { const el = document.querySelector(`#viagemConteudo [data-k="${k}"]`); if (el) el.classList.add("auto"); }
+    const ach = Object.keys(r).map(k => nomes[k]);
+    $("vgStatus").textContent = ach.length ? `Arquivo juntado. Preenchido: ${ach.join(", ")}. Confira os campos destacados.` : "Arquivo juntado. Não reconheci o endereço nele; preencha manualmente.";
+  } catch (e) { $("vgStatus").textContent = "Arquivo juntado, mas não consegui ler o texto; preencha manualmente."; }
+}
 async function lerPrintReserva(arquivo) {
   const st = $("vgStatus"); st.textContent = "Lendo a reserva…";
   try {
@@ -460,6 +520,9 @@ function salvarViagem(apagar) {
   if (apagar) delete atual[qual]; else atual[qual] = v[qual];
   if (atual.transporte || atual.hospedagem || atual.local) x.viagens[uid] = atual; else delete x.viagens[uid];
   if (qual === "local") {
+    const chave = `${id}:local:${uid}`;
+    if (apagar || viagemAtual.removerArquivo) { arq("apagar", chave).catch(() => {}); if (atual.local) delete atual.local.arquivo; }
+    if (!apagar && viagemAtual.arquivoNovo) { arq("gravar", chave, viagemAtual.arquivoNovo).catch(() => toast("Não foi possível guardar o arquivo neste navegador.")); atual.local.arquivo = { nome: viagemAtual.arquivoNovo.name }; }
     const f = (x.fases || []).find(f => f.uid === uid);
     if (f) f.local = apagar ? "" : [v.local.nome, enderecoHosp(v.local), v.local.sala].filter(Boolean).join(" – ");
   }
@@ -488,6 +551,7 @@ document.addEventListener("click", e => {
   if (e.target.id === "vgSalvar") salvarViagem(false);
   else if (e.target.id === "vgLimpar") salvarViagem(true);
   else if (e.target.closest("#vgPrint")) $("vgArq").click();
+  else if (e.target.id === "vgRemArq") { viagemAtual.arquivoNovo = null; viagemAtual.removerArquivo = true; if (viagemAtual.v.local) delete viagemAtual.v.local.arquivo; desenharViagem(); }
 });
 document.addEventListener("input", e => {
   const el = e.target; if (!el.closest("#viagemConteudo") || !el.dataset.k || !viagemAtual) return;
@@ -500,7 +564,7 @@ document.addEventListener("input", e => {
 });
 document.addEventListener("change", e => {
   const el = e.target; if (!el.closest("#viagemConteudo") || !viagemAtual) return;
-  if (el.id === "vgArq") { const f = el.files[0]; el.value = ""; if (f) lerPrintReserva(f); return; }
+  if (el.id === "vgArq") { const f = el.files[0]; el.value = ""; if (f) (viagemAtual.qual === "local" ? lerDocumentoLocal(f) : lerPrintReserva(f)); return; }
   if (el.dataset.k) {
     let val = el.value;
     // aeroporto escolhido na lista: fica só a sigla
