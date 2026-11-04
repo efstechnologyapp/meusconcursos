@@ -20,7 +20,7 @@ function limparMd(s) {
     .replace(/\*\*|__/g, "").replace(/(^|\s)\*([^*\n]+)\*/g, "$1$2").replace(/\s+/g, " ").trim();
 }
 const nomeDisciplina = s => s.trim().toLowerCase().replace(/(^|\s)(\S)/g, (a, b, c) => b + c.toUpperCase()).replace(/\b(Da|Do|De|E|Dos|Das)\b/g, w => w.toLowerCase());
-const RE_CIT = /\b(STF|STJ|TSE)\.\s?[^()\n]{0,260}?\(Info(?:rmativo)?\.?\s*([\d.]+)\)/g;
+const RE_CIT = /\b(STF|STJ|TSE)\.\s?[^\n]{0,420}?\(Info(?:rmativo)?\.?\s*([\d.]+)[^)\n]{0,40}\)/g;
 function montarJulgado(disc, titulo, texto) {
   const cits = [...texto.matchAll(RE_CIT)];
   const trib = cits[0] ? cits[0][1] : ((texto.match(/\b(STF|STJ|TSE)\b/) || [])[1] || "");
@@ -42,7 +42,31 @@ function montarJulgado(disc, titulo, texto) {
   j.id = idJulgado(j);
   return j;
 }
+// Ano de cada julgado: pelo sumário do caderno ("INFORMATIVOS 2025: STF: 1.162-1.202 …") ou, sem ele, pela data do julgamento
+function faixasDoSumario(texto) {
+  const faixas = [], ini = texto.slice(0, 5000);
+  const blocos = ini.split(/INFORMATIVOS\s+(?=\d{4})/i).slice(1);
+  for (const b of blocos) {
+    const ano = (b.match(/^(\d{4})/) || [])[1]; if (!ano) continue;
+    for (const m of b.slice(0, 400).matchAll(/\b(STF|STJ|TSE)\b[^\d]{0,6}([\d.]+)\s*[-–a]\s*([\d.]+)/g))
+      faixas.push({ ano, trib: m[1], de: +m[2].replace(/\./g, ""), ate: +m[3].replace(/\./g, "") });
+  }
+  return faixas;
+}
+function anoDoJulgado(j, faixas) {
+  const n = +String(j.info || "").split(",")[0].replace(/\./g, "");
+  const f = n && faixas.find(x => x.trib === j.trib && n >= x.de && n <= x.ate);
+  if (f) return f.ano;
+  const datas = [...(j.cit + " " + j.texto).matchAll(/julgad[oa]s?\s+em\s*\d{1,2}\/\d{1,2}\/(\d{4})/gi)].map(m => m[1]);
+  return datas[0] || "";
+}
 function lerCaderno(textoBruto) {
+  const faixas = faixasDoSumario(textoBruto);
+  const r = lerCadernoBase(textoBruto);
+  r.forEach(j => { j.ano = anoDoJulgado(j, faixas); });
+  return r;
+}
+function lerCadernoBase(textoBruto) {
   const linhas = textoBruto.replace(/\r/g, "").split("\n");
   const out = []; let disc = "Geral", atual = null;
   const reDisc = /^\|?\s*\**\s*([IVXL]{1,5})\.\s+((?:DIREITO|PROCESSO|EXECU|FORMA|DIREITOS)[A-ZÁÉÍÓÚÂÊÔÃÕÇ ]+?)\s*\**\s*\|/;
@@ -80,8 +104,25 @@ function lerCaderno(textoBruto) {
 async function carregarJulgados() {
   if (julgados.length) return julgados;
   try { julgados = (await arq("ler", CHAVE_IDB_JULGADOS)) || []; } catch (e) { julgados = []; }
+  // caderno lido por versão anterior (sem o ano): relê
+  if (julgados.length && !("ano" in julgados[0])) {
+    const cad = lerEst("caderno", {});
+    const blob = cad.fonte === "arquivo" ? await arq("ler", CHAVE_IDB_CADERNO).catch(() => null) : null;
+    if (blob && !/pdf/i.test(blob.type || "")) { await guardarCaderno(await blob.text(), { fonte: "arquivo", nome: cad.nome }); }
+    else { gravarEst("caderno", { ...cad, modificado: "" }); cadernoDriveChecado = false; }
+  }
   return julgados;
 }
+// grupos de ano para os filtros: anos com 10+ julgados aparecem sozinhos; os demais vão para "Anteriores"; sem data, "Sem data"
+let gruposAnoCache = null;
+function grupoAno(j) {
+  if (!gruposAnoCache || gruposAnoCache.n !== julgados.length) {
+    const c = {}; julgados.forEach(x => { if (x.ano) c[x.ano] = (c[x.ano] || 0) + 1; });
+    gruposAnoCache = { n: julgados.length, fortes: new Set(Object.keys(c).filter(a => c[a] >= 10)) };
+  }
+  return !j.ano ? "Sem data" : gruposAnoCache.fortes.has(j.ano) ? j.ano : "Anteriores";
+}
+const anosDoCaderno = () => { const g = new Set(julgados.map(grupoAno)); return [...[...g].filter(a => /^\d{4}$/.test(a)).sort().reverse(), ...["Anteriores", "Sem data"].filter(a => g.has(a))]; };
 async function guardarCaderno(texto, info) {
   const js = lerCaderno(texto);
   if (!js.length) return 0;
@@ -199,9 +240,9 @@ function registrar(j, nota) {   // nota: 1 acerto, 0.5 parcial, 0 erro
 }
 function escolherJulgados(filtro, n) {
   const prog = lerEst("prog", {}), hoje = hojeISO();
-  const base = julgados.filter(j => (!filtro.discs.length || filtro.discs.includes(j.disc)) && filtro.tribs.includes(j.trib) && (!filtro.soErros || (prog[j.id] && prog[j.id].erros && prog[j.id].caixa <= 1)));
-  const vencidos = embaralhar(base.filter(j => prog[j.id] && prog[j.id].prox <= hoje));
-  const novos = embaralhar(base.filter(j => !prog[j.id]));
+  const base = julgados.filter(j => (!filtro.discs.length || filtro.discs.includes(j.disc)) && filtro.tribs.includes(j.trib) && (!(filtro.anos || []).length || filtro.anos.includes(grupoAno(j))) && (!filtro.soErros || (prog[j.id] && prog[j.id].erros && prog[j.id].caixa <= 1)));
+  const vencidos = embaralhar(base.filter(j => prog[j.id] && prog[j.id].prox && prog[j.id].prox <= hoje));
+  const novos = embaralhar(base.filter(j => !prog[j.id] || !prog[j.id].prox));   // nunca praticados (só lidos em "Revisar" também contam)
   const resto = embaralhar(base.filter(j => prog[j.id] && prog[j.id].prox > hoje)).sort((a, b) => prog[a.id].caixa - prog[b.id].caixa);
   return [...vencidos, ...novos, ...resto].slice(0, n);
 }
@@ -214,7 +255,7 @@ function abrirEstudo() {
 }
 function cabecalhoEstudo(aba) {
   return `<div class="dlg-head"><div style="flex:1;min-width:0"><h2>Estudar informativos</h2><p class="sub">${julgados.length ? `${julgados.length} julgados do caderno · questões e correções pela IA Gemini` : "Carregando o caderno de informativos…"}</p></div><button type="button" class="close" data-close aria-label="Fechar">×</button></div>
-    <div class="est-abas">${[["praticar", "Praticar"], ["erros", "Caderno de erros"], ["desempenho", "Desempenho"], ["config", "Caderno e IA"]].map(([k, n]) => `<button type="button" class="${aba === k ? "on" : ""}" data-estaba="${k}">${n}</button>`).join("")}</div>`;
+    <div class="est-abas">${[["praticar", "Praticar"], ["revisar", "Revisar julgados"], ["erros", "Caderno de erros"], ["desempenho", "Desempenho"], ["config", "Caderno e IA"]].map(([k, n]) => `<button type="button" class="${aba === k ? "on" : ""}" data-estaba="${k}">${n}</button>`).join("")}</div>`;
 }
 function desenharEstudo(aba) {
   aba = aba || (julgados.length ? "praticar" : "config");
@@ -223,6 +264,7 @@ function desenharEstudo(aba) {
   if (aba === "config") corpo = htmlConfigEstudo();
   else if (!julgados.length) corpo = `<p class="note">Primeiro junte o caderno na aba <b>Caderno e IA</b>.</p>`;
   else if (aba === "praticar") corpo = estudo ? htmlSessao() : htmlPreparar();
+  else if (aba === "revisar") corpo = htmlRevisar();
   else if (aba === "erros") corpo = htmlErros();
   else corpo = htmlDesempenho();
   $("estudoConteudo").innerHTML = cabecalhoEstudo(aba) + `<div class="est-corpo">${corpo}</div>`;
@@ -255,10 +297,12 @@ function htmlPreparar() {
   const concursos = itens.filter(x => andamento(x).ativo && disciplinasDoConcurso(x).length);
   return `${vencidos ? `<p class="est-aviso">${vencidos} julgado(s) para revisar hoje — eles entram primeiro na sessão.</p>` : ""}
     <div class="est-sec"><h4>Modalidade</h4><div class="est-opts">${Object.entries(MODOS).map(([k, n]) => `<button type="button" class="opt${filtro.modo === k ? " on" : ""}" data-estmodo="${k}">${n}</button>`).join("")}</div></div>
+    ${anosDoCaderno().length > 1 ? `<div class="est-sec"><h4>Ano <span class="note">${(filtro.anos || []).length ? "" : "(todos)"}</span></h4><div class="est-chips">${anosDoCaderno().map(a => `<button type="button" class="chip-sel${(filtro.anos || []).includes(a) ? " on" : ""}" data-estano="${a}">${a} (${julgados.filter(j => grupoAno(j) === a).length})</button>`).join("")}</div></div>` : ""}
     <div class="est-sec"><h4>Tribunais</h4><div class="est-chips">${["STF", "STJ", "TSE"].map(t => `<button type="button" class="chip-sel${filtro.tribs.includes(t) ? " on" : ""}" data-esttrib="${t}">${t} (${julgados.filter(j => j.trib === t).length})</button>`).join("")}</div></div>
     <div class="est-sec"><h4>Disciplinas <span class="note">${filtro.discs.length ? "" : "(todas)"}</span></h4>
       ${concursos.length ? `<label class="est-conc">Focar nas matérias do concurso<select id="estConcurso"><option value="">—</option>${concursos.map(x => `<option value="${esc(x.id)}">${esc(x.nome)}</option>`).join("")}</select></label>` : ""}
-      <div class="est-chips">${discs.map(d => `<button type="button" class="chip-sel${filtro.discs.includes(d) ? " on" : ""}" data-estdisc="${esc(d)}">${esc(d)}</button>`).join("")}</div></div>
+      <div class="est-chips">${discs.map(d => { const n = julgados.filter(j => j.disc === d && filtro.tribs.includes(j.trib) && (!(filtro.anos || []).length || filtro.anos.includes(grupoAno(j)))).length; return `<button type="button" class="chip-sel${filtro.discs.includes(d) ? " on" : ""}" data-estdisc="${esc(d)}">${esc(d)} <span class="ct">${n}</span></button>`; }).join("")}</div></div>
+    <p class="note">Julgados que entram na sessão com esses filtros: <b>${julgados.filter(j => (!filtro.discs.length || filtro.discs.includes(j.disc)) && filtro.tribs.includes(j.trib) && (!(filtro.anos || []).length || filtro.anos.includes(grupoAno(j)))).length}</b></p>
     <div class="est-sec"><h4>Quantidade de questões</h4><div class="est-chips">${[5, 10, 20, 30].map(n => `<button type="button" class="chip-sel${filtro.n === n ? " on" : ""}" data-estn="${n}">${n}</button>`).join("")}</div></div>
     <p class="note">${iaLigada() ? "As questões e as correções das discursivas são feitas pela IA Gemini, do Google, a partir do julgado." : esc(iaIndisponivel || "Sem conexão com a IA: as questões serão simples, feitas a partir das teses.")}</p>
     <div class="actions"><button type="button" class="primary" id="estComecar">Começar</button></div>`;
@@ -345,11 +389,52 @@ function htmlDesempenho() {
   const porD = {}; hist.forEach(h => (porD[h.disc] = porD[h.disc] || []).push(h));
   const porM = {}; hist.forEach(h => (porM[h.modo] = porM[h.modo] || []).push(h));
   const ult7 = hist.filter(h => h.d >= new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10));
-  const vistos = Object.keys(prog).length, dom = Object.values(prog).filter(p => p.caixa >= 3).length;
+  const vistos = Object.values(prog).filter(p => p.prox).length, dom = Object.values(prog).filter(p => p.caixa >= 3).length;
   const barra = (n, l) => `<div class="est-barra"><span class="est-b-nome">${esc(n)}</span><span class="est-b-tr"><span style="width:${pct(l)}%"></span></span><span class="est-b-v">${pct(l)}% <span class="note">(${l.length})</span></span></div>`;
   return `<div class="est-kpis"><div><b>${hist.length}</b><span>questões</span></div><div><b>${pct(hist)}%</b><span>aproveitamento</span></div><div><b>${pct(ult7)}%</b><span>últimos 7 dias</span></div><div><b>${vistos}/${julgados.length}</b><span>julgados vistos</span></div><div><b>${dom}</b><span>dominados</span></div></div>
     <div class="est-sec"><h4>Por disciplina</h4>${Object.entries(porD).sort((a, b) => pct(a[1]) - pct(b[1])).map(([d, l]) => barra(d, l)).join("")}</div>
     <div class="est-sec"><h4>Por modalidade</h4>${Object.entries(porM).map(([m, l]) => barra(MODOS[m] || m, l)).join("")}</div>`;
+}
+
+// ---------- revisar julgados (leitura, um por vez) ----------
+function filtroRevisao() { return { ano: "", ...lerEst("rev", { disc: "", tribs: ["STF", "STJ", "TSE"], busca: "", soNaoRevisados: false, pos: {} }) }; }
+function listaRevisao(f) {
+  const prog = lerEst("prog", {}), b = semAcentoEst(f.busca || "").trim();
+  return julgados.filter(j => (!f.disc || j.disc === f.disc) && f.tribs.includes(j.trib) && (!f.ano || grupoAno(j) === f.ano)
+    && (!b || semAcentoEst(j.titulo + " " + j.texto).includes(b))
+    && (!f.soNaoRevisados || !(prog[j.id] && prog[j.id].revisado)));
+}
+const chavePosRev = f => [f.disc, f.tribs.join(""), f.ano, f.busca, f.soNaoRevisados ? 1 : 0].join("|");
+function htmlRevisar() {
+  const f = filtroRevisao(), lista = listaRevisao(f), prog = lerEst("prog", {});
+  const discs = [...new Set(julgados.map(j => j.disc))];
+  let i = Math.min((f.pos || {})[chavePosRev(f)] || 0, Math.max(0, lista.length - 1));
+  const filtros = `<div class="est-rev-filtros">
+      <label>Disciplina<select id="revDisc"><option value="">Todas (${julgados.length})</option>${discs.map(d => `<option${d === f.disc ? " selected" : ""} value="${esc(d)}">${esc(d)} (${julgados.filter(j => j.disc === d).length})</option>`).join("")}</select></label>
+      ${anosDoCaderno().length > 1 ? `<label>Ano<select id="revAno"><option value="">Todos</option>${anosDoCaderno().map(a => `<option${a === f.ano ? " selected" : ""}>${a}</option>`).join("")}</select></label>` : ""}
+      <label>Buscar no texto<input id="revBusca" type="search" value="${esc(f.busca || "")}" placeholder="ex.: outorga uxória, prescrição"></label></div>
+    <div class="est-chips">${["STF", "STJ", "TSE"].map(t => `<button type="button" class="chip-sel${f.tribs.includes(t) ? " on" : ""}" data-revtrib="${t}">${t}</button>`).join("")}
+      <label class="chk" style="margin-left:6px"><input type="checkbox" id="revSoNovos"${f.soNaoRevisados ? " checked" : ""}> Só os que ainda não revisei</label></div>`;
+  if (!lista.length) return filtros + `<p class="note">Nenhum julgado com esses filtros.</p>`;
+  const j = lista[i], p = prog[j.id] || {};
+  const revisados = lista.filter(x => prog[x.id] && prog[x.id].revisado).length;
+  return filtros + `
+    <div class="est-rev-nav"><button type="button" id="revAnt" ${i ? "" : "disabled"}>‹ Anterior</button>
+      <span class="note">${i + 1} de ${lista.length} · ${revisados} revisado(s)</span>
+      <button type="button" id="revProx" ${i + 1 < lista.length ? "" : "disabled"}>Próximo ›</button></div>
+    <div class="est-rev-card">
+      <div class="est-prog"><span class="chip">${esc(j.trib)}${j.info ? " · Info " + esc(j.info) : ""}${j.ano ? " · " + esc(j.ano) : ""}</span><span class="chip">${esc(j.disc)}</span>${p.revisado ? `<span class="chip ok">revisado em ${esc(new Date(p.revisado + "T12:00").toLocaleDateString("pt-BR"))}</span>` : ""}${p.erros && p.caixa <= 1 ? `<span class="chip bad">no caderno de erros</span>` : ""}</div>
+      <p class="est-rev-tit">${esc(j.titulo)}</p>
+      <p class="est-rev-tese">${esc(j.tese)}</p>
+      <details class="est-det"><summary>Texto completo do julgado</summary><p class="pre">${esc(j.texto)}</p></details>
+      ${j.cit ? `<p class="note">${esc(j.cit)}</p>` : ""}
+    </div>
+    <div class="actions"><button type="button" id="revPraticar">Praticar este julgado</button><button type="button" class="primary" id="revOk">${p.revisado ? "Revisado ✓ · próximo" : "Marcar como revisado e seguir"}</button></div>`;
+}
+function moverRevisao(delta) {
+  const f = filtroRevisao(), lista = listaRevisao(f), k = chavePosRev(f);
+  f.pos = f.pos || {}; f.pos[k] = Math.max(0, Math.min(lista.length - 1, (f.pos[k] || 0) + delta));
+  gravarEst("rev", f); desenharEstudo("revisar"); $("estudoConteudo").scrollTop = 0;
 }
 
 // ---------- eventos ----------
@@ -358,9 +443,24 @@ document.addEventListener("click", async e => {
   const t = e.target.closest("button,[data-estaba]"); if (!t) return;
   const filtro = lerEst("filtro", { modo: "ce", discs: [], tribs: ["STF", "STJ", "TSE"], n: 10 });
   if (t.dataset.estaba) { desenharEstudo(t.dataset.estaba); return; }
+  if (t.dataset.revtrib) { const f = filtroRevisao(), k = t.dataset.revtrib; f.tribs = f.tribs.includes(k) ? f.tribs.filter(x => x !== k) : [...f.tribs, k]; if (!f.tribs.length) f.tribs = [k]; gravarEst("rev", f); desenharEstudo("revisar"); return; }
+  if (t.id === "revAnt") { moverRevisao(-1); return; }
+  if (t.id === "revProx") { moverRevisao(1); return; }
+  if (t.id === "revOk" || t.id === "revPraticar") {
+    const f = filtroRevisao(), lista = listaRevisao(f), j = lista[Math.min((f.pos || {})[chavePosRev(f)] || 0, lista.length - 1)]; if (!j) return;
+    if (t.id === "revOk") {
+      const prog = lerEst("prog", {}); prog[j.id] = { ...(prog[j.id] || { caixa: 0, acertos: 0, erros: 0 }), revisado: hojeISO() }; gravarEst("prog", prog);
+      if (f.soNaoRevisados) desenharEstudo("revisar"); else moverRevisao(1);   // na lista "não revisados" o atual sai e o próximo assume o lugar
+      return;
+    }
+    // praticar só este julgado, na modalidade escolhida em Praticar
+    estudo = { modo: filtro.modo, lista: [j], i: 0, qs: {}, resp: {}, notas: [] };
+    prepararQuestao(0); desenharEstudo("praticar"); return;
+  }
   if (t.dataset.estmodo) { filtro.modo = t.dataset.estmodo; gravarEst("filtro", filtro); desenharEstudo("praticar"); return; }
   if (t.dataset.esttrib) { const k = t.dataset.esttrib; filtro.tribs = filtro.tribs.includes(k) ? filtro.tribs.filter(x => x !== k) : [...filtro.tribs, k]; if (!filtro.tribs.length) filtro.tribs = [k]; gravarEst("filtro", filtro); desenharEstudo("praticar"); return; }
   if (t.dataset.estdisc) { const k = t.dataset.estdisc; filtro.discs = filtro.discs.includes(k) ? filtro.discs.filter(x => x !== k) : [...filtro.discs, k]; gravarEst("filtro", filtro); desenharEstudo("praticar"); return; }
+  if (t.dataset.estano) { const k = t.dataset.estano; filtro.anos = (filtro.anos || []).includes(k) ? filtro.anos.filter(x => x !== k) : [...(filtro.anos || []), k]; gravarEst("filtro", filtro); desenharEstudo("praticar"); return; }
   if (t.dataset.estn) { filtro.n = +t.dataset.estn; gravarEst("filtro", filtro); desenharEstudo("praticar"); return; }
   if (t.id === "estComecar") { iniciarSessao(false); return; }
   if (t.id === "estPraticarErros") { iniciarSessao(true); return; }
@@ -394,6 +494,9 @@ document.addEventListener("click", async e => {
   if (t.id === "estProxima") { estudo.i++; estudo.rascunho = ""; prepararQuestao(estudo.i); if (estudo.qs[estudo.i] && estudo.qs[estudo.i].pronta) prepararQuestao(estudo.i + 1); desenharEstudo("praticar"); $("estudoConteudo").scrollTop = 0; return; }
 });
 document.addEventListener("change", e => {
+  if (e.target.id === "revAno") { const f = filtroRevisao(); f.ano = e.target.value; gravarEst("rev", f); desenharEstudo("revisar"); return; }
+  if (e.target.id === "revDisc") { const f = filtroRevisao(); f.disc = e.target.value; gravarEst("rev", f); desenharEstudo("revisar"); return; }
+  if (e.target.id === "revSoNovos") { const f = filtroRevisao(); f.soNaoRevisados = e.target.checked; gravarEst("rev", f); desenharEstudo("revisar"); return; }
   if (e.target.id === "estArqCad") { const f = e.target.files[0]; e.target.value = ""; if (f) juntarCaderno(f); }
   if (e.target.id === "estConcurso" && e.target.value) {
     const x = itens.find(i => i.id === e.target.value); if (!x) return;
@@ -401,7 +504,13 @@ document.addEventListener("change", e => {
     filtro.discs = disciplinasDoConcurso(x); gravarEst("filtro", filtro); desenharEstudo("praticar");
   }
 });
+let revBuscaTimer = null;
 document.addEventListener("input", e => {
+  if (e.target.id === "revBusca") {
+    const v = e.target.value; clearTimeout(revBuscaTimer);
+    revBuscaTimer = setTimeout(() => { const f = filtroRevisao(); f.busca = v; gravarEst("rev", f); desenharEstudo("revisar"); const el = $("revBusca"); if (el) { el.focus(); el.setSelectionRange(v.length, v.length); } }, 400);
+    return;
+  }
   if (e.target.id !== "estTexto" || !estudo) return;
   estudo.rascunho = e.target.value;
   const l = Math.ceil(e.target.value.length / 75), el = $("estLinhas");

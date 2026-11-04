@@ -201,6 +201,7 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .est-opts{display:flex;gap:8px;flex-wrap:wrap}
 .est-chips{display:flex;gap:6px;flex-wrap:wrap}
 .chip-sel{font-size:13px;padding:5px 11px;border-radius:999px}
+.chip-sel .ct{opacity:.65;font-size:11.5px;margin-left:3px}
 .chip-sel.on{background:var(--brand);border-color:var(--brand);color:var(--surface)}
 .est-conc{max-width:420px}
 .est-aviso{background:var(--accent);color:var(--accent-ink);border-radius:10px;padding:8px 12px;margin:0;font-weight:600;font-size:14px}
@@ -222,6 +223,12 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .est-fim{text-align:center;display:flex;flex-direction:column;gap:6px;align-items:center;padding:16px 0}
 .est-erro{border-top:1px solid var(--line);padding-top:10px;font-size:14px}
 .est-erro p{margin:2px 0}
+.est-rev-filtros{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media (max-width:560px){.est-rev-filtros{grid-template-columns:1fr}}
+.est-rev-nav{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.est-rev-card{background:var(--bg);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.est-rev-tit{font-weight:700;font-size:14px;line-height:1.4}
+.est-rev-tese{font-size:16px;line-height:1.55;border-left:4px solid var(--accent);padding-left:12px}
 .est-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
 .est-kpis div{background:var(--bg);border-radius:10px;padding:10px;display:flex;flex-direction:column}
 .est-kpis b{font-family:var(--f-display);font-size:22px} .est-kpis span{font-size:12px;color:var(--muted)}
@@ -1547,7 +1554,7 @@ iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO=43;
+const APP_VERSAO=45;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{
