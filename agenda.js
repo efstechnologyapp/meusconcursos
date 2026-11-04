@@ -129,6 +129,7 @@ function talvezPedirAcessoNoToque() {
 
 function iniciarAgendaUI() {
   $("chkAgenda").checked = agendaLigada();
+  $("agendaEmail").textContent = usuarioAtual && usuarioAtual.email ? `(${usuarioAtual.email})` : "";
   if (agendaLigada()) sincronizarAgenda(); else statusAgenda("Cada fase com data vira um evento no seu Google Agenda, com lembretes 1 dia e 3 horas antes.");
 }
 document.addEventListener("change", e => {
