@@ -3,6 +3,7 @@
 // a partir das teses. Revisão espaçada: o que você erra volta em 1, 3, 7, 15 e 30 dias.
 
 const CHAVE_IDB_CADERNO = "estudo:caderno", CHAVE_IDB_JULGADOS = "estudo:julgados";
+const VERSAO_LEITURA = 3;   // muda quando a leitura do caderno melhora: o app relê o caderno sozinho
 const INTERVALOS = [0, 1, 3, 7, 15, 30];   // dias por "caixa" da revisão espaçada
 let julgados = [], estudo = null;
 
@@ -17,7 +18,7 @@ function idJulgado(j) { let h = 0; const s = j.titulo + j.cit; for (let i = 0; i
 // ---------- leitura do caderno ----------
 function limparMd(s) {
   return s.replace(/^#+\s*/, "").replace(/\\([\-.()[\]_*#>+!])/g, "$1").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/\*\*|__/g, "").replace(/(^|\s)\*([^*\n]+)\*/g, "$1$2").replace(/\s+/g, " ").trim();
+    .replace(/\*\*|__/g, "").replace(/(^|\s)\*([^*\n]+)\*/g, "$1$2").replace(/\*/g, "").replace(/\s+/g, " ").trim();
 }
 const nomeDisciplina = s => s.trim().toLowerCase().replace(/(^|\s)(\S)/g, (a, b, c) => b + c.toUpperCase()).replace(/\b(Da|Do|De|E|Dos|Das)\b/g, w => w.toLowerCase());
 const RE_CIT = /\b(STF|STJ|TSE)\.\s?[^\n]{0,420}?\(Info(?:rmativo)?\.?\s*([\d.]+)[^)\n]{0,40}\)/g;
@@ -28,6 +29,11 @@ function montarJulgado(disc, titulo, texto) {
   let tese = (corte > 0 ? texto.slice(0, corte) : texto.slice(0, 700)).trim();
   const suma = texto.match(/Em suma:\s*([^\n]+?)(?=\s*\b(?:STF|STJ|TSE)\.|$)/i);
   if (suma) tese = suma[1].trim();
+  else if (/^caso hipot[eé]tico/i.test(tese) || /^imagine/i.test(tese)) {
+    // sem enunciado antes do caso: a tese é o trecho em que o tribunal decide ("Para o STJ, …", "O STF entendeu que …")
+    const i = texto.search(/\b(?:Para o|Segundo o|De acordo com o)\s+(?:STJ|STF|TSE)\b|\bo\s+(?:STJ|STF|TSE)\s*,?\s*(?:contudo|porém|no entanto|entretanto)?\s*,?\s*(?:entendeu|decidiu|concluiu|afirmou|fixou|firmou|reconheceu|reformou|deu provimento)/i);
+    if (i > 0) { const resto = texto.slice(i), c = resto.search(/\b(?:STF|STJ|TSE)\.\s/); tese = (c > 0 ? resto.slice(0, c) : resto).trim().slice(0, 800); }
+  }
   // título que continua na linha de baixo (em maiúsculas) não faz parte da tese
   tese = tese.replace(/^[^a-zà-ú]{12,}?(?=[A-ZÀ-Ú][a-zà-ú])/, "").trim();
   // frases iniciais em maiúsculas (resto do título) e pedacinhos logo depois delas também saem
@@ -80,9 +86,25 @@ function lerCadernoBase(textoBruto) {
     const tb = semH.match(/^\*\*(.{20,}?)\*\*/);
     if (tb) {
       const t = limparMd(tb[0]), letras = t.replace(/[^A-Za-zÀ-ú]/g, ""), up = t.replace(/[^A-ZÀ-Ý]/g, "").length;
-      if (letras.length > 15 && up / letras.length > 0.7) { fechar(); atual = { disc, titulo: t, linhas: [limparMd(semH.slice(tb[0].length))].filter(Boolean) }; continue; }
+      if (letras.length > 15 && up / letras.length > 0.7) {
+        // a ementa (título em maiúsculas) pode ter trechos em itálico no meio ("*DIES A QUO*", "*ACTIO NATA*"): vale a linha inteira
+        // até onde começa o texto corrido (4+ palavras seguidas com minúsculas)
+        const pal = limparMd(semH).split(" ");
+        let k = pal.findIndex((w, i) => i > 3 && pal.slice(i, i + 4).length === 4 && pal.slice(i, i + 4).every(x => /[a-zà-ú]/.test(x)));
+        if (k < 0) k = pal.length;
+        // a primeira palavra do texto ("A doação…", "O STJ…", "É possível…") não é da ementa
+        while (k > 1 && k < pal.length && /[.;:)!?]$/.test(pal[k - 2]) && /^[A-ZÀ-Ú][a-zà-ú]{0,12}$|^[AOÉE]$/.test(pal[k - 1])) k--;
+        fechar(); atual = { disc, titulo: pal.slice(0, k).join(" "), linhas: [pal.slice(k).join(" ")].filter(Boolean), ementaAberta: k === pal.length };
+        continue;
+      }
     }
-    if (atual) atual.linhas.push(limparMd(l));
+    if (atual) {
+      // ementa que continua na linha seguinte, também em maiúsculas
+      const lm = limparMd(l), le = lm.replace(/[^A-Za-zÀ-ú]/g, ""), ue = lm.replace(/[^A-ZÀ-Ý]/g, "").length;
+      if (atual.ementaAberta && !atual.linhas.length && le.length > 3 && ue / le.length > 0.7 && lm.length < 400) { atual.titulo += " " + lm; continue; }
+      atual.ementaAberta = false;
+      atual.linhas.push(lm);
+    }
   }
   fechar();
   let r = out.filter(j => j.trib && j.texto.length > 150);
@@ -104,9 +126,10 @@ function lerCadernoBase(textoBruto) {
 async function carregarJulgados() {
   if (julgados.length) return julgados;
   try { julgados = (await arq("ler", CHAVE_IDB_JULGADOS)) || []; } catch (e) { julgados = []; }
-  // caderno lido por versão anterior (sem o ano): relê
-  if (julgados.length && !("ano" in julgados[0])) {
-    const cad = lerEst("caderno", {});
+  // caderno lido por versão anterior da leitura: relê
+  const cad0 = lerEst("caderno", {});
+  if (julgados.length && cad0.versao !== VERSAO_LEITURA) {
+    const cad = cad0;
     const blob = cad.fonte === "arquivo" ? await arq("ler", CHAVE_IDB_CADERNO).catch(() => null) : null;
     if (blob && !/pdf/i.test(blob.type || "")) { await guardarCaderno(await blob.text(), { fonte: "arquivo", nome: cad.nome }); }
     else { gravarEst("caderno", { ...cad, modificado: "" }); cadernoDriveChecado = false; }
@@ -128,7 +151,7 @@ async function guardarCaderno(texto, info) {
   if (!js.length) return 0;
   await arq("gravar", CHAVE_IDB_JULGADOS, js);
   julgados = js;
-  gravarEst("caderno", { ...info, quando: new Date().toISOString(), total: js.length });
+  gravarEst("caderno", { ...info, quando: new Date().toISOString(), total: js.length, versao: VERSAO_LEITURA });
   return js.length;
 }
 // Caderno do Drive do projeto (lido pelo Apps Script). Só baixa de novo quando o documento muda.
