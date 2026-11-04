@@ -42,7 +42,7 @@ Ficam fora do formulário do concurso. Ao abrir o concurso na tela inicial, cada
 
 ## Google Agenda
 
-Marcando **Gravar as datas das provas no meu Google Agenda** (fim da tela inicial), cada fase com data vira um evento na agenda, com local, horário de Brasília, portões e lembretes 1 dia e 3 horas antes; mudanças e exclusões são replicadas. Requer atualizar o Apps Script (veja CONFIGURAR-LOGIN.md).
+Marcando **Gravar as datas das provas no meu Google Agenda** (fim da tela inicial), cada fase com data vira um evento na agenda, com local, horário de Brasília, portões e lembretes 1 dia e 3 horas antes; mudanças e exclusões são replicadas. Os eventos vão para o Google Agenda de quem está usando o app; requer ativar a API do Google Agenda no projeto do Google Cloud (veja CONFIGURAR-LOGIN.md).
 
 ## Imprimir uma fase
 
@@ -72,6 +72,7 @@ Os concursos ficam salvos no navegador e sincronizados com a nuvem da conta. O e
 | `manifest.json` | Nome, cores e ícones para o Chrome instalar como app |
 | `edital.js` | Lê o PDF do edital e encontra os dados da prova |
 | `boleto.js` | Lê o boleto em PDF (linha digitável, vencimento e valor) |
+| `agenda.js` | Grava as provas no Google Agenda do usuário |
 | `viagem.js` | Transporte (voos com conexões ou carro) e hospedagem de cada viagem |
 | `config.js` | ID do cliente Google e URL do Apps Script (preencher) |
 | `apps-script/Codigo.gs` | Servidor que envia e confere o código por e-mail (colar no Apps Script) |

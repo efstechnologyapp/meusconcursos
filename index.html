@@ -436,6 +436,7 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 <script src="edital.js"></script>
 <script src="boleto.js"></script>
 <script src="viagem.js"></script>
+<script src="agenda.js"></script>
 <script>
 const CHAVE="meus-concursos-dados";
 const MESES=["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
@@ -503,6 +504,7 @@ function salvar(opcoes={}){
     localStorage.setItem(chaveUsuario(CHAVE),JSON.stringify(itens));
     localStorage.setItem(chaveUsuario("meus-concursos-excluidos"),JSON.stringify(excluidos));
     if(!opcoes.remoto) marcarAlteracao();
+    if(typeof agendarAgenda==="function") agendarAgenda();   // provas no Google Agenda do usuário
     return true; }
   catch(e){ toast("Não foi possível salvar neste navegador."); return false; }
 }
@@ -1307,7 +1309,7 @@ async function sincronizar(){
   sinc.rodando=true; clearTimeout(sinc.timer); mostrarSinc("rodando");
   const versaoEnviada=sinc.versaoLocal;
   try{
-    const r=await postScript({ acao:"sincronizar", sessao:usuarioAtual.sessao, itens, excluidos, agenda:agendaLigada() });
+    const r=await postScript({ acao:"sincronizar", sessao:usuarioAtual.sessao, itens, excluidos });
     if(!r.ok){ if(r.sessaoInvalida){ sinc.rodando=false; sessaoExpirada(); return; } mostrarSinc("erro", r.erro); return; }
     let resultado={ itens:r.itens, excluidos:r.excluidos };
     const mudouDurante = sinc.versaoLocal!==versaoEnviada;
@@ -1319,7 +1321,6 @@ async function sincronizar(){
     if(JSON.stringify(itens)!==antes) render();
     mostrarSinc(mudouDurante?"pendente":"ok");
     enviarAnexos(r.arquivos||[]);
-    if(agendaLigada()) mostrarAgenda(r.agenda);
     if(mudouDurante) sinc.timer=setTimeout(sincronizar,800);
   }catch(e){ mostrarSinc(navigator.onLine?"erro":"offline", navigator.onLine?"servidor indisponível":""); }
   finally{ sinc.rodando=false; }
@@ -1496,27 +1497,8 @@ montarSeletor();
 iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
-// ---------- Google Agenda ----------
-// O servidor (Apps Script) cria, atualiza e apaga um evento para cada fase com data, a cada sincronização.
-function chaveAgenda(){ return chaveUsuario("meus-concursos-agenda"); }
-function agendaLigada(){ try{ return localStorage.getItem(chaveAgenda())==="1"; }catch(e){ return false; } }
-function mostrarAgenda(a){
-  const st=$("agendaStatus"); if(!st) return;
-  if(!agendaLigada()){ st.textContent="Cada fase com data vira um evento na sua agenda, com lembretes 1 dia e 3 horas antes."; return; }
-  if(a===undefined){ st.textContent="O servidor ainda não grava na agenda: atualize o Apps Script (veja CONFIGURAR-LOGIN.md, seção Google Agenda)."; return; }
-  if(!a.ok){ st.textContent="Agenda: "+(a.erro||"não foi possível gravar."); return; }
-  const mud=[a.criados&&`${a.criados} criado(s)`,a.atualizados&&`${a.atualizados} atualizado(s)`,a.removidos&&`${a.removidos} removido(s)`].filter(Boolean).join(", ");
-  st.textContent=`Agenda em dia: ${a.eventos} prova(s) com data no Google Agenda${mud?" ("+mud+" agora)":""}.`;
-}
-$("chkAgenda").onchange=e=>{
-  try{ localStorage.setItem(chaveAgenda(), e.target.checked?"1":"0"); }catch(err){}
-  $("agendaStatus").textContent = e.target.checked ? "Gravando no Google Agenda…" : "Desligado. Os eventos já criados continuam na agenda.";
-  if(e.target.checked) sincronizar();
-};
-function iniciarAgendaUI(){ $("chkAgenda").checked=agendaLigada(); if(agendaLigada()) $("agendaStatus").textContent="Sincronizando com o Google Agenda…"; else mostrarAgenda(); }
-
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO=35;
+const APP_VERSAO=36;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{

@@ -68,15 +68,17 @@ Proteções incluídas: o servidor confere com o Google se o login é verdadeiro
 - Se o mesmo concurso for editado em dois aparelhos ao mesmo tempo, vale a última alteração salva. Exclusões são replicadas para todos os aparelhos.
 - Os dados ficam no Google Drive da conta que publicou o Apps Script, na pasta **Meus Concursos – dados** (uma subpasta por usuário). Se outras pessoas usarem o seu app, os dados delas também ficam nessa pasta, na sua conta.
 
-## Google Agenda (gravar as provas na agenda)
+## Google Agenda (gravar as provas na agenda de cada usuário)
 
-O app pode criar um evento no seu Google Agenda para cada fase com data. Os eventos se atualizam sozinhos quando a data ou o horário mudam e são apagados se a fase ou o concurso forem excluídos. Cada evento tem lembretes 1 dia e 3 horas antes. Fase sem horário vira evento de dia inteiro.
+O app pode criar um evento no Google Agenda **da conta que entrou no app** para cada fase com data. Os eventos se atualizam quando a data ou o horário mudam e são apagados se a fase ou o concurso forem excluídos. Cada evento tem lembretes 1 dia e 3 horas antes. Fase sem horário vira evento de dia inteiro. O app só mexe nos eventos que ele mesmo criou.
 
-Para ativar (uma vez só):
+Para ativar (uma vez só, no mesmo projeto do Google Cloud do login):
 
-1. Abra o projeto do Apps Script, apague o conteúdo de `Código.gs` e cole o novo `apps-script/Codigo.gs`. Salve.
-2. Escolha a função **autorizar** e clique em **Executar**. Aceite a nova permissão (Google Agenda).
-3. **Implantar → Gerenciar implantações → lápis (Editar) → Versão: Nova versão → Implantar**. A URL `/exec` continua a mesma.
-4. No app, no fim da tela inicial, marque **Gravar as datas das provas no meu Google Agenda**.
+1. Em https://console.cloud.google.com/, com o projeto do app selecionado, vá em **APIs e serviços → Biblioteca**, procure **Google Calendar API** e clique em **Ativar**.
+2. Vá em **Google Auth Platform → Acesso a dados** (ou **Tela de permissão OAuth → Escopos**), clique em **Adicionar ou remover escopos**, marque **`.../auth/calendar.events`** (Ver e editar eventos em todas as suas agendas) e salve. Se não aparecer na lista, cole `https://www.googleapis.com/auth/calendar.events` em "Adicionar escopos manualmente".
+3. Confira em **Público-alvo / Usuários de teste** se o e-mail de quem vai usar está na lista (enquanto o app estiver em modo de teste).
+4. No app, no fim da tela inicial, marque **Gravar as datas das provas no meu Google Agenda** e autorize na janela do Google. Pode aparecer "O Google não verificou este app": clique em **Continuar** (o app é seu).
 
-Os eventos vão para a agenda principal da conta que publicou o Apps Script. Por isso, só essa conta pode ligar a opção; para outras contas o app avisa que não é possível.
+O Apps Script não precisa de nenhuma mudança para isso.
+
+O acesso que o Google libera vale cerca de 1 hora. Depois disso, quando houver mudança para gravar, o app pede de novo ao tocar em **Salvar** (a janela do Google abre e fecha sozinha) ou mostra o botão **Atualizar agenda agora**.
