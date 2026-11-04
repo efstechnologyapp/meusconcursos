@@ -40,6 +40,10 @@ Ficam fora do formulário do concurso. Ao abrir o concurso na tela inicial, cada
 
 **Deslocamentos:** com o voo (aeroporto de chegada), a hospedagem e o local de prova preenchidos, o app mostra a distância e o tempo de carro do aeroporto até a hospedagem e da hospedagem até o local de prova, além do horário sugerido de saída em cada dia de prova (trajeto + 30 min de folga antes dos portões). Os endereços são localizados no OpenStreetMap (Nominatim) e a rota é calculada pelo OSRM, gratuitos e sem trânsito em tempo real; os links **Trânsito agora (Google Maps)**, **Waze** e **Pedir Uber** abrem a rota com o trânsito do momento.
 
+## Estudar informativos
+
+Botão **Estudar informativos** na tela inicial. Junte o caderno de informativos (Google Docs → Arquivo → Fazer download → Markdown .md, ou .txt/PDF): o app separa os julgados por disciplina e tribunal (STF, STJ, TSE). Modalidades: certo/errado (Cebraspe), múltipla escolha (FGV) e discursiva com caso concreto. Com a chave gratuita do Gemini (aba Caderno e IA, guardada só no aparelho), a IA cria as questões a partir do julgado e corrige a discursiva com nota, itens do espelho e resposta-modelo; sem chave, o app gera questões simples a partir das teses e a discursiva é autocorrigida pelo espelho. Revisão espaçada (erros voltam em 1 dia; acertos em 3, 7, 15, 30), caderno de erros, desempenho por disciplina e foco nas matérias de um concurso cadastrado.
+
 ## Google Agenda
 
 Marcando **Gravar as datas das provas no meu Google Agenda** (fim da tela inicial), cada fase com data vira um evento na agenda, com local, horário de Brasília, portões e lembretes 1 dia e 3 horas antes; mudanças e exclusões são replicadas. Os eventos vão para o Google Agenda de quem está usando o app; requer ativar a API do Google Agenda no projeto do Google Cloud (veja CONFIGURAR-LOGIN.md).
@@ -72,6 +76,7 @@ Os concursos ficam salvos no navegador e sincronizados com a nuvem da conta. O e
 | `manifest.json` | Nome, cores e ícones para o Chrome instalar como app |
 | `edital.js` | Lê o PDF do edital e encontra os dados da prova |
 | `boleto.js` | Lê o boleto em PDF (linha digitável, vencimento e valor) |
+| `estudos.js` | Estudar informativos: questões, correção com IA e revisão espaçada |
 | `agenda.js` | Grava as provas no Google Agenda do usuário |
 | `viagem.js` | Transporte (voos com conexões ou carro) e hospedagem de cada viagem |
 | `config.js` | ID do cliente Google e URL do Apps Script (preencher) |
