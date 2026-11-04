@@ -7,6 +7,18 @@ const ESCOPO_AGENDA = "https://www.googleapis.com/auth/calendar.events";
 const API_AGENDA = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
 let agendaTokenCliente = null, agendaTimer = null, agendaRodando = false, agendaPendente = false;
 
+// cores de evento do Google Agenda (colorId 1 a 11); "" = cor padrão da agenda
+const CORES_AGENDA = [["", "Cor da agenda", ""], ["1", "Lavanda", "#7986cb"], ["2", "Sálvia", "#33b679"], ["3", "Uva", "#8e24aa"], ["4", "Flamingo", "#e67c73"], ["5", "Banana", "#f6bf26"], ["6", "Tangerina", "#f4511e"], ["7", "Pavão", "#039be5"], ["8", "Grafite", "#616161"], ["9", "Mirtilo", "#3f51b5"], ["10", "Manjericão", "#0b8043"], ["11", "Tomate", "#d50000"]];
+function chaveCorAgenda() { return chaveUsuario("meus-concursos-agenda-cor"); }
+function corAgenda() { try { return localStorage.getItem(chaveCorAgenda()) || ""; } catch (e) { return ""; } }
+function desenharCoresAgenda() {
+  const box = $("agendaCores"); if (!box) return;
+  box.hidden = !agendaLigada();
+  const atual = corAgenda();
+  box.innerHTML = `<span class="note">Cor dos eventos:</span>` + CORES_AGENDA.map(([id, nome, hex]) =>
+    `<button type="button" class="cor-ag${id === atual ? " on" : ""}" data-cor="${id}" title="${nome}" aria-label="${nome}" style="${hex ? "background:" + hex : ""}">${hex ? "" : "×"}</button>`).join("") +
+    `<span class="note cor-nome">${esc(CORES_AGENDA.find(c => c[0] === atual)[1])}</span>`;
+}
 function chaveAgenda() { return chaveUsuario("meus-concursos-agenda"); }
 function chaveTokenAgenda() { return chaveUsuario("meus-concursos-agenda-token"); }
 function chaveAssinaturaAgenda() { return chaveUsuario("meus-concursos-agenda-sig"); }
@@ -62,7 +74,7 @@ function eventosDasFases() {
         end = { dateTime: `${f.data}T${fim}:00-03:00`, timeZone: "America/Sao_Paulo" };
       } else { start = { date: f.data }; end = { date: somarDias(f.data, 1) }; }
       const ev = { summary: `${x.nome} – ${f.nome}`, location: local, description: desc, start, end };
-      ev.sig = JSON.stringify([ev.summary, ev.location, ev.description, start, end]);
+      ev.sig = JSON.stringify([ev.summary, ev.location, ev.description, start, end, corAgenda()]);
       ev.chave = `${x.id}:${f.uid}`;
       out.push(ev);
     });
@@ -101,6 +113,7 @@ async function sincronizarAgenda(forcar) {
     let criados = 0, atualizados = 0, removidos = 0;
     for (const ev of desejados) {
       const corpo = { summary: ev.summary, location: ev.location, description: ev.description, start: ev.start, end: ev.end,
+        ...(corAgenda() ? { colorId: corAgenda() } : {}),   // sem cor escolhida: o evento usa a cor da agenda
         reminders: { useDefault: false, overrides: [{ method: "popup", minutes: 1440 }, { method: "popup", minutes: 180 }] },
         extendedProperties: { private: { meusConcursos: "1", chave: ev.chave, sig: hashTexto(ev.sig) } } };
       const at = existentes[ev.chave]; delete existentes[ev.chave];
@@ -129,16 +142,26 @@ function talvezPedirAcessoNoToque() {
 
 function iniciarAgendaUI() {
   $("chkAgenda").checked = agendaLigada();
+  desenharCoresAgenda();
   $("agendaEmail").textContent = usuarioAtual && usuarioAtual.email ? `(${usuarioAtual.email})` : "";
   if (agendaLigada()) sincronizarAgenda(); else statusAgenda("Cada fase com data vira um evento no seu Google Agenda, com lembretes 1 dia e 3 horas antes.");
 }
 document.addEventListener("change", e => {
   if (e.target.id !== "chkAgenda") return;
   try { localStorage.setItem(chaveAgenda(), e.target.checked ? "1" : "0"); } catch (err) {}
+  desenharCoresAgenda();
   if (e.target.checked) { statusAgenda("Aguardando a permissão do Google…"); pedirAcessoAgenda(() => sincronizarAgenda(true)); }
   else statusAgenda("Desligado. Os eventos já criados continuam na sua agenda.");
 });
 document.addEventListener("click", e => {
+  const cor = e.target.closest("[data-cor]");
+  if (cor) {
+    try { localStorage.setItem(chaveCorAgenda(), cor.dataset.cor); } catch (err) {}
+    desenharCoresAgenda();
+    // troca a cor de todos os eventos já criados (o toque permite pedir o acesso ao Google, se tiver expirado)
+    if (tokenAgenda()) sincronizarAgenda(true); else pedirAcessoAgenda(() => sincronizarAgenda(true));
+    return;
+  }
   if (e.target.id === "btnAgendaAgora") { pedirAcessoAgenda(() => sincronizarAgenda(true)); return; }
   if (e.target.id === "btnSalvar" || e.target.id === "vgSalvar") talvezPedirAcessoNoToque();
 }, true);

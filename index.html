@@ -183,6 +183,10 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .imp-rod{color:#666;font-size:9pt;margin-top:12px}
 .agenda-box{display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center}
 .agenda-box .chk{font-size:14px;color:var(--ink)}
+.agenda-cores{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:center;margin:4px 0}
+.cor-ag{width:24px;height:24px;border-radius:50%;padding:0;border:2px solid var(--surface);box-shadow:0 0 0 1px var(--line);font-size:13px;line-height:1;color:var(--muted);background:var(--bg)}
+.cor-ag.on{box-shadow:0 0 0 2px var(--ink)}
+.cor-nome{min-width:70px;text-align:left}
 .agenda-email{color:var(--muted);overflow-wrap:anywhere}
 .chip.pend{background:transparent;border:1px dashed var(--muted);color:var(--muted)}
 .tl-dir{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}
@@ -335,6 +339,7 @@ fieldset{border:none;padding:0;margin:0;display:contents}
   </div>
   <div class="agenda-box">
     <label class="chk"><input type="checkbox" id="chkAgenda"> <span>Gravar as datas das provas no meu Google Agenda <span id="agendaEmail" class="agenda-email"></span></span></label>
+    <div class="agenda-cores" id="agendaCores" hidden></div>
     <p class="note" id="agendaStatus"></p>
   </div>
   <p class="note" style="text-align:center;margin:0">Seus concursos e anexos são sincronizados com a sua conta e aparecem em qualquer aparelho em que você entrar. O backup em arquivo é opcional.</p>
@@ -1499,7 +1504,7 @@ iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO=37;
+const APP_VERSAO=38;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{
