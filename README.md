@@ -42,7 +42,7 @@ Ficam fora do formulário do concurso. Ao abrir o concurso na tela inicial, cada
 
 ## Estudar informativos
 
-Botão **Estudar informativos** na tela inicial. Junte o caderno de informativos (Google Docs → Arquivo → Fazer download → Markdown .md, ou .txt/PDF): o app separa os julgados por disciplina e tribunal (STF, STJ, TSE). Modalidades: certo/errado (Cebraspe), múltipla escolha (FGV) e discursiva com caso concreto. Com a chave gratuita do Gemini (aba Caderno e IA, guardada só no aparelho), a IA cria as questões a partir do julgado e corrige a discursiva com nota, itens do espelho e resposta-modelo; sem chave, o app gera questões simples a partir das teses e a discursiva é autocorrigida pelo espelho. Revisão espaçada (erros voltam em 1 dia; acertos em 3, 7, 15, 30), caderno de erros, desempenho por disciplina e foco nas matérias de um concurso cadastrado.
+Botão **Estudar informativos** na tela inicial. O app lê o caderno de informativos direto do Google Docs no Drive do projeto (pelo Apps Script; também é possível usar outro arquivo .md/.txt/PDF) e separa os julgados por disciplina e tribunal (STF, STJ, TSE). Modalidades: certo/errado (Cebraspe), múltipla escolha (FGV) e discursiva com caso concreto. A IA Gemini (chave guardada no Apps Script) cria as questões a partir do julgado e corrige a discursiva com nota, itens do espelho e resposta-modelo; sem a IA, o app gera questões simples a partir das teses e a discursiva é autocorrigida pelo espelho. Revisão espaçada (erros voltam em 1 dia; acertos em 3, 7, 15, 30), caderno de erros, desempenho por disciplina e foco nas matérias de um concurso cadastrado.
 
 ## Google Agenda
 

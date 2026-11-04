@@ -82,3 +82,16 @@ Para ativar (uma vez só, no mesmo projeto do Google Cloud do login):
 O Apps Script não precisa de nenhuma mudança para isso.
 
 O acesso que o Google libera vale cerca de 1 hora. Depois disso, quando houver mudança para gravar, o app pede de novo ao tocar em **Salvar** (a janela do Google abre e fecha sozinha) ou mostra o botão **Atualizar agenda agora**.
+
+## Estudar informativos (caderno do Drive e IA Gemini)
+
+O app lê o caderno de informativos direto do Google Docs no Drive e usa a IA Gemini pelo Apps Script; a chave do Gemini fica guardada no servidor, não no GitHub nem nos aparelhos.
+
+1. Abra o projeto do Apps Script, apague o conteúdo de `Código.gs`, cole o novo `apps-script/Codigo.gs` e salve.
+2. **Configurações do projeto (engrenagem) → Propriedades do script → Adicionar propriedade**:
+   - Propriedade `GEMINI_KEY`, valor: a sua chave do Google AI Studio.
+   - (Opcional) Propriedade `CADERNO_ID`, se quiser usar outro documento: é o trecho entre `/d/` e `/edit` no link do Google Docs. Sem ela, o app usa o caderno `1Fj54SY_vUd1JnGDnP0AZ89Tyfg5pAgn33N5OjWeKUMY`.
+3. A conta que publicou o Apps Script precisa conseguir abrir o documento do caderno (ser dona ou ter o documento compartilhado com ela).
+4. **Implantar → Gerenciar implantações → lápis (Editar) → Versão: Nova versão → Implantar.** A URL `/exec` continua a mesma.
+
+Se o app mostrar "atualize o script", é porque a nova versão ainda não foi implantada.

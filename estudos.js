@@ -4,7 +4,7 @@
 
 const CHAVE_IDB_CADERNO = "estudo:caderno", CHAVE_IDB_JULGADOS = "estudo:julgados";
 const INTERVALOS = [0, 1, 3, 7, 15, 30];   // dias por "caixa" da revisão espaçada
-let julgados = [], estudo = null, geminiModelo = null;
+let julgados = [], estudo = null;
 
 const chaveEst = b => chaveUsuario("meus-concursos-estudo-" + b);
 const lerEst = (b, p) => { try { return JSON.parse(localStorage.getItem(chaveEst(b))) ?? p; } catch (e) { return p; } };
@@ -73,52 +73,57 @@ async function carregarJulgados() {
   try { julgados = (await arq("ler", CHAVE_IDB_JULGADOS)) || []; } catch (e) { julgados = []; }
   return julgados;
 }
+async function guardarCaderno(texto, info) {
+  const js = lerCaderno(texto);
+  if (!js.length) return 0;
+  await arq("gravar", CHAVE_IDB_JULGADOS, js);
+  julgados = js;
+  gravarEst("caderno", { ...info, quando: new Date().toISOString(), total: js.length });
+  return js.length;
+}
+// Caderno do Drive do projeto (lido pelo Apps Script). Só baixa de novo quando o documento muda.
+let cadernoDriveChecado = false;
+async function atualizarDoDrive(forcar) {
+  const cad = lerEst("caderno", null);
+  if (cad && cad.fonte === "arquivo" && !forcar) return;
+  if (!usuarioAtual || !usuarioAtual.sessao) return;
+  const st = () => $("estCadStatus");
+  if (st()) st().textContent = "Conferindo o caderno no Drive…";
+  try {
+    const r = await postScript({ acao: "caderno", sessao: usuarioAtual.sessao, desde: (!forcar && cad && cad.fonte === "drive") ? cad.modificado : "" });
+    if (!r.ok) { if (st()) st().textContent = r.erro && /desconhecida/i.test(r.erro) ? "O Apps Script ainda não tem a leitura do caderno: atualize o script (veja CONFIGURAR-LOGIN.md)." : (r.erro || "Não foi possível ler o caderno do Drive."); return; }
+    cadernoDriveChecado = true;
+    if (!r.naoMudou) {
+      const n = await guardarCaderno(r.texto, { fonte: "drive", nome: r.nome, modificado: r.modificado });
+      if (!n && st()) { st().textContent = "O caderno do Drive foi lido, mas não encontrei julgados nele."; return; }
+    }
+    if (estudoAba === "config" || !estudo) desenharEstudo(estudoAba === "config" ? "config" : undefined);
+  } catch (e) { if (st()) st().textContent = "Sem conexão com o servidor para buscar o caderno do Drive."; }
+}
 async function juntarCaderno(f) {
   const st = $("estCadStatus"); st.textContent = "Lendo o caderno…";
   try {
     let texto;
     if (/pdf/i.test(f.type) || /\.pdf$/i.test(f.name)) texto = await textoDoPdf(f, 2000, { aoProgredir: (p, t) => { st.textContent = `Lendo o PDF… página ${p} de ${t}`; } });
     else texto = await f.text();
-    const js = lerCaderno(texto);
-    if (!js.length) { st.textContent = "Não encontrei julgados nesse arquivo. Use o caderno em .md, .txt ou PDF com as citações \"(Info nº)\"."; return; }
-    await arq("gravar", CHAVE_IDB_JULGADOS, js); await arq("gravar", CHAVE_IDB_CADERNO, f);
-    julgados = js;
-    gravarEst("caderno", { nome: f.name, quando: new Date().toISOString(), total: js.length });
+    const n = await guardarCaderno(texto, { fonte: "arquivo", nome: f.name });
+    if (!n) { st.textContent = "Não encontrei julgados nesse arquivo. Use o caderno em .md, .txt ou PDF com as citações \"(Info nº)\"."; return; }
+    await arq("gravar", CHAVE_IDB_CADERNO, f).catch(() => {});
     desenharEstudo("config");
-    $("estCadStatus").textContent = `Pronto: ${js.length} julgados lidos de ${f.name}. Agora é só ir em Praticar.`;
+    $("estCadStatus").textContent = `Pronto: ${n} julgados lidos de ${f.name}. Agora é só ir em Praticar.`;
   } catch (e) { st.textContent = "Não consegui ler esse arquivo."; }
 }
 
-// ---------- Gemini ----------
-function chaveGemini() { try { return localStorage.getItem(chaveEst("gemini")) || ""; } catch (e) { return ""; } }
-async function escolherModelo(k) {
-  const cache = lerEst("modelo", null);
-  if (cache && cache.k === k.slice(-6) && Date.now() - cache.t < 7 * 864e5) return cache.m;
-  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${encodeURIComponent(k)}`);
-  if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error((j.error && j.error.message) || "chave recusada (" + r.status + ")"); }
-  const j = await r.json();
-  const ok = (j.models || []).filter(m => (m.supportedGenerationMethods || []).includes("generateContent") && /gemini-[\d.]+-flash/.test(m.name) && !/lite|image|tts|live|audio|thinking|embedding/.test(m.name));
-  const ver = n => parseFloat((n.match(/gemini-([\d.]+)/) || [0, 0])[1]);
-  ok.sort((a, b) => (ver(b.name) - ver(a.name)) || ((/preview|exp/.test(a.name) ? 1 : 0) - (/preview|exp/.test(b.name) ? 1 : 0)));
-  const m = ok.length ? ok[0].name.replace(/^models\//, "") : "gemini-2.5-flash";
-  gravarEst("modelo", { k: k.slice(-6), t: Date.now(), m });
-  return m;
-}
+// ---------- Gemini (pelo Apps Script: a chave fica no servidor) ----------
+let iaIndisponivel = "";   // motivo, quando o servidor avisa que a IA não está configurada
+function iaLigada() { return !!(usuarioAtual && usuarioAtual.sessao) && !iaIndisponivel; }
 async function gemini(prompt) {
-  const k = chaveGemini(); if (!k) throw new Error("sem chave");
-  geminiModelo = geminiModelo || await escolherModelo(k);
-  for (let tent = 0; tent < 3; tent++) {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModelo}:generateContent?key=${encodeURIComponent(k)}`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", temperature: 0.9 } })
-    });
-    if (r.status === 429 || r.status === 503) { await new Promise(ok => setTimeout(ok, 6000 * (tent + 1))); continue; }
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error((j.error && j.error.message) || "erro " + r.status);
-    const txt = (((j.candidates || [])[0] || {}).content || {}).parts?.map(p => p.text || "").join("") || "";
-    try { return JSON.parse(txt.replace(/^```(?:json)?\s*|\s*```$/g, "")); } catch (e) { if (tent === 2) throw new Error("resposta inválida da IA"); }
+  const r = await postScript({ acao: "gemini", sessao: usuarioAtual.sessao, prompt });
+  if (!r.ok) {
+    if (r.semChave || /desconhecida/i.test(r.erro || "")) iaIndisponivel = r.semChave ? r.erro : "O Apps Script ainda não tem a IA: atualize o script (veja CONFIGURAR-LOGIN.md).";
+    throw new Error(r.erro || "falha na IA");
   }
-  throw new Error("a IA está ocupada (limite gratuito por minuto); tente de novo em instantes");
+  try { return JSON.parse(String(r.texto).replace(/^```(?:json)?\s*|\s*```$/g, "")); } catch (e) { throw new Error("resposta inválida da IA"); }
 }
 const contextoJulgado = j => `JULGADO (${j.trib}${j.info ? ", Informativo " + j.info : ""} – ${j.disc}):\nTÍTULO: ${j.titulo}\nTEXTO:\n${j.texto.slice(0, 4500)}`;
 
@@ -152,7 +157,7 @@ function questaoLocal(j, modo) {
     espelho: [{ item: j.tese, pontos: 10 }], resposta_modelo: j.tese, linhas: 20, ia: false };
 }
 async function gerarQuestao(j, modo) {
-  if (!chaveGemini()) return questaoLocal(j, modo);
+  if (!iaLigada()) return questaoLocal(j, modo);
   const base = contextoJulgado(j) + "\n\nVocê é examinador de concursos da magistratura e do Ministério Público. Use SOMENTE o entendimento do julgado acima. Escreva em português do Brasil, com rigor técnico e nível de prova de juiz.";
   let p;
   if (modo === "ce") p = base + `\nCrie UMA assertiva no estilo Cebraspe (certo ou errado) sobre o entendimento central do julgado. Sorteie se será CERTA ou ERRADA (50% cada); se errada, altere um detalhe relevante (conclusão, requisito, exceção, competência, prazo), como fazem as bancas, sem ser óbvio. Responda em JSON: {"assertiva": string, "gabarito": "C" ou "E", "comentario": string explicando o porquê com base no julgado, em até 5 frases}`;
@@ -189,11 +194,11 @@ function escolherJulgados(filtro, n) {
 // ---------- tela ----------
 const MODOS = { ce: "Certo ou errado (estilo Cebraspe)", me: "Múltipla escolha (estilo FGV)", disc: "Discursiva (caso concreto)" };
 function abrirEstudo() {
-  carregarJulgados().then(() => { estudo = null; desenharEstudo(); });
+  carregarJulgados().then(() => { estudo = null; desenharEstudo(); if (!cadernoDriveChecado) atualizarDoDrive(); });
   const d = $("dlgEstudo"); if (!d.open) d.showModal();
 }
 function cabecalhoEstudo(aba) {
-  return `<div class="dlg-head"><div style="flex:1;min-width:0"><h2>Estudar informativos</h2><p class="sub">${julgados.length ? `${julgados.length} julgados do caderno` : "Junte o caderno de informativos para começar"}</p></div><button type="button" class="close" data-close aria-label="Fechar">×</button></div>
+  return `<div class="dlg-head"><div style="flex:1;min-width:0"><h2>Estudar informativos</h2><p class="sub">${julgados.length ? `${julgados.length} julgados do caderno · questões e correções pela IA Gemini` : "Carregando o caderno de informativos…"}</p></div><button type="button" class="close" data-close aria-label="Fechar">×</button></div>
     <div class="est-abas">${[["praticar", "Praticar"], ["erros", "Caderno de erros"], ["desempenho", "Desempenho"], ["config", "Caderno e IA"]].map(([k, n]) => `<button type="button" class="${aba === k ? "on" : ""}" data-estaba="${k}">${n}</button>`).join("")}</div>`;
 }
 function desenharEstudo(aba) {
@@ -209,18 +214,18 @@ function desenharEstudo(aba) {
 }
 let estudoAba = "praticar";
 function htmlConfigEstudo() {
-  const cad = lerEst("caderno", null), k = chaveGemini();
+  const cad = lerEst("caderno", null), doDrive = !cad || cad.fonte !== "arquivo";
+  const dt = cad && new Date(cad.modificado || cad.quando), quando = dt && !isNaN(dt) ? dt.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "";
   return `<div class="est-sec"><h4>Caderno de informativos</h4>
-      <p class="note">No Google Docs: <b>Arquivo → Fazer download → Markdown (.md)</b> (melhor), Texto (.txt) ou PDF.</p>
-      <div class="auto-box"><button type="button" id="estBtnCad">${typeof CLIP_SVG !== "undefined" ? CLIP_SVG : ""} ${cad ? "Trocar o caderno" : "Juntar o caderno"}</button>
-      <input type="file" id="estArqCad" accept=".md,.txt,.markdown,text/plain,text/markdown,application/pdf,.pdf" hidden>
-      <span class="note" id="estCadStatus">${cad ? `${esc(cad.nome)}: ${cad.total} julgados (juntado em ${esc(new Date(cad.quando).toLocaleDateString("pt-BR"))})` : "Nenhum caderno juntado neste aparelho."}</span></div>
+      <p class="note">${doDrive ? `Usando o caderno do Drive do projeto${cad ? ` (<b>${esc(cad.nome || "")}</b>${quando ? ", atualizado em " + esc(quando) : ""})` : ""}. Quando o documento for editado no Drive, o app baixa a versão nova sozinho.` : `Usando um arquivo seu: <b>${esc(cad.nome)}</b> (juntado em ${esc(quando)}).`}</p>
+      <div class="auto-box">
+        ${doDrive ? `<button type="button" id="estAtualizarDrive">Atualizar do Drive agora</button>` : `<button type="button" id="estVoltarDrive">Voltar ao caderno do Drive</button>`}
+        <button type="button" id="estBtnCad">${typeof CLIP_SVG !== "undefined" ? CLIP_SVG : ""} Usar outro arquivo (opcional)</button>
+        <input type="file" id="estArqCad" accept=".md,.txt,.markdown,text/plain,text/markdown,application/pdf,.pdf" hidden>
+        <span class="note" id="estCadStatus">${cad ? `${cad.total} julgados prontos para estudar.` : "Buscando o caderno no Drive…"}</span></div>
       ${julgados.length ? `<p class="note">${Object.entries(julgados.reduce((a, j) => (a[j.disc] = (a[j.disc] || 0) + 1, a), {})).map(([d, n]) => `${esc(d)} (${n})`).join(" · ")}</p>` : ""}</div>
-    <div class="est-sec"><h4>Inteligência artificial (Gemini, gratuita)</h4>
-      <p class="note">Com a chave, a IA cria questões no estilo da banca e corrige as discursivas com nota e espelho. Sem chave, o app usa questões simples feitas a partir das teses. A chave fica guardada só neste aparelho.</p>
-      <label>Chave do Gemini (Google AI Studio)<input id="estChave" type="password" autocomplete="off" value="${esc(k)}" placeholder="cole aqui a chave"></label>
-      <div class="actions" style="justify-content:flex-start"><button type="button" id="estSalvarChave" class="primary">Salvar e testar</button>${k ? `<button type="button" id="estApagarChave">Apagar chave</button>` : ""}<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="align-self:center">Criar chave gratuita</a></div>
-      <p class="note" id="estChaveStatus">${k ? "Chave salva neste aparelho." : ""}</p></div>`;
+    <div class="est-sec"><h4>Inteligência artificial</h4>
+      <p class="note">${iaIndisponivel ? esc(iaIndisponivel) : "As questões e as correções das discursivas são feitas pela IA Gemini, do Google, a partir de cada julgado do caderno."}</p></div>`;
 }
 function disciplinasDoConcurso(x) {
   const txt = semAcentoEst((x.fases || []).map(f => f.objetivas && (f.objetivas.blocos || []).map(b => b.disciplinas).join(" ")).join(" "));
@@ -240,7 +245,7 @@ function htmlPreparar() {
       ${concursos.length ? `<label class="est-conc">Focar nas matérias do concurso<select id="estConcurso"><option value="">—</option>${concursos.map(x => `<option value="${esc(x.id)}">${esc(x.nome)}</option>`).join("")}</select></label>` : ""}
       <div class="est-chips">${discs.map(d => `<button type="button" class="chip-sel${filtro.discs.includes(d) ? " on" : ""}" data-estdisc="${esc(d)}">${esc(d)}</button>`).join("")}</div></div>
     <div class="est-sec"><h4>Quantidade de questões</h4><div class="est-chips">${[5, 10, 20, 30].map(n => `<button type="button" class="chip-sel${filtro.n === n ? " on" : ""}" data-estn="${n}">${n}</button>`).join("")}</div></div>
-    ${chaveGemini() ? "" : `<p class="note">Sem a chave do Gemini as questões são simples (a partir das teses). Cadastre a chave na aba <b>Caderno e IA</b>.</p>`}
+    <p class="note">${iaLigada() ? "As questões e as correções das discursivas são feitas pela IA Gemini, do Google, a partir do julgado." : esc(iaIndisponivel || "Sem conexão com a IA: as questões serão simples, feitas a partir das teses.")}</p>
     <div class="actions"><button type="button" class="primary" id="estComecar">Começar</button></div>`;
 }
 function iniciarSessao(soErros) {
@@ -267,7 +272,7 @@ function htmlSessao() {
   }
   const j = s.lista[i], q = s.qs[i] && s.qs[i].pronta, r = s.resp[i];
   const topo = `<div class="est-prog"><span>Questão ${i + 1} de ${s.lista.length}</span><span class="chip">${esc(j.trib)}${j.info ? " · Info " + esc(j.info.split(",")[0]) : ""}</span><span class="chip">${esc(j.disc)}</span></div>`;
-  if (!q) return topo + `<p class="note est-gerando">Criando a questão${chaveGemini() ? " com a IA" : ""}…</p>`;
+  if (!q) return topo + `<p class="note est-gerando">Criando a questão${iaLigada() ? " com a IA Gemini" : ""}…</p>`;
   let h = topo + (q.aviso ? `<p class="note">${esc(q.aviso)}</p>` : "");
   if (q.tipo === "ce") {
     h += `<p class="est-enun">${esc(q.assertiva)}</p>`;
@@ -279,7 +284,7 @@ function htmlSessao() {
   } else {
     h += `<p class="est-enun pre">${esc(q.enunciado)}</p>`;
     if (!r || r.corrigindo) h += `<label>Sua resposta <span class="note" id="estLinhas">(até ${q.linhas || 20} linhas)</span><textarea id="estTexto" rows="12" ${r && r.corrigindo ? "disabled" : ""}>${esc(r ? r.texto : (s.rascunho || ""))}</textarea></label>
-      <div class="actions">${r && r.corrigindo ? `<span class="note">Corrigindo…</span>` : `<button type="button" id="estVerEspelho">Ver espelho sem corrigir</button><button type="button" class="primary" id="estCorrigir">${chaveGemini() && q.ia ? "Enviar para correção" : "Comparar com o espelho"}</button>`}</div>`;
+      <div class="actions">${r && r.corrigindo ? `<span class="note">Corrigindo…</span>` : `<button type="button" id="estVerEspelho">Ver espelho sem corrigir</button><button type="button" class="primary" id="estCorrigir">${iaLigada() && q.ia ? "Enviar para correção" : "Comparar com o espelho"}</button>`}</div>`;
     else {
       if (r.correcao) {
         const c = r.correcao;
@@ -335,17 +340,8 @@ document.addEventListener("click", async e => {
   if (t.id === "estPraticarErros") { iniciarSessao(true); return; }
   if (t.id === "estNova") { estudo = null; desenharEstudo("praticar"); return; }
   if (t.id === "estBtnCad") { $("estArqCad").click(); return; }
-  if (t.id === "estApagarChave") { try { localStorage.removeItem(chaveEst("gemini")); } catch (err) {} geminiModelo = null; desenharEstudo("config"); return; }
-  if (t.id === "estSalvarChave") {
-    const k = $("estChave").value.trim(), st = $("estChaveStatus");
-    if (!k) { st.textContent = "Cole a chave."; return; }
-    st.textContent = "Testando a chave…";
-    try { localStorage.setItem(chaveEst("gemini"), k); } catch (err) {}
-    geminiModelo = null; try { localStorage.removeItem(chaveEst("modelo")); } catch (err) {}
-    try { const m = await escolherModelo(k); geminiModelo = m; st.textContent = `Chave funcionando. Modelo: ${m}.`; }
-    catch (err) { st.textContent = "A chave foi salva, mas o Google respondeu: " + err.message; }
-    return;
-  }
+  if (t.id === "estAtualizarDrive") { atualizarDoDrive(true); return; }
+  if (t.id === "estVoltarDrive") { gravarEst("caderno", { ...(lerEst("caderno", {})), fonte: "drive", modificado: "" }); atualizarDoDrive(true); return; }
   if (!estudo) return;
   const i = estudo.i, j = estudo.lista[i], q = estudo.qs[i] && estudo.qs[i].pronta;
   if (t.dataset.estresp && q && !estudo.resp[i]) {
@@ -353,7 +349,7 @@ document.addEventListener("click", async e => {
     estudo.resp[i] = { marcada: t.dataset.estresp, nota }; estudo.notas.push(nota); registrar(j, nota);
     desenharEstudo("praticar"); return;
   }
-  if (t.id === "estVerEspelho" || (t.id === "estCorrigir" && !(chaveGemini() && q.ia))) {
+  if (t.id === "estVerEspelho" || (t.id === "estCorrigir" && !(iaLigada() && q.ia))) {
     const texto = ($("estTexto") || {}).value || "";
     estudo.resp[i] = { texto }; desenharEstudo("praticar"); return;
   }
