@@ -28,6 +28,8 @@ function montarJulgado(disc, titulo, texto) {
   let tese = (corte > 0 ? texto.slice(0, corte) : texto.slice(0, 700)).trim();
   const suma = texto.match(/Em suma:\s*([^\n]+?)(?=\s*\b(?:STF|STJ|TSE)\.|$)/i);
   if (suma) tese = suma[1].trim();
+  // título que continua na linha de baixo (em maiúsculas) não faz parte da tese
+  tese = tese.replace(/^[^a-zà-ú]{12,}?(?=[A-ZÀ-Ú][a-zà-ú])/, "").trim();
   tese = tese.charAt(0).toUpperCase() + tese.slice(1);
   const j = { disc, trib, info: [...new Set(cits.map(c => c[2]))].join(", "), titulo, tese: tese.slice(0, 900), texto: texto.slice(0, 6000), cit: cits.map(c => c[0]).join(" | ") };
   j.id = idJulgado(j);
@@ -118,7 +120,9 @@ async function juntarCaderno(f) {
 let iaIndisponivel = "";   // motivo, quando o servidor avisa que a IA não está configurada
 function iaLigada() { return !!(usuarioAtual && usuarioAtual.sessao) && !iaIndisponivel; }
 async function gemini(prompt) {
-  const r = await postScript({ acao: "gemini", sessao: usuarioAtual.sessao, prompt });
+  // limite de espera: sem resposta em 90 s, o app segue com a questão simples
+  const r = await Promise.race([postScript({ acao: "gemini", sessao: usuarioAtual.sessao, prompt }),
+    new Promise((_, falha) => setTimeout(() => falha(new Error("a IA demorou demais para responder")), 90000))]);
   if (!r.ok) {
     if (r.semChave || /desconhecida/i.test(r.erro || "")) iaIndisponivel = r.semChave ? r.erro : "O Apps Script ainda não tem a IA: atualize o script (veja CONFIGURAR-LOGIN.md).";
     throw new Error(r.erro || "falha na IA");
@@ -136,7 +140,7 @@ function alterarTese(t) {
   for (const [a, b] of embaralhar(TROCAS.slice())) {
     for (const [de, para] of [[b, a], [a, b]]) {
       const re = new RegExp(`(^|[^A-Za-zÀ-ú])${de.replace(/ /g, "\\s+")}(?![A-Za-zÀ-ú])`, "i");
-      if (re.test(t)) return t.replace(re, (m, p1) => p1 + para);
+      if (re.test(t)) { const r = t.replace(re, (m, p1) => p1 + para); return r.charAt(0).toUpperCase() + r.slice(1); }
     }
   }
   return null;
@@ -147,9 +151,13 @@ function questaoLocal(j, modo) {
     return { tipo: "ce", assertiva: falsa || j.tese, gabarito: falsa ? "E" : "C", comentario: falsa ? "A assertiva inverteu a conclusão do julgado. O entendimento correto é: " + j.tese : "A assertiva reproduz o entendimento do julgado.", ia: false };
   }
   if (modo === "me") {
-    const outras = embaralhar(julgados.filter(o => o.id !== j.id && o.disc === j.disc)).map(o => alterarTese(o.tese)).filter(Boolean).slice(0, 4);
-    while (outras.length < 4) { const o = julgados[Math.floor(Math.random() * julgados.length)]; const a = alterarTese(o.tese); if (a && !outras.includes(a)) outras.push(a); }
-    const alts = embaralhar([j.tese, ...outras]); const g = alts.indexOf(j.tese);
+    // teses curtas (até ~2 frases) para as alternativas ficarem do tamanho de prova
+    const curta = t => { const f = (t || "").match(/[^.;]+[.;]/g) || [t || ""]; let o = ""; for (const x of f) { if ((o + x).length > 320) break; o += x; } return (o || t || "").trim(); };
+    const boa = t => t && t.length >= 60 && /\b(é|são|não|deve|pode|exige|cabe|incide|configura|admite)\b/i.test(t) && t !== t.toUpperCase();
+    const certa = curta(j.tese);
+    const outras = embaralhar(julgados.filter(o => o.id !== j.id && o.disc === j.disc && boa(o.tese))).map(o => alterarTese(curta(o.tese))).filter(Boolean).slice(0, 4);
+    for (let n = 0; outras.length < 4 && n < 200; n++) { const o = julgados[Math.floor(Math.random() * julgados.length)]; const a = boa(o.tese) && alterarTese(curta(o.tese)); if (a && !outras.includes(a)) outras.push(a); }
+    const alts = embaralhar([certa, ...outras]); const g = alts.indexOf(certa);
     return { tipo: "me", enunciado: `De acordo com a jurisprudência do ${j.trib} sobre ${j.disc}, assinale a alternativa correta.`, alternativas: alts, gabarito: "ABCDE"[g], comentario: "Correta: " + j.tese + " As demais alternativas inverteram a conclusão de outros julgados.", ia: false };
   }
   const caso = (j.texto.match(/caso hipot[eé]tico:\s*([\s\S]+?)(?=\s(?:O|A)\s(?:STJ|STF|TSE|Tribunal|juiz)\b[^.]{0,60}(?:entendeu|decidiu|reformou|afirmou|concluiu|reconheceu)|Em suma:|$)/i) || [])[1];
@@ -253,14 +261,21 @@ function iniciarSessao(soErros) {
   const lista = escolherJulgados({ ...filtro, soErros }, soErros ? 30 : filtro.n);
   if (!lista.length) { toast("Nenhum julgado com esses filtros."); return; }
   estudo = { modo: filtro.modo, lista, i: 0, qs: {}, resp: {}, notas: [] };
-  prepararQuestao(0); prepararQuestao(1);
+  prepararQuestao(0);
   desenharEstudo("praticar");
 }
 function prepararQuestao(i) {
   if (!estudo || i >= estudo.lista.length || estudo.qs[i]) return;
   const j = estudo.lista[i];
   estudo.qs[i] = gerarQuestao(j, estudo.modo).catch(e => { const q = questaoLocal(j, estudo.modo); q.aviso = "A IA não respondeu (" + e.message + "); questão simples gerada pelo app."; return q; });
-  estudo.qs[i].then(q => { estudo && (estudo.qs[i].pronta = q); if (estudo && estudo.i === i && estudoAba === "praticar") desenharEstudo("praticar"); });
+  estudo.qs[i].inicio = Date.now();
+  const s0 = estudo;
+  estudo.qs[i].then(q => {
+    if (estudo !== s0) return;
+    estudo.qs[i].pronta = q;
+    if (estudo.i === i && estudoAba === "praticar") desenharEstudo("praticar");
+    if (i <= estudo.i) prepararQuestao(i + 1);   // prepara só a próxima, uma de cada vez (o plano gratuito limita as consultas por minuto)
+  });
 }
 function htmlSessao() {
   const s = estudo, i = s.i;
@@ -272,7 +287,11 @@ function htmlSessao() {
   }
   const j = s.lista[i], q = s.qs[i] && s.qs[i].pronta, r = s.resp[i];
   const topo = `<div class="est-prog"><span>Questão ${i + 1} de ${s.lista.length}</span><span class="chip">${esc(j.trib)}${j.info ? " · Info " + esc(j.info.split(",")[0]) : ""}</span><span class="chip">${esc(j.disc)}</span></div>`;
-  if (!q) return topo + `<p class="note est-gerando">Criando a questão${iaLigada() ? " com a IA Gemini" : ""}…</p>`;
+  if (!q) {
+    const seg = s.qs[i] && s.qs[i].inicio ? Math.round((Date.now() - s.qs[i].inicio) / 1000) : 0;
+    clearTimeout(htmlSessao.t); htmlSessao.t = setTimeout(() => { if (estudo === s && s.i === i && !(s.qs[i] && s.qs[i].pronta) && estudoAba === "praticar") desenharEstudo("praticar"); }, 1000);
+    return topo + `<p class="note est-gerando">Criando a questão${iaLigada() ? " com a IA Gemini" : ""}… ${seg}s${seg > 15 ? "<br>A IA gratuita às vezes demora até 1 minuto; se passar disso, o app segue com uma questão simples." : ""}</p>`;
+  }
   let h = topo + (q.aviso ? `<p class="note">${esc(q.aviso)}</p>` : "");
   if (q.tipo === "ce") {
     h += `<p class="est-enun">${esc(q.assertiva)}</p>`;
@@ -365,7 +384,7 @@ document.addEventListener("click", async e => {
     desenharEstudo("praticar"); return;
   }
   if (t.dataset.estauto !== undefined) { const nota = +t.dataset.estauto; estudo.resp[i].nota = nota; estudo.notas.push(nota); registrar(j, nota); desenharEstudo("praticar"); return; }
-  if (t.id === "estProxima") { estudo.i++; estudo.rascunho = ""; prepararQuestao(estudo.i); prepararQuestao(estudo.i + 1); desenharEstudo("praticar"); $("estudoConteudo").scrollTop = 0; return; }
+  if (t.id === "estProxima") { estudo.i++; estudo.rascunho = ""; prepararQuestao(estudo.i); if (estudo.qs[estudo.i] && estudo.qs[estudo.i].pronta) prepararQuestao(estudo.i + 1); desenharEstudo("praticar"); $("estudoConteudo").scrollTop = 0; return; }
 });
 document.addEventListener("change", e => {
   if (e.target.id === "estArqCad") { const f = e.target.files[0]; e.target.value = ""; if (f) juntarCaderno(f); }
