@@ -30,6 +30,13 @@ function montarJulgado(disc, titulo, texto) {
   if (suma) tese = suma[1].trim();
   // título que continua na linha de baixo (em maiúsculas) não faz parte da tese
   tese = tese.replace(/^[^a-zà-ú]{12,}?(?=[A-ZÀ-Ú][a-zà-ú])/, "").trim();
+  // frases iniciais em maiúsculas (resto do título) e pedacinhos logo depois delas também saem
+  const frases = tese.split(/(?<=[.;])\s+/); let tirou = false;
+  while (frases.length > 1) {
+    const f = frases[0], letras = f.replace(/[^A-Za-zÀ-ú]/g, ""), up = f.replace(/[^A-ZÀ-Ý]/g, "").length;
+    if ((letras && up / letras.length > 0.5) || (tirou && f.length < 40)) { frases.shift(); tirou = true; } else break;
+  }
+  tese = frases.join(" ");
   tese = tese.charAt(0).toUpperCase() + tese.slice(1);
   const j = { disc, trib, info: [...new Set(cits.map(c => c[2]))].join(", "), titulo, tese: tese.slice(0, 900), texto: texto.slice(0, 6000), cit: cits.map(c => c[0]).join(" | ") };
   j.id = idJulgado(j);
@@ -153,7 +160,7 @@ function questaoLocal(j, modo) {
   if (modo === "me") {
     // teses curtas (até ~2 frases) para as alternativas ficarem do tamanho de prova
     const curta = t => { const f = (t || "").match(/[^.;]+[.;]/g) || [t || ""]; let o = ""; for (const x of f) { if ((o + x).length > 320) break; o += x; } return (o || t || "").trim(); };
-    const boa = t => t && t.length >= 60 && /\b(é|são|não|deve|pode|exige|cabe|incide|configura|admite)\b/i.test(t) && t !== t.toUpperCase();
+    const boa = t => t && t.length >= 60 && /\b(é|são|não|deve|pode|exige|cabe|incide|configura|admite)\b/i.test(t) && t.replace(/[^A-ZÀ-Ý]/g, "").length / Math.max(1, t.replace(/[^A-Za-zÀ-ú]/g, "").length) < 0.3;
     const certa = curta(j.tese);
     const outras = embaralhar(julgados.filter(o => o.id !== j.id && o.disc === j.disc && boa(o.tese))).map(o => alterarTese(curta(o.tese))).filter(Boolean).slice(0, 4);
     for (let n = 0; outras.length < 4 && n < 200; n++) { const o = julgados[Math.floor(Math.random() * julgados.length)]; const a = boa(o.tese) && alterarTese(curta(o.tese)); if (a && !outras.includes(a)) outras.push(a); }
