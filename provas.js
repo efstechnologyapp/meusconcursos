@@ -110,6 +110,31 @@ async function enviarParaDrive() {
   } catch (e) { envio.enviando = false; envio.msg = "Não foi possível enviar: " + e.message; desenharEstudo(estudoAba); }
 }
 
+// ---------- separar prova e gabarito (arquivo que já vem com as respostas) ----------
+let separando = {};
+const botaoSeparar = i => i.gab ? "" : `<button type="button" data-provsep="${esc(i.id)}" ${separando[i.id] ? "disabled" : ""} title="Gera, na subpasta Para imprimir, um PDF só com as questões e outro com ${i.tipo === "objetiva" ? "o gabarito" : "o padrão de resposta"}">${separando[i.id] ? "Separando…" : "Separar prova e " + (i.tipo === "objetiva" ? "gabarito" : "resposta")}</button>`;
+async function separarProvaGabarito(id) {
+  const it = repo.itens.find(i => i.id === id); if (!it || separando[id]) return;
+  separando[id] = 1; desenharEstudo(estudoAba);
+  toast("Lendo a prova com a IA para separar as questões das respostas… pode levar alguns minutos.");
+  try {
+    await garantirQuestoes(it); if (it.tipo === "objetiva") await completarProva(it);
+    const g = await questoesGuardadas(it);
+    const qs = (g && g.questoes || []).filter(q => q.enunciado);
+    if (!qs.length) throw new Error("a IA não encontrou as questões");
+    if (it.tipo === "objetiva" && g.total && qs.length < g.total) throw new Error(`a leitura parou em ${qs.length} de ${g.total} questões; tente de novo`);
+    const temResp = it.tipo === "objetiva" ? qs.some(q => q.gabarito) : qs.some(q => (q.espelho || []).length || q.resposta_esperada);
+    if (!temResp) throw new Error("a IA não encontrou respostas dentro deste arquivo");
+    const base = it.nome.replace(/\s*-\s*(prova objetiva|prova subjetiva|pe[çc]a pr[áa]tica)(\s*\(\d+\))?\s*$/i, "") || it.nome;
+    const num = (it.nome.match(/\((\d+)\)\s*$/) || ["", ""])[1], suf = num ? ` (${num})` : "";
+    const r = await postLongo({ acao: "separarProva", prova: it.id, tipo: it.tipo, titulo: it.nome, questoes: qs,
+      nomeProva: `${base} - ${PAPEL[it.tipo][0]} (sem respostas)${suf}`, nomeGab: `${base} - ${PAPEL[it.tipo][1]}${suf}` }, 300000);
+    if (!r.ok) throw new Error(/desconhecida/i.test(r.erro || "") ? "atualize o Apps Script" : r.erro);
+    toast(`Pronto: 2 PDFs em ${r.pasta}.`);
+  } catch (e) { toast("Não foi possível separar: " + e.message); }
+  delete separando[id]; if (["provas", "pecas"].includes(estudoAba)) desenharEstudo(estudoAba);
+}
+
 // ---------- padronizar nomes dos arquivos ----------
 // "PCDF/2026 - Cebraspe - prova objetiva" e "PCDF/2026 - Cebraspe - gabarito prova objetiva"
 let padr = null;   // { itens: [{it, ident, nomeProva, nomeGab, erro}], i, fase }
@@ -163,7 +188,7 @@ function htmlPadronizar() {
       ${x.nomeProva === undefined ? `<p class="note">${esc(x.it.nome)} · aguardando…</p>` : `
       <label class="padr-l"><span class="note">${esc(x.it.nome)} →</span><input data-padr="${k}" data-papel="p" value="${esc(x.nomeProva)}"></label>
       ${x.it.gab ? `<label class="padr-l"><span class="note">${esc(x.it.gabNome.replace(/\.(pdf|docx?|jpe?g|png)$/i, ""))} →</span><input data-padr="${k}" data-papel="g" value="${esc(x.nomeGab)}"></label>` : ""}`}</div>`).join("")}
-    <div class="actions"><button type="button" id="padrSair">Cancelar</button><button type="button" class="primary" id="padrRenomear" ${p.fase !== "conferir" ? "disabled" : ""}>Renomear no Drive</button></div>`;
+    <div class="actions"><button type="button" id="padrSair">Cancelar</button>${p.fase === "renomeando" ? `<span class="note est-gerando">Renomeando no Drive…</span>` : ""}<button type="button" class="primary" id="padrRenomear" ${p.fase !== "conferir" ? "disabled" : ""}>${p.fase === "renomeando" ? "Renomeando…" : "Renomear no Drive"}</button></div>`;
 }
 async function renomearPadronizados() {
   const lista = [];
@@ -172,7 +197,7 @@ async function renomearPadronizados() {
   try {
     const r = await postLongo({ acao: "renomear", lista }, 300000);
     if (!r.ok) throw new Error(r.erro);
-    toast(`${r.feitos} arquivo(s) renomeado(s)${r.erros.length ? `; ${r.erros.length} com problema` : ""}.`);
+    toast((r.feitos ? `Pronto: ${r.feitos} arquivo(s) renomeado(s) no Drive` : "Os arquivos já estavam com esses nomes no Drive") + (r.erros.length ? `; ${r.erros.length} com problema: ${r.erros.join("; ")}` : ".") + " A lista foi atualizada.");
     const area = padr.area; padr = null; repo = null; carregarRepo(true); desenharEstudo(area);
   } catch (e) { padr.fase = "conferir"; toast("Não foi possível renomear: " + e.message); desenharEstudo(estudoAba); }
 }
@@ -193,7 +218,7 @@ function htmlProvas() {
     ${lista.length ? lista.map(i => {
       const r = res[i.id];
       return `<div class="prov-item"><div class="prov-tit"><b>${esc(i.nome)}</b><span class="note">${esc(i.pastaCargo || i.cargo)}${i.gab ? " · gabarito: " + esc(i.gabNome) : " · sem gabarito separado"}${r ? ` · última vez: ${r.acertos}/${r.total} (${Math.round(r.acertos / Math.max(1, r.total) * 100)}%)` : ""}</span></div>
-        <div class="prov-acoes"><button type="button" class="primary" data-provsim="${esc(i.id)}">${i.tipo === "objetiva" ? "Simulado com as questões originais" : "Responder as questões originais"}</button><button type="button" data-provnovas="${esc(i.id)}">Questões novas no estilo desta prova</button></div></div>`;
+        <div class="prov-acoes"><button type="button" class="primary" data-provsim="${esc(i.id)}">${i.tipo === "objetiva" ? "Simulado com as questões originais" : "Responder as questões originais"}</button><button type="button" data-provnovas="${esc(i.id)}">Questões novas no estilo desta prova</button>${botaoSeparar(i)}</div></div>`;
     }).join("") : `<p class="note">Nenhuma prova ${f.tipo === "objetiva" ? "objetiva" : "subjetiva"}${f.cargo ? " de " + esc(f.cargo) : ""} na pasta. Coloque os PDFs em <b>Provas Jurídicas / ${f.tipo === "objetiva" ? "Provas objetivas" : "Provas subjetivas"} / ${esc(f.cargo || "cargo")}</b>.</p>`}
     <p class="note">Pasta no Drive: <b>${esc(repo.raiz || "Provas Jurídicas")}</b>. Prova e gabarito são reconhecidos pelo nome (ex.: "TJMG 2022 - prova.pdf" e "TJMG 2022 - gabarito.pdf"). <button type="button" class="link-x" id="provRecarregar" style="color:var(--brand)">Atualizar lista</button> · <button type="button" class="link-x" id="padrIniciar" style="color:var(--brand)">Padronizar nomes dos arquivos</button></p>`;
 }
@@ -270,9 +295,13 @@ function htmlRespostaEscrita(q, r, pref) {
   let h = "";
   if (!r || r.corrigindo) {
     const rasc = lerProv(rascunhoKey(), "");
-    h += `<label>Sua resposta <span class="note" id="provLinhas">${q.linhas ? `(até ${q.linhas} linhas)` : ""}</span><textarea id="provTexto" rows="${sim.it.tipo === "peca" ? 22 : 12}" ${r && r.corrigindo ? "disabled" : ""}>${esc(r ? r.texto : rasc)}</textarea></label>
+    h += `${r && r.corrigindo ? "" : `<div class="est-det manu-box"><p class="est-sub">Treino no papel, como na prova</p>
+        <p class="note">Imprima a prova com a folha de resposta pautada, escreva à mão e depois envie as fotos (ou o PDF escaneado) das folhas: a IA transcreve, corrige, dá a nota e avalia a caligrafia.</p>
+        <div class="actions" style="justify-content:flex-start;flex-wrap:wrap"><button type="button" id="provImprimir">Imprimir prova + folha de resposta</button>
+        <button type="button" class="primary" id="provFotosBtn">Enviar fotos da resposta manuscrita</button><input type="file" id="provFotos" accept="image/*,application/pdf" multiple hidden></div></div>`}
+      <label>Sua resposta digitada <span class="note" id="provLinhas">${q.linhas ? `(até ${q.linhas} linhas)` : ""}</span><textarea id="provTexto" rows="${sim.it.tipo === "peca" ? 22 : 12}" ${r && r.corrigindo ? "disabled" : ""}>${esc(r ? r.texto : rasc)}</textarea></label>
       <p class="note">O rascunho fica salvo neste aparelho enquanto você escreve.</p>
-      <div class="actions">${r && r.corrigindo ? `<span class="note">Corrigindo com a IA Gemini…</span>` : `<button type="button" id="provEspelho">Ver o espelho sem corrigir</button><button type="button" class="primary" id="provCorrigir">Enviar para correção</button>`}</div>`;
+      <div class="actions">${r && r.corrigindo ? `<span class="note est-gerando">${r.manuscrito ? "A IA está lendo a sua letra e corrigindo… pode levar 1 ou 2 minutos." : "Corrigindo com a IA Gemini…"}</span>` : `<button type="button" id="provEspelho">Ver o espelho sem corrigir</button><button type="button" class="primary" id="provCorrigir">Enviar texto digitado para correção</button>`}</div>`;
     return h;
   }
   if (r.correcao) {
@@ -280,12 +309,13 @@ function htmlRespostaEscrita(q, r, pref) {
     h += `<p class="est-res ${c.nota >= 7 ? "ok" : c.nota >= 5 ? "" : "bad"}">Nota <b>${esc(String(c.nota))}</b> de 10</p>
       <ul class="est-itens">${(c.itens || []).map(t => `<li class="${t.atendido === "sim" ? "ok" : t.atendido === "parcial" ? "parc" : "bad"}"><b>${esc(t.item)}</b> — ${esc(t.atendido)}${t.comentario ? ": " + esc(t.comentario) : ""}</li>`).join("")}</ul>
       ${(c.estrutura || []).length ? `<p class="est-sub">Estrutura da peça</p><ul class="est-itens">${c.estrutura.map(t => `<li class="${t.presente === "sim" ? "ok" : t.presente === "parcial" ? "parc" : "bad"}"><b>${esc(t.elemento)}</b> — ${esc(t.presente)}${t.comentario ? ": " + esc(t.comentario) : ""}</li>`).join("")}</ul>` : ""}
+      ${c.caligrafia ? `<div class="est-det"><p class="est-sub">Caligrafia${c.caligrafia.nota != null ? `: <b>${esc(String(c.caligrafia.nota))}</b> de 10` : ""}${c.caligrafia.legibilidade ? ` · legibilidade ${esc(c.caligrafia.legibilidade)}` : ""}${c.linhas_usadas ? ` · ${esc(String(c.linhas_usadas))} linhas usadas${q.linhas ? " de " + q.linhas : ""}` : ""}</p>${c.caligrafia.comentario ? `<p>${esc(c.caligrafia.comentario)}</p>` : ""}${(c.caligrafia.trechos_ilegiveis || []).length ? `<p class="note"><b>Trechos que a IA não conseguiu ler</b> (a banca também os desconsideraria): ${esc(c.caligrafia.trechos_ilegiveis.join(" · "))}</p>` : ""}${(c.caligrafia.dicas || []).length ? `<p class="note"><b>Dicas:</b> ${esc(c.caligrafia.dicas.join("; "))}</p>` : ""}</div>` : ""}
       ${c.pontos_fortes && c.pontos_fortes.length ? `<p><b>Pontos fortes:</b> ${esc(c.pontos_fortes.join("; "))}</p>` : ""}${c.melhorias && c.melhorias.length ? `<p><b>Para melhorar:</b> ${esc(c.melhorias.join("; "))}</p>` : ""}${c.feedback ? `<p class="note">${esc(c.feedback)}</p>` : ""}`;
   }
   if ((q.espelho || []).length) h += `<details class="est-det"${r.correcao ? "" : " open"}><summary>Espelho ${q.inedita ? "" : "oficial "}de correção</summary><ul class="est-itens">${q.espelho.map(t => `<li>${esc(t.item)} <span class="note">(${esc(String(t.pontos))} pts)</span></li>`).join("")}</ul></details>`;
   if (q.resposta_esperada) h += `<details class="est-det"><summary>Resposta esperada ${q.inedita ? "" : "(padrão oficial)"}</summary><p class="pre">${esc(q.resposta_esperada)}</p></details>`;
   if (!(q.espelho || []).length && !q.resposta_esperada) h += `<p class="note">Esta prova não trouxe espelho oficial; a correção usa a legislação e a jurisprudência.</p>`;
-  if (r.texto) h += `<details class="est-det"><summary>Sua resposta</summary><p class="pre">${esc(r.texto)}</p></details>`;
+  if (r.texto) h += `<details class="est-det"><summary>${r.manuscrito ? "Sua resposta (transcrição da IA)" : "Sua resposta"}</summary><p class="pre">${esc(r.texto)}</p></details>`;
   h += `<div class="actions"><button type="button" class="primary" id="provProx">${sim.it.tipo === "peca" ? "Concluir" : (sim.i + 1 < (sim.novas ? 10 : (sim.total || sim.qs.length)) ? "Próxima" : "Ver resultado")}</button></div>`;
   return h;
 }
@@ -321,7 +351,7 @@ function htmlPecas() {
   h += htmlEnvio("peca");
   if (repo.erro) return h + `<p class="note">${esc(repo.erro)}</p>`;
   h += lista.length ? lista.map(i => `<div class="prov-item"><div class="prov-tit"><b>${esc(i.nome)}</b><span class="note">${esc(i.pastaCargo || i.cargo)}${i.gab ? " · espelho: " + esc(i.gabNome) : " · sem espelho separado"}</span></div>
-      <div class="prov-acoes"><button type="button" class="primary" data-provsim="${esc(i.id)}">Fazer esta peça</button><button type="button" data-pecanova="${esc(i.id)}">Caso novo no estilo desta peça</button></div></div>`).join("")
+      <div class="prov-acoes"><button type="button" class="primary" data-provsim="${esc(i.id)}">Fazer esta peça</button><button type="button" data-pecanova="${esc(i.id)}">Caso novo no estilo desta peça</button>${botaoSeparar(i)}</div></div>`).join("")
     : `<p class="note">Nenhuma peça${f.cargo ? " de " + esc(f.cargo) : ""} na pasta. Coloque os PDFs em <b>Provas Jurídicas / Peças jurídicas / ${esc(f.cargo || "cargo")}</b>.</p>`;
   h += `<p class="note"><button type="button" class="link-x" id="provRecarregar" style="color:var(--brand)">Atualizar lista</button> · <button type="button" class="link-x" id="padrIniciar" style="color:var(--brand)">Padronizar nomes dos arquivos</button></p>`;
   return h;
@@ -371,9 +401,9 @@ function htmlPecaAtiva() {
   if (q.tipo_peca && !e) carregarEstrutura(q.tipo_peca);
   const els = e && e.estrutura && e.estrutura.elementos || [];
   const r = s.resp[0];
-  return topo + `<div class="est-prog">${q.tipo_peca ? `<span class="chip">${esc(q.tipo_peca)}</span>` : ""}${q.linhas ? `<span class="chip">até ${q.linhas} linhas</span>` : ""}</div>
+  return topo + `${q.linhas ? `<div class="est-prog"><span class="chip">até ${q.linhas} linhas</span></div>` : ""}
     <details class="est-det" open><summary>Enunciado</summary><p class="pre">${esc(q.enunciado)}</p></details>
-    ${els.length ? `<details class="est-det"><summary>Roteiro da estrutura (${els.length} elementos)</summary><ol class="pec-roteiro">${els.map(x => `<li><b>${esc(x.nome)}</b>${x.fundamento ? ` <span class="note">${esc(x.fundamento)}</span>` : ""}</li>`).join("")}</ol></details>` : ""}
+    ${els.length ? `<details class="est-det"><summary>Roteiro da estrutura (revela qual é a peça)</summary><ol class="pec-roteiro">${els.map(x => `<li><b>${esc(x.nome)}</b>${x.fundamento ? ` <span class="note">${esc(x.fundamento)}</span>` : ""}</li>`).join("")}</ol></details>` : ""}
     ${htmlRespostaEscrita(q, r, "peca")}`;
 }
 async function gerarPecaNova() {
@@ -384,15 +414,55 @@ async function gerarPecaNova() {
   try { sim.geradas[0] = { q: { ...(await gemini(p)), inedita: true } }; } catch (e) { sim.geradas[0] = { erro: e.message }; }
   if (sim && estudoAba === "pecas") desenharEstudo("pecas");
 }
-async function corrigirEscrita(q, texto) {
+async function corrigirEscrita(q, texto, partes) {
   const tipo = sim.it.tipo, e = q.tipo_peca && pecaEstr[q.tipo_peca], els = e && e.estrutura && e.estrutura.elementos || [];
   const p = `Você é examinador de concurso (banca ${sim.banca || ""}). Corrija com rigor e justiça a resposta do candidato.\n\n${tipo === "peca" ? "PEÇA PRÁTICA (" + (q.tipo_peca || "") + ")" : "QUESTÃO DISCURSIVA"}:\n${q.enunciado}\n\n` +
     ((q.espelho || []).length ? `ESPELHO ${q.inedita ? "" : "OFICIAL "}DE CORREÇÃO:\n${q.espelho.map(x => `- ${x.item} (${x.pontos} pts)`).join("\n")}\n\n` : "") +
     (q.resposta_esperada ? `RESPOSTA ESPERADA:\n${q.resposta_esperada}\n\n` : "") +
     (els.length ? `ELEMENTOS DE ESTRUTURA ESPERADOS:\n${els.map(x => "- " + x.nome).join("\n")}\n\n` : "") +
-    `RESPOSTA DO CANDIDATO:\n${texto}\n\nAvalie item por item do espelho (ou, sem espelho, os pontos jurídicos essenciais), a técnica, a fundamentação e a clareza${tipo === "peca" ? ", e confira cada elemento da estrutura da peça" : ""}. Responda em JSON: {"nota": number de 0 a 10 com uma casa decimal, "itens": [{"item": string, "atendido": "sim"|"parcial"|"não", "comentario": string}]${tipo === "peca" ? ', "estrutura": [{"elemento": string, "presente": "sim"|"parcial"|"não", "comentario": string}]' : ""}, "pontos_fortes": [string], "melhorias": [string], "feedback": string curto}`;
-  return gemini(p);
+    (partes ? `RESPOSTA DO CANDIDATO: está MANUSCRITA nas imagens/PDF anexos (folhas em ordem). Primeiro transcreva fielmente o texto, sem corrigir nada; o que não for possível ler, marque como [ilegível] e DESCONSIDERE na nota, como faz a banca. Avalie também a caligrafia como um examinador: legibilidade, traçado, espaçamento, margens, rasuras e respeito às linhas e ao limite de ${q.linhas || "linhas"}; texto além do limite não conta.\n\n` : `RESPOSTA DO CANDIDATO:\n${texto}\n\n`) +
+    `Avalie item por item do espelho (ou, sem espelho, os pontos jurídicos essenciais), a técnica, a fundamentação e a clareza${tipo === "peca" ? ", e confira cada elemento da estrutura da peça" : ""}. Responda em JSON: {${partes ? '"transcricao": string, "linhas_usadas": number, "caligrafia": {"nota": number de 0 a 10, "legibilidade": "boa"|"regular"|"ruim", "comentario": string, "trechos_ilegiveis": [string], "dicas": [string]}, ' : ""}"nota": number de 0 a 10 com uma casa decimal, "itens": [{"item": string, "atendido": "sim"|"parcial"|"não", "comentario": string}]${tipo === "peca" ? ', "estrutura": [{"elemento": string, "presente": "sim"|"parcial"|"não", "comentario": string}]' : ""}, "pontos_fortes": [string], "melhorias": [string], "feedback": string curto}`;
+  return gemini(p, partes ? { partes, ms: 300000 } : undefined);
 }
+
+// ---------- prova no papel: impressão e correção do manuscrito ----------
+function imprimirProvaReal(q) {
+  const s = sim, peca = s.it.tipo === "peca";
+  const qs = peca || s.novas ? [q] : (s.qs || []).filter(x => x.enunciado);
+  const nome = s.it.nome.replace(/\s*-\s*(prova subjetiva|pe[çc]a pr[áa]tica)(\s*\(\d+\))?\s*$/i, "");
+  const folha = (x, n) => { const L = x.linhas || (peca ? 60 : 30); let h = `<section class="pr-folha"><div class="pr-fcab"><b>FOLHA DE TEXTO DEFINITIVO</b><span>${peca ? "Peça prática" : "Questão " + esc(String(x.numero || n))}</span><span>Limite: ${L} linhas</span></div><ol class="pr-linhas">`; for (let i = 1; i <= L; i++) h += "<li></li>"; return h + "</ol></section>"; };
+  let h = `<div class="pr-capa"><h1>${esc(nome)}</h1><p>${esc(s.it.pastaCargo || s.it.cargo || "")} · Prova ${peca ? "prática (peça profissional)" : "discursiva"}${s.novas ? " · caso inédito" : ""}</p>
+    <div class="pr-ident"><span>Nome: ______________________________________________</span><span>Data: ____/____/______</span><span>Início: ____h____ · Término: ____h____</span></div>
+    <ul class="pr-instr"><li>Use caneta esferográfica de tinta preta, fabricada em material transparente.</li><li>Escreva com letra legível: o que não puder ser lido será desconsiderado.</li><li>Respeite o limite de linhas da folha de texto definitivo; o que passar dele não será corrigido.</li><li>Não assine nem se identifique no corpo do texto; use apenas dados fornecidos no enunciado e não crie fatos novos.</li></ul></div>`;
+  qs.forEach((x, n) => { h += `<section class="pr-q"><h2>${peca ? "Peça prática" : "Questão " + esc(String(x.numero || n + 1))}${x.pontos ? ` <small>(${esc(String(x.pontos))} pontos)</small>` : ""}</h2><p class="pre">${esc(x.enunciado)}</p></section>`; });
+  qs.forEach((x, n) => { h += folha(x, n + 1); });
+  $("impressao").innerHTML = h;
+  setTimeout(() => window.print(), 50);
+}
+// fotos ficam com até 2000 px no lado maior (legível para a IA e leve para enviar)
+function fotoParaParte(f) {
+  if (f.type === "application/pdf") return lerBase64(f).then(data => ({ inline_data: { mime_type: "application/pdf", data } }));
+  return new Promise((ok, falha) => {
+    const url = URL.createObjectURL(f), img = new Image();
+    img.onload = () => { const k = Math.min(1, 2000 / Math.max(img.width, img.height)), c = document.createElement("canvas"); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url); ok({ inline_data: { mime_type: "image/jpeg", data: c.toDataURL("image/jpeg", 0.85).split(",")[1] } }); };
+    img.onerror = () => falha(new Error(`não consegui abrir "${f.name}"`)); img.src = url;
+  });
+}
+async function corrigirManuscrito(files) {
+  const q = questaoAtual(); if (!sim || !q || !files.length) return;
+  const k = sim.it.tipo === "peca" ? 0 : sim.i, aba = estudoAba;
+  if (files.length > 12) { toast("Envie no máximo 12 folhas."); return; }
+  sim.resp[k] = { texto: "", corrigindo: true, manuscrito: true }; desenharEstudo(aba);
+  try {
+    const partes = await Promise.all([...files].map(fotoParaParte));
+    if (partes.reduce((t, x) => t + x.inline_data.data.length, 0) > 35e6) throw new Error("os arquivos são grandes demais; envie fotos em vez de PDF");
+    const c = await corrigirEscrita(q, "", partes);
+    sim.resp[k] = { texto: c.transcricao || "", correcao: c, conta: true, ok: +c.nota >= 6, manuscrito: true };
+  } catch (e) { sim.resp[k] = undefined; delete sim.resp[k]; toast("A IA não conseguiu corrigir o manuscrito (" + e.message + ")."); }
+  if (sim) desenharEstudo(aba);
+}
+document.addEventListener("change", e => { if (e.target.id === "provFotos" && e.target.files.length) corrigirManuscrito(e.target.files); });
 
 // ---------- eventos ----------
 function seletorCargo(id, cargos, atual) {
@@ -412,10 +482,11 @@ document.addEventListener("click", async e => {
   if (t.dataset.pecatipo) { fp.tipoAberto = fp.tipoAberto === t.dataset.pecatipo ? "" : t.dataset.pecatipo; gravarProv("filtroPeca", fp); desenharEstudo("pecas"); return; }
   if (t.dataset.pecarefazer) { delete pecaEstr[t.dataset.pecarefazer]; carregarEstrutura(t.dataset.pecarefazer, true); desenharEstudo("pecas"); return; }
   if (t.dataset.copiaresq) { const s = pecaEstr[t.dataset.copiaresq]; try { await navigator.clipboard.writeText(s.estrutura.esqueleto); toast("Esqueleto copiado."); } catch (err) {} return; }
+  if (t.dataset.provsep) { separarProvaGabarito(t.dataset.provsep); return; }
   if (t.id === "envEnviar") { enviarParaDrive(); return; }
   if (t.id === "padrIniciar") { iniciarPadronizacao(estudoAba); return; }
   if (t.id === "padrSair") { const a = padr && padr.area; padr = null; desenharEstudo(a || estudoAba); return; }
-  if (t.id === "padrRenomear" && padr) { renomearPadronizados(); return; }
+  if (t.id === "padrRenomear" && padr && padr.fase === "conferir") { renomearPadronizados(); return; }
   if (t.id === "provRecarregar") { repo = null; carregarRepo(true); desenharEstudo(estudoAba); return; }
   if (t.dataset.provsim) { iniciarSimulado(t.dataset.provsim, false); return; }
   if (t.dataset.provnovas) { iniciarSimulado(t.dataset.provnovas, true); return; }
@@ -446,6 +517,8 @@ document.addEventListener("click", async e => {
     catch (err) { sim.resp[k] = { texto }; toast("A IA não conseguiu corrigir agora (" + err.message + "). Veja o espelho."); }
     desenharEstudo(estudoAba); return;
   }
+  if (t.id === "provImprimir" && q) { imprimirProvaReal(q); return; }
+  if (t.id === "provFotosBtn") { $("provFotos").click(); return; }
   if (t.id === "provProx") {
     if (sim.it.tipo === "peca") { const aba = "pecas"; sim = null; desenharEstudo(aba); return; }
     sim.i++; if (sim.novas) { gerarNova(sim.i); gerarNova(sim.i + 1); }

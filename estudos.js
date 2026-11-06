@@ -190,10 +190,11 @@ async function juntarCaderno(f) {
 // ---------- Gemini (pelo Apps Script: a chave fica no servidor) ----------
 let iaIndisponivel = "";   // motivo, quando o servidor avisa que a IA não está configurada
 function iaLigada() { return !!(usuarioAtual && usuarioAtual.sessao) && !iaIndisponivel; }
-async function gemini(prompt) {
-  // limite de espera: sem resposta em 90 s, o app segue com a questão simples
-  const r = await Promise.race([postScript({ acao: "gemini", sessao: usuarioAtual.sessao, prompt }),
-    new Promise((_, falha) => setTimeout(() => falha(new Error("a IA demorou demais para responder")), 90000))]);
+async function gemini(prompt, opc) {
+  // limite de espera: sem resposta em 90 s, o app segue com a questão simples; opc.partes = imagens/PDF anexos
+  const o = opc || {};
+  const r = await Promise.race([postScript({ acao: "gemini", sessao: usuarioAtual.sessao, prompt, ...(o.partes ? { partes: o.partes } : {}) }),
+    new Promise((_, falha) => setTimeout(() => falha(new Error("a IA demorou demais para responder")), o.ms || 90000))]);
   if (!r.ok) {
     if (r.semChave || /desconhecida/i.test(r.erro || "")) iaIndisponivel = r.semChave ? r.erro : "O Apps Script ainda não tem a IA: atualize o script (veja CONFIGURAR-LOGIN.md).";
     throw new Error(r.erro || "falha na IA");
@@ -471,7 +472,12 @@ document.addEventListener("click", async e => {
   if (!e.target.closest("#estudoConteudo")) return;
   const t = e.target.closest("button,[data-estaba]"); if (!t) return;
   const filtro = lerEst("filtro", { modo: "ce", discs: [], tribs: ["STF", "STJ", "TSE"], n: 10 });
-  if (t.dataset.estaba) { desenharEstudo(t.dataset.estaba); return; }
+  if (t.dataset.estaba) {
+    // tocar em "Provas anteriores" ou "Peças práticas" sai da prova/peça aberta e volta para a lista (o rascunho fica salvo)
+    if (typeof sim !== "undefined" && sim && ["provas", "pecas"].includes(t.dataset.estaba)) sim = null;
+    if (typeof padr !== "undefined" && padr && padr.fase !== "renomeando") padr = null;
+    desenharEstudo(t.dataset.estaba); return;
+  }
   if (t.dataset.revtrib) { const f = filtroRevisao(), k = t.dataset.revtrib; f.tribs = f.tribs.includes(k) ? f.tribs.filter(x => x !== k) : [...f.tribs, k]; if (!f.tribs.length) f.tribs = [k]; gravarEst("rev", f); desenharEstudo("revisar"); return; }
   if (t.id === "revAnt") { moverRevisao(-1); return; }
   if (t.id === "revProx") { moverRevisao(1); return; }
