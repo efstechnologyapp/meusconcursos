@@ -212,7 +212,7 @@ function capitulosDe(L) { const s = new Set(); L.artigos.forEach(a => { const p 
 function htmlLerLei() {
   const prontas = leisProntas();
   if (!prontas.length) return `<p class="note">Nenhuma lei baixada ainda. Vá em <b>Minhas leis</b> e baixe as que vai estudar.</p><div class="actions" style="justify-content:flex-start"><button type="button" class="primary" data-estaba="lei-leis">Minhas leis</button></div>`;
-  const c = lerLeiCfg(); if (!leis[c.lei]) c.lei = prontas[0].id;
+  const c = lerLeiCfg(); if (!leis[c.lei]) { c.lei = prontas[0].id; c.cap = ""; gravarEst("leiRev", c); }   // guarda a lei mostrada (os botões Próximo/Anterior usam ela)
   const L = leis[c.lei], lista = listaFiltrada(c), mk = marcasLei(), chave = [c.lei, c.cap, c.busca, c.soDificeis ? 1 : 0].join("|");
   const pos = Math.min((c.pos || {})[chave] || 0, Math.max(0, lista.length - 1)), a = lista[pos];
   const revisados = L.artigos.filter(x => mk[x.id] && mk[x.id].rev).length, dificeis = L.artigos.filter(x => mk[x.id] && mk[x.id].dif).length;
