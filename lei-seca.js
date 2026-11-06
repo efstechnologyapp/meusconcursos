@@ -20,7 +20,7 @@ const LEIS_PADRAO = [
 ];
 let leis = {};          // id -> { meta, artigos: [{ id, rot, txt, cap }], quando, fonte }
 let leiUi = { baixando: {}, colar: null, msg: {} };
-const MATERIAS_LEI = ["Constitucional", "Penal", "Processo Penal", "Execução Penal", "Civil", "Processo Civil", "Criança e Adolescente", "Administrativo", "Eleitoral", "Tributário", "Trabalho", "Outras"];
+const MATERIAS_LEI = ["Constitucional", "Penal", "Processo Penal", "Execução Penal", "Civil", "Processo Civil", "Consumidor", "Criança e Adolescente", "Administrativo", "Eleitoral", "Tributário", "Empresarial", "Ambiental", "Institucional", "Trabalho", "Outras"];
 const materiaDe = l => l.materia || "Outras";
 const materiasUsadas = lista => MATERIAS_LEI.filter(m => lista.some(l => materiaDe(l) === m));
 // select de leis agrupado por matéria
@@ -91,7 +91,8 @@ async function baixarLei(id, forcar) {
   const meta = leiCatalogo().find(l => l.id === id); if (!meta || leiUi.baixando[id]) return;
   leiUi.baixando[id] = true; leiUi.msg[id] = ""; desenharEstudo(estudoAba);
   try {
-    const r = await postLongo({ acao: "lei", url: meta.url, forcar: !!forcar }, 180000);
+    const r = await postLongo({ acao: "lei", url: meta.url, alternativas: meta.alts || [], forcar: !!forcar }, 240000);
+    if (r.ok && r.url && r.url !== meta.url && meta.extra) gravarEst("leisExtras", lerEst("leisExtras", []).map(l => l.id === meta.id ? { ...l, url: r.url } : l));   // guarda o endereço que funcionou
     if (!r.ok) { if (r.bloqueado) { leiUi.colar = id; leiUi.msg[id] = "O site do Planalto recusou o acesso automático. Cole o texto da página (passo a passo abaixo)."; } else throw new Error(/desconhecida/i.test(r.erro || "") ? "atualize o Apps Script" : r.erro); }
     else { const reg = await guardarLei(meta, r.html, r); leiUi.msg[id] = `${reg.artigos.length} artigos${r.aviso ? " · " + r.aviso : ""}`; }
   } catch (e) { leiUi.msg[id] = "Não foi possível: " + e.message; }
@@ -123,6 +124,7 @@ function htmlLei(aba) {
 const leisProntas = () => leiCatalogo().filter(l => leis[l.id]);
 function htmlMinhasLeis() {
   const idx = lerEst("leisBaixadas", {});
+  if (!leiUi.editaisLidos) { leiUi.editaisLidos = true; setTimeout(procurarLeisNosEditais, 0); }   // inclui na lista as leis citadas nos editais
   const fm = lerEst("leiMat", ""), cat = leiCatalogo();
   let h = `<div class="est-chips lei-mats"><button type="button" class="chip-sel${!fm ? " on" : ""}" data-leimat="">Todas</button>${materiasUsadas(cat).map(m => `<button type="button" class="chip-sel${fm === m ? " on" : ""}" data-leimat="${esc(m)}">${esc(m)} <span class="ct">${cat.filter(l => materiaDe(l) === m).length}</span></button>`).join("")}</div>
     <p class="note">Baixe as leis que você vai estudar. O app pega o texto vigente no site do Planalto, tira o que está revogado (riscado no site) e separa os artigos. Fica guardado neste aparelho e na nuvem do app.</p>`;
@@ -244,6 +246,117 @@ function comecarLei() {
   prepararQuestao(0); desenharEstudo("lei-praticar"); $("estudoConteudo").scrollTop = 0;
 }
 
+// ---------- leis citadas nos editais dos concursos cadastrados ----------
+// número/ano -> [sigla, nome, matéria, id do catálogo (quando já está na lista padrão)]
+const LEIS_CONHECIDAS = {
+  "lei:7210:1984": ["LEP", "Lei de Execução Penal", "Execução Penal", "lep"], "lei:8069:1990": ["ECA", "Estatuto da Criança e do Adolescente", "Criança e Adolescente", "eca"],
+  "lei:11343:2006": ["Lei de Drogas", "Lei de Drogas", "Penal", "drogas"], "lei:11340:2006": ["Maria da Penha", "Lei Maria da Penha", "Penal", "mariapenha"],
+  "lei:8429:1992": ["LIA", "Lei de Improbidade Administrativa", "Administrativo", "improbidade"], "lei:13869:2019": ["Abuso de Autoridade", "Lei de Abuso de Autoridade", "Penal", "abuso"],
+  "lei:12850:2013": ["Org. Criminosas", "Lei das Organizações Criminosas", "Penal", "orcrim"], "lei:9296:1996": ["Interceptação", "Lei de Interceptação Telefônica", "Processo Penal", "intercept"],
+  "lei:4737:1965": ["Cód. Eleitoral", "Código Eleitoral", "Eleitoral", "ce"], "lei:10406:2002": ["CC", "Código Civil", "Civil", "cc"], "lei:13105:2015": ["CPC", "Código de Processo Civil", "Processo Civil", "cpc"],
+  "dl:2848:1940": ["CP", "Código Penal", "Penal", "cp"], "dl:3689:1941": ["CPP", "Código de Processo Penal", "Processo Penal", "cpp"],
+  "lei:8072:1990": ["Hediondos", "Lei dos Crimes Hediondos", "Penal"], "lei:8078:1990": ["CDC", "Código de Defesa do Consumidor", "Consumidor"],
+  "lei:8112:1990": ["Servidores", "Regime Jurídico dos Servidores Públicos Federais", "Administrativo"], "lei:14133:2021": ["Licitações", "Lei de Licitações e Contratos", "Administrativo"],
+  "lei:8666:1993": ["Licitações (antiga)", "Lei 8.666/1993 (licitações)", "Administrativo"], "lei:9099:1995": ["Juizados", "Lei dos Juizados Especiais", "Processo Civil"],
+  "lei:9455:1997": ["Tortura", "Lei de Tortura", "Penal"], "lei:9503:1997": ["CTB", "Código de Trânsito Brasileiro", "Penal"], "lei:9605:1998": ["Crimes Ambientais", "Lei de Crimes Ambientais", "Ambiental"],
+  "lei:9613:1998": ["Lavagem", "Lei de Lavagem de Dinheiro", "Penal"], "lei:9784:1999": ["Proc. Administrativo", "Lei do Processo Administrativo", "Administrativo"],
+  "lei:9868:1999": ["ADI/ADC", "Lei da ADI e da ADC", "Constitucional"], "lei:9882:1999": ["ADPF", "Lei da ADPF", "Constitucional"], "lei:10741:2003": ["Pessoa Idosa", "Estatuto da Pessoa Idosa", "Civil"],
+  "lei:10826:2003": ["Desarmamento", "Estatuto do Desarmamento", "Penal"], "lei:12016:2009": ["Mandado de Segurança", "Lei do Mandado de Segurança", "Processo Civil"],
+  "lei:12037:2009": ["Identificação Criminal", "Lei de Identificação Criminal", "Processo Penal"], "lei:12153:2009": ["Juizados Fazenda", "Juizados Especiais da Fazenda Pública", "Processo Civil"],
+  "lei:13146:2015": ["Pessoa com Deficiência", "Estatuto da Pessoa com Deficiência", "Civil"], "lei:13964:2019": ["Pacote Anticrime", "Pacote Anticrime", "Penal"],
+  "lei:7347:1985": ["Ação Civil Pública", "Lei da Ação Civil Pública", "Processo Civil"], "lei:4717:1965": ["Ação Popular", "Lei da Ação Popular", "Processo Civil"],
+  "lei:6830:1980": ["Execução Fiscal", "Lei de Execução Fiscal", "Tributário"], "lei:5172:1966": ["CTN", "Código Tributário Nacional", "Tributário"],
+  "lei:9504:1997": ["Lei das Eleições", "Lei das Eleições", "Eleitoral"], "lei:9096:1995": ["Partidos", "Lei dos Partidos Políticos", "Eleitoral"],
+  "lc:64:1990": ["Inelegibilidades", "Lei das Inelegibilidades (LC 64/1990)", "Eleitoral"], "lc:35:1979": ["LOMAN", "Lei Orgânica da Magistratura Nacional (LC 35/1979)", "Institucional"],
+  "lc:101:2000": ["LRF", "Lei de Responsabilidade Fiscal (LC 101/2000)", "Administrativo"], "lei:13709:2018": ["LGPD", "Lei Geral de Proteção de Dados", "Civil"],
+  "lei:12527:2011": ["LAI", "Lei de Acesso à Informação", "Administrativo"], "lei:12846:2013": ["Anticorrupção", "Lei Anticorrupção", "Administrativo"],
+  "lei:8137:1990": ["Crimes Tributários", "Crimes contra a Ordem Tributária", "Penal"], "lei:7716:1989": ["Racismo", "Lei dos Crimes de Racismo", "Penal"],
+  "lei:11101:2005": ["Falências", "Lei de Falências e Recuperação", "Empresarial"], "lei:6015:1973": ["Registros Públicos", "Lei de Registros Públicos", "Civil"],
+  "lei:8245:1991": ["Locações", "Lei de Locações", "Civil"], "lei:9307:1996": ["Arbitragem", "Lei de Arbitragem", "Processo Civil"],
+  "dl:4657:1942": ["LINDB", "Lei de Introdução às Normas do Direito Brasileiro", "Civil"], "dl:3688:1941": ["Contravenções", "Lei das Contravenções Penais", "Penal"],
+  "dl:201:1967": ["DL 201", "Crimes de Responsabilidade de Prefeitos (DL 201/1967)", "Penal"], "lei:8038:1990": ["Lei 8.038", "Processos no STF e no STJ (Lei 8.038/1990)", "Processo Penal"],
+  "lei:9714:1998": ["Penas Alternativas", "Penas Restritivas de Direitos (Lei 9.714/1998)", "Penal"], "lei:7960:1989": ["Prisão Temporária", "Lei da Prisão Temporária", "Processo Penal"],
+  "lei:12830:2013": ["Investigação Criminal", "Investigação Criminal pelo Delegado (Lei 12.830/2013)", "Processo Penal"], "lei:13431:2017": ["Depoimento Especial", "Escuta e Depoimento Especial (Lei 13.431/2017)", "Processo Penal"],
+  "lei:11079:2004": ["PPP", "Lei das Parcerias Público-Privadas", "Administrativo"], "lei:8987:1995": ["Concessões", "Lei de Concessões", "Administrativo"],
+  "lei:6938:1981": ["PNMA", "Política Nacional do Meio Ambiente", "Ambiental"], "lei:12651:2012": ["Código Florestal", "Código Florestal", "Ambiental"]
+};
+// nomes que aparecem no edital sem o número
+const NOMES_LEIS = [
+  [/constitui[çc][ãa]o (federal|da rep[úu]blica)/i, "cf"], [/c[óo]digo de processo penal/i, "dl:3689:1941"], [/c[óo]digo penal(?! militar)/i, "dl:2848:1940"],
+  [/c[óo]digo de processo civil/i, "lei:13105:2015"], [/c[óo]digo civil/i, "lei:10406:2002"], [/c[óo]digo eleitoral/i, "lei:4737:1965"], [/c[óo]digo de defesa do consumidor/i, "lei:8078:1990"],
+  [/c[óo]digo tribut[áa]rio nacional/i, "lei:5172:1966"], [/estatuto da crian[çc]a e do adolescente/i, "lei:8069:1990"], [/lei de execu[çc][ãa]o penal/i, "lei:7210:1984"],
+  [/lei maria da penha/i, "lei:11340:2006"], [/lei de drogas|lei antidrogas/i, "lei:11343:2006"], [/lei de improbidade/i, "lei:8429:1992"], [/lei org[âa]nica da magistratura/i, "lc:35:1979"],
+  [/c[óo]digo de tr[âa]nsito/i, "lei:9503:1997"], [/estatuto do desarmamento/i, "lei:10826:2003"], [/lei de introdu[çc][ãa]o [àa]s normas/i, "dl:4657:1942"]
+];
+const RE_LEI_NUM = /\b(lei\s+complementar|lei|decreto[\s-]+lei|decreto)\s+(?:federal\s+)?(?:n[º°o.]*\s*|n[úu]mero\s+)?(\d{1,2}(?:\.\d{3})+|\d{1,5})(?:\s*[,/]\s*(?:de\s+\d{1,2}(?:º|°)?\s+de\s+[a-zç]+\s+de\s+)?|\s+de\s+\d{1,2}(?:º|°)?\s+de\s+[a-zç]+\s+de\s+|\s*\/\s*)(\d{4}|\d{2})\b/gi;
+function chaveLei(tipo, num, ano) {
+  const t = /complementar/i.test(tipo) ? "lc" : /decreto[\s-]+lei/i.test(tipo) ? "dl" : /decreto/i.test(tipo) ? "dec" : "lei";
+  let a = +ano; if (a < 100) a += a > 30 ? 1900 : 2000;
+  return `${t}:${String(num).replace(/\D/g, "")}:${a}`;
+}
+// endereço no Planalto pelo padrão de pastas do site (com variações "compilado"/"compilada")
+function urlsPlanalto(k) {
+  const [t, n, a] = k.split(":"), ano = +a, B = "https://www.planalto.gov.br/ccivil_03/";
+  const faixa = [[2004, 2006], [2007, 2010], [2011, 2014], [2015, 2018], [2019, 2022], [2023, 2026], [2027, 2030]].find(([i, f]) => ano >= i && ano <= f);
+  let base;
+  if (t === "lc") base = `${B}leis/lcp/lcp${n}.htm`;
+  else if (t === "dl") base = `${B}decreto-lei/del${n}.htm`;
+  else if (t === "dec") base = ano <= 2000 ? `${B}decreto/d${n}.htm` : ano <= 2003 ? `${B}decreto/${ano}/d${n}.htm` : `${B}_ato${faixa[0]}-${faixa[1]}/${ano}/decreto/d${n}.htm`;
+  else base = ano <= 2000 ? `${B}leis/l${n}.htm` : ano <= 2003 ? `${B}leis/${ano}/l${n}.htm` : `${B}_ato${faixa[0]}-${faixa[1]}/${ano}/lei/l${n}.htm`;
+  return [base.replace(/\.htm$/, "compilado.htm"), base.replace(/\.htm$/, "compilada.htm"), base];
+}
+// matéria pela seção do edital onde a lei aparece ("DIREITO PROCESSUAL PENAL: … Lei nº 9.296/1996 …")
+function materiaPeloContexto(trecho) {
+  const t = semAcentoEst(trecho), achados = [...t.matchAll(/(direito|nocoes de direito)\s+(processual\s+(penal|civil)|penal|civil|constitucional|administrativo|eleitoral|tributario|empresarial|comercial|ambiental|do consumidor|da crianca|financeiro|do trabalho|processual do trabalho)|execucao penal|legislacao (penal|criminal) especial/g)];
+  if (!achados.length) return "";
+  const u = achados[achados.length - 1][0];
+  return /processual penal/.test(u) ? "Processo Penal" : /processual civil/.test(u) ? "Processo Civil" : /penal|criminal/.test(u) ? (/execucao/.test(u) ? "Execução Penal" : "Penal") : /civil/.test(u) ? "Civil" : /constitucional/.test(u) ? "Constitucional"
+    : /administrativo|financeiro/.test(u) ? "Administrativo" : /eleitoral/.test(u) ? "Eleitoral" : /tributario/.test(u) ? "Tributário" : /empresarial|comercial/.test(u) ? "Empresarial" : /ambiental/.test(u) ? "Ambiental" : /consumidor/.test(u) ? "Consumidor" : /crianca/.test(u) ? "Criança e Adolescente" : /trabalho/.test(u) ? "Trabalho" : "";
+}
+function leisDoTexto(texto) {
+  const achadas = {};
+  const soma = (k, pos, rotulo) => { const a = achadas[k] = achadas[k] || { k, n: 0, rotulo, mats: {} }; a.n++; const m = materiaPeloContexto(texto.slice(Math.max(0, pos - 3000), pos)); if (m) a.mats[m] = (a.mats[m] || 0) + 1; };
+  for (const m of texto.matchAll(RE_LEI_NUM)) { const k = chaveLei(m[1], m[2], m[3]); if (+k.split(":")[2] < 1850 || +k.split(":")[2] > new Date().getFullYear() + 1) continue; soma(k, m.index, m[0].replace(/\s+/g, " ").trim()); }
+  for (const [re, k] of NOMES_LEIS) { const g = new RegExp(re.source, "gi"); for (const m of texto.matchAll(g)) soma(k, m.index, m[0]); }
+  return achadas;
+}
+function metaDaChave(k, a) {
+  if (k === "cf") return LEIS_PADRAO.find(l => l.id === "cf");
+  const conhecida = LEIS_CONHECIDAS[k];
+  if (conhecida && conhecida[3]) return LEIS_PADRAO.find(l => l.id === conhecida[3]);
+  const [t, n, ano] = k.split(":"), num = n.length > 3 ? n.replace(/\B(?=(\d{3})+(?!\d))/g, ".") : n;
+  const tipo = { lc: "Lei Complementar", dl: "Decreto-Lei", dec: "Decreto", lei: "Lei" }[t];
+  const mat = conhecida ? conhecida[2] : (Object.entries(a.mats || {}).sort((x, y) => y[1] - x[1])[0] || ["Outras"])[0];
+  const urls = urlsPlanalto(k);
+  return { id: "e-" + k.replace(/:/g, "-"), sigla: conhecida ? conhecida[0] : `${tipo === "Lei" ? "Lei" : tipo === "Lei Complementar" ? "LC" : tipo === "Decreto-Lei" ? "DL" : "Dec."} ${num}/${ano}`,
+    nome: conhecida ? (/\d\/\d{4}/.test(conhecida[1]) ? conhecida[1] : `${conhecida[1]} (${tipo} ${num}/${ano})`) : `${tipo} nº ${num}/${ano}`, materia: mat, url: urls[0], alts: urls.slice(1), extra: true, doEdital: true };
+}
+async function procurarLeisNosEditais() {
+  if (leiUi.procurando) return;
+  const conc = itens.filter(x => x.edital_arquivo && andamento(x).ativo);
+  if (!conc.length) return;
+  leiUi.procurando = true;
+  const cache = lerEst("leisEditais", {}), total = {};
+  for (const x of conc) {
+    try {
+      const marca = x.edital_arquivo.nome + "|" + (x.edital_arquivo.tamanho || x.edital_arquivo.size || "");
+      let achadas = cache[x.id] && cache[x.id].marca === marca ? cache[x.id].achadas : null;
+      if (!achadas) {
+        const blob = await arq("ler", `${x.id}:edital`).catch(() => null) || await baixarDaNuvem(`${x.id}:edital`).catch(() => null);
+        if (!blob) continue;
+        achadas = leisDoTexto(await textoDoPdf(blob, 400));
+        cache[x.id] = { marca, achadas }; gravarEst("leisEditais", cache);
+      }
+      Object.values(achadas).forEach(a => { const t = total[a.k] = total[a.k] || { k: a.k, n: 0, mats: {} }; t.n += a.n; Object.entries(a.mats).forEach(([m, c]) => t.mats[m] = (t.mats[m] || 0) + c); });
+    } catch (e) { console.warn("edital", x.nome, e); }
+  }
+  leiUi.procurando = false;
+  // as leis encontradas entram na lista normal (as já existentes e as que você removeu ficam como estão)
+  const ext = lerEst("leisExtras", []), fora = lerEst("leisRemovidas", []), cat = leiCatalogo();
+  let novas = 0;
+  Object.values(total).sort((a, b) => b.n - a.n).forEach(t => { const m = metaDaChave(t.k, t); if (m && !fora.includes(m.id) && !cat.some(l => l.id === m.id) && !ext.some(l => l.id === m.id)) { ext.push(m); novas++; } });
+  if (novas) { gravarEst("leisExtras", ext); if (estudoAba === "lei-leis") desenharEstudo("lei-leis"); }
+}
 // ---------- eventos ----------
 document.addEventListener("click", e => {
   if (!e.target.closest("#estudoConteudo")) return;
@@ -253,7 +366,7 @@ document.addEventListener("click", e => {
   if (d.leicolar) { leiUi.colar = leiUi.colar === d.leicolar ? null : d.leicolar; desenharEstudo(estudoAba); setTimeout(() => { const el = $("leiCola"); if (el) el.focus(); }, 50); return; }
   if (d.leicolarfechar) { leiUi.colar = null; desenharEstudo(estudoAba); return; }
   if (d.leiler) { const c = lerLeiCfg(); c.lei = d.leiler; c.cap = ""; c.busca = ""; gravarEst("leiRev", c); desenharEstudo("lei-ler"); return; }
-  if (d.leiremover) { gravarEst("leisExtras", lerEst("leisExtras", []).filter(l => l.id !== d.leiremover)); desenharEstudo(estudoAba); return; }
+  if (d.leiremover) { gravarEst("leisRemovidas", [...lerEst("leisRemovidas", []), d.leiremover]); gravarEst("leisExtras", lerEst("leisExtras", []).filter(l => l.id !== d.leiremover)); desenharEstudo(estudoAba); return; }
   if (t.id === "leiNovaAdd") {
     const nome = $("leiNovaNome").value.trim(), url = $("leiNovaUrl").value.trim(), sigla = $("leiNovaSigla").value.trim() || nome.slice(0, 20);
     if (!nome || !/^https?:\/\/(www\.)?planalto\.gov\.br\//i.test(url)) { toast("Informe o nome e um link do planalto.gov.br."); return; }
