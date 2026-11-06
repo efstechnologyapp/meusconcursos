@@ -48,11 +48,18 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .card:hover{border-color:var(--brand)}
 .date{display:flex;flex-direction:column;align-items:center;justify-content:center;border-right:1px dashed var(--line);padding-right:14px;font-family:var(--f-mono)}
 .date .d{font-size:26px;line-height:1;font-weight:500}
-.date .m{font-size:12px;text-transform:uppercase;color:var(--muted);letter-spacing:.04em;white-space:nowrap;text-align:center}
+.date .m .m-e{text-transform:none}
+.date .m{font-size:12px;text-transform:uppercase;color:var(--muted);letter-spacing:.04em;white-space:nowrap;text-align:center;line-height:1.3}
 .info{min-width:0}
 .info h3{font-family:var(--f-display);font-weight:600;font-size:18px;margin:0;line-height:1.2;overflow-wrap:anywhere}
 .info p{margin:2px 0 0;color:var(--muted);font-size:14px;overflow-wrap:anywhere}
 .right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:0}
+#alertas{display:flex;flex-direction:column;gap:8px;margin:0 0 12px}#alertas:empty{display:none}
+.alerta-boleto{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:#fff4d6;border:1px solid #f0c24b;color:#4d3800;font-size:14px}
+.alerta-boleto.hoje{background:#fde7e5;border-color:#e8a29b;color:#6e1710}
+.alerta-boleto>span:nth-child(2){flex:1}
+.ab-ic{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:currentColor;font-weight:800;flex:none}
+.ab-ic{color:inherit}.ab-ic{background:#d08a00;color:#fff}.alerta-boleto.hoje .ab-ic{background:var(--danger)}
 .count{font-family:var(--f-mono);font-size:13px;background:var(--accent);color:var(--accent-ink);padding:2px 8px;border-radius:6px;white-space:nowrap}
 .count.today{background:var(--danger);color:#fff}
 .count.past{background:var(--chip);color:var(--muted)}
@@ -240,6 +247,23 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .padr-esc input{width:auto;margin-top:3px}.padr-esc>span:nth-child(2){flex:1;min-width:0;overflow-wrap:anywhere}
 .chip-alerta{background:#fff1d6;color:#7a5600}
 .padr-ren{flex-direction:row;align-items:center;gap:6px;float:right;font-size:13px}.padr-ren input{width:auto}
+#pgEstudo .pe-topo{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.pe-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:6px}
+.pe-card{display:flex;flex-direction:column;align-items:flex-start;gap:10px;text-align:left;padding:18px;border-radius:16px;background:var(--surface);border:1px solid var(--line);box-shadow:0 1px 2px rgba(20,33,61,.04);position:relative;transition:transform .12s,box-shadow .12s,border-color .12s;min-height:190px}
+.pe-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(20,33,61,.10);border-color:var(--brand)}
+.pe-ic{width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--brand) 10%,var(--surface));color:var(--brand)}
+.pe-ic svg{width:26px;height:26px}
+.pe-card h3{margin:0;font-family:var(--f-display);font-size:19px}
+.pe-card p{margin:0;color:var(--muted);font-size:14px;line-height:1.45}
+.pe-stats{margin-top:auto!important;font-size:13px!important;color:var(--ink)!important}
+.pe-card .badge-pend{position:absolute;top:14px;right:14px;font-size:12px;line-height:20px;min-width:20px}
+.pe-pend{font-size:12px!important;color:#7a5600!important;font-weight:600}
+@media (max-width:760px){.pe-cards{grid-template-columns:1fr}.pe-card{min-height:0}}
+.sim-box{border:2px solid color-mix(in srgb,var(--brand) 35%,var(--line));border-radius:14px;padding:14px;background:color-mix(in srgb,var(--brand) 4%,var(--surface))}
+.sim-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0}
+@media (max-width:560px){.sim-grid{grid-template-columns:1fr}}
+.selo-resp{color:var(--ok);font-weight:600;white-space:nowrap}
+.selo-nao{color:var(--muted);font-style:italic;white-space:nowrap}
 .cart-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:6px}
 .cart-q{flex-direction:row;align-items:center;gap:6px;font-size:13px;color:var(--ink)}
 .cart-q b{min-width:22px;text-align:right}.cart-q select{padding:4px 6px;font-size:14px}
@@ -460,6 +484,8 @@ fieldset{border:none;padding:0;margin:0;display:contents}
     <img id="usuFoto" alt="" referrerpolicy="no-referrer"><span id="usuEmail"></span>
     <button type="button" id="btnSair">Sair</button>
   </div>
+  <div id="pgEstudo" hidden></div>
+  <div id="pgHome">
   <header>
     <div>
       <h1>Meus <mark>Concursos</mark></h1>
@@ -468,6 +494,7 @@ fieldset{border:none;padding:0;margin:0;display:contents}
     <div class="topo-acoes"><button id="btnEstudo" type="button">Estudar</button><button class="primary" id="btnNovo" type="button">+ Novo concurso</button></div>
   </header>
 
+  <div id="alertas"></div>
   <p class="section-label" id="lblProx" hidden>Em andamento</p>
   <div class="list" id="proximos"></div>
   <p class="section-label" id="lblPass" hidden>Encerrados</p>
@@ -479,9 +506,10 @@ fieldset{border:none;padding:0;margin:0;display:contents}
     <input type="file" id="arqBackup" accept=".json,application/json" hidden>
   </div>
   <div class="agenda-box">
-    <label class="chk"><input type="checkbox" id="chkAgenda"> <span>Gravar as datas das provas no meu Google Agenda <span id="agendaEmail" class="agenda-email"></span></span></label>
+    <label class="chk"><input type="checkbox" id="chkAgenda"> <span>Gravar as datas das provas e os vencimentos de boleto no meu Google Agenda <span id="agendaEmail" class="agenda-email"></span></span></label>
     <div class="agenda-cores" id="agendaCores" hidden></div>
     <p class="note" id="agendaStatus"></p>
+  </div>
   </div>
   <p class="note" style="text-align:center;margin:0">Seus concursos e anexos são sincronizados com a sua conta e aparecem em qualquer aparelho em que você entrar. O backup em arquivo é opcional.</p>
   <p class="note" id="versaoApp" style="text-align:center;margin:0;font-size:11px"></p>
@@ -588,6 +616,8 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 <script src="estudos.js"></script>
 <script src="provas.js"></script>
 <script src="historico.js"></script>
+<script src="papel-info.js"></script>
+<script src="pagina-estudo.js"></script>
 <script>
 const CHAVE="meus-concursos-dados";
 const MESES=["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
@@ -613,7 +643,7 @@ const STATUS=[
   "Inscrição homologada, aguardando local de prova",
   "Local de prova divulgado"
 ];
-const STATUS_CURTO=["Inscrição pendente","Pagamento pendente","Aguardando homologação","Aguardando local de prova","Local divulgado"];
+const STATUS_CURTO=["Inscrição pendente","Boleto pendente","Aguardando homologação","Aguardando local de prova","Local divulgado"];
 const STATUS_ANTIGO={"Inscrição a fazer":0,"Inscrito":3,"Boleto pago":2,"Em andamento":4,"Aprovado":4,"Encerrado":4};
 const CLIP_SVG='<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.4 11.6 12.3 20.7a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const CHAVE_NOME="meus-concursos-nome";
@@ -743,7 +773,7 @@ function cardHTML(x){
   const d=f? parseData(f.data) : null;
   let c = a.eliminado ? {t:"encerrado",c:"past"} : contagem(f? diasAte(f.data) : null);
   const vb = x.status===STATUS[1] && x.boleto_venc ? diasAte(x.boleto_venc) : null;
-  const chipBoleto = vb===null ? "" : `<span class="count ${vb<=2?"warn":""}">${vb<0?"boleto vencido":vb===0?"boleto vence hoje":"boleto vence em "+vb+(vb===1?" dia":" dias")}</span>`;
+  const chipBoleto = vb===null ? "" : `<span class="count ${vb<=2?"warn":""}">${vb<0?"boleto vencido":vb===0?"boleto vence hoje":vb===1?"boleto vence amanhã":"boleto vence em "+vb+(vb===1?" dia":" dias")}</span>`;
   const grupoProx = f ? (gruposDeFases(x.fases).find(g=>g.includes(a.prox.i))||[a.prox.i]) : [];
   const turProx = emTurnos(grupoProx,x.fases);
   const faseTxt = f ? (turProx
@@ -769,7 +799,7 @@ function cardHTML(x){
     return `<p class="fase-ok">${esc([fz.nome,"Aprovado",q,fz.classificacao&&`classificação ${fz.classificacao}`].filter(Boolean).join(" · "))}</p>`;
   }).join("");
   return `<button class="card" type="button" data-id="${esc(x.id)}">
-    <div class="date">${x.logo?`<img class="logo" src="${x.logo}" alt="">`:`<span class="sigla">${esc(siglaDoOrgao(x.nome))}</span>`}${d?`<span class="m">${String(d.getDate()).padStart(2,"0")} ${MESES[d.getMonth()]} ${String(d.getFullYear()).slice(2)}</span>`:""}</div>
+    <div class="date">${x.logo?`<img class="logo" src="${x.logo}" alt="">`:`<span class="sigla">${esc(siglaDoOrgao(x.nome))}</span>`}${d?`<span class="m">${rotuloDatas(datasDaEtapa(x,a.prox.i))}</span>`:""}</div>
     <div class="info"><h3>${esc(x.nome)}</h3>${sub?`<p>${esc(sub)}</p>`:""}${tv?`<p class="vagas-l"><b>${esc(tv.tot)}</b>${tv.det?" · "+esc(tv.det):""}</p>`:""}${aprovadas}${faseTxt?`<p class="fase-prox">${esc(faseTxt)}</p>`:""}</div>
     <div class="right"><span class="count ${c.c}">${c.t}</span>${chipBoleto}${stChip}${chipsViagem}${passo}</div>
   </button>`;
@@ -785,6 +815,9 @@ function render(){
     `<div class="empty">Nenhum concurso em andamento.<br>Clique em <b>+ Novo concurso</b> para cadastrar o primeiro.</div>`;
   $("passados").innerHTML = fim.map(cardHTML).join("");
   $("lblProx").hidden=false; $("lblPass").hidden=!fim.length;
+  // aviso de boleto: na véspera e no dia do vencimento (a notificação no celular vem do Google Agenda)
+  const avisos=ativos.filter(x=>x.status===STATUS[1]&&x.boleto_venc&&[0,1].includes(diasAte(x.boleto_venc)));
+  $("alertas").innerHTML=avisos.map(x=>{ const d=diasAte(x.boleto_venc); return `<div class="alerta-boleto${d===0?" hoje":""}" role="alert"><span class="ab-ic" aria-hidden="true">!</span><span>O boleto de <b>${esc(x.nome)}</b> vence <b>${d===0?"hoje":"amanhã"}</b> (${fmtCurta(x.boleto_venc)}).${x.boleto_valor?" Valor: "+esc(x.boleto_valor)+".":""}</span><button type="button" class="mini" data-verboleto="${esc(x.id)}">Ver boleto</button></div>`; }).join("");
   const comData=ativos.map(x=>({x,a:andamento(x)})).filter(o=>o.a.prox);
   $("resumo").textContent = comData.length
     ? `Próxima prova: ${comData[0].x.nome} (${comData[0].a.prox.f.nome}), ${contagem(diasAte(comData[0].a.prox.f.data)).t}.`
@@ -977,6 +1010,25 @@ function htmlResultado(f){
 // Fases no mesmo dia formam um grupo: data e local aparecem uma vez só.
 // Com o mesmo horário de início, os horários também são comuns; com horários/turnos
 // diferentes (ex.: objetiva de manhã e discursiva à tarde), cada fase mostra o seu.
+// Provas da mesma etapa em dias diferentes (ex.: TJMG, 2ª etapa: discursiva e sentença cível no dia 17, sentença penal no dia 18):
+// o card mostra todas as datas. A etapa vem do nome da fase ("2ª etapa – …", "Fase 2 – …").
+function etapaDaFase(f){ const n=String(f&&f.nome||""), m=n.match(/(\d+)\s*[ªºa°o]?\s*(?:etapa|fase)\b/i)||n.match(/\b(?:etapa|fase)\s*(\d+)/i); return m?m[1]:""; }
+function datasDaEtapa(x,i){
+  const fs=x.fases||[], f=fs[i]; if(!f||!f.data) return [];
+  const et=etapaDaFase(f), ini=parseData(f.data);
+  if(!et) return [f.data];
+  const ds=new Set([f.data]);
+  for(let k=i+1;k<fs.length;k++){ const z=fs[k]; if(!z.data||etapaDaFase(z)!==et) continue; const dz=parseData(z.data); if(dz&&ini&&(dz-ini)/864e5>=0&&(dz-ini)/864e5<=10) ds.add(z.data); }
+  return [...ds].sort();
+}
+function rotuloDatas(ds){
+  const p=ds.map(parseData).filter(Boolean); if(!p.length) return "";
+  const dd=d=>String(d.getDate()).padStart(2,"0"), e=l=>l.length>1?l.slice(0,-1).join(", ")+' <span class="m-e">e</span> '+l[l.length-1]:l[0], aa=d=>String(d.getFullYear()).slice(2);
+  if(p.length===1) return `${dd(p[0])} ${MESES[p[0].getMonth()]} ${aa(p[0])}`;
+  // várias datas: dias numa linha e mês/ano na outra, para caber embaixo da logo
+  if(p.every(d=>d.getMonth()===p[0].getMonth()&&d.getFullYear()===p[0].getFullYear())) return `${e(p.map(dd))}<br>${MESES[p[0].getMonth()]} ${aa(p[0])}`;
+  return p.map((d,k)=>`${dd(d)} ${MESES[d.getMonth()]}${k===p.length-1?" "+aa(d):k===p.length-2?' <span class="m-e">e</span>':","}`).join("<br>");
+}
 function gruposDeFases(fases){
   const g=[];
   fases.forEach((f,i)=>{
@@ -1159,11 +1211,14 @@ $("form").addEventListener("submit", e=>{
 });
 
 document.addEventListener("click", e=>{
+  const vb=e.target.closest("[data-verboleto]"); if(vb){ abrirVer(vb.dataset.verboleto); return; }
   const card=e.target.closest(".card"); if(card){ abrirVer(card.dataset.id); return; }
   if(e.target.closest("[data-close]")){ e.target.closest("dialog").close(); }
 });
 $("btnNovo").onclick=()=>abrirForm(null);
-$("btnEstudo").onclick=()=>abrirEstudo();
+// ao voltar ao app num outro dia, o aviso de boleto se atualiza
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden && typeof itens!=="undefined" && $("proximos")) render(); });
+$("btnEstudo").onclick=()=>{ location.hash="estudar"; };
 
 // ---------- Situação e boleto ----------
 $("f_status").innerHTML = STATUS.map(t=>`<option>${t}</option>`).join("");
@@ -1651,7 +1706,7 @@ iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO=64;
+const APP_VERSAO=73;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{
