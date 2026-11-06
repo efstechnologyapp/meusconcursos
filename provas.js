@@ -32,6 +32,7 @@ async function carregarRepo(forcar) {
     const r = await postLongo({ acao: "repositorio" }, 120000);
     // o nome da pasta do cargo pode variar ("Delegado de Polícia", "Magistratura", "Ministério Público"…): agrupa no cargo-padrão
     if (r.ok) (r.itens || []).forEach(i => { i.pastaCargo = i.cargo; i.cargo = cargoPadrao(i.cargo); });
+    if (r.ok) { r.soltos = (r.itens || []).filter(i => i.soGab); r.itens = (r.itens || []).filter(i => !i.soGab); }
     repo = r.ok ? r : { erro: /desconhecida/i.test(r.erro || "") ? "O Apps Script ainda não tem o repositório de provas: atualize o script (veja CONFIGURAR-LOGIN.md)." : r.erro, itens: [] };
   } catch (e) { repo = { erro: "Sem conexão com o servidor.", itens: [] }; }
   repoCarregando = false;
@@ -113,15 +114,32 @@ async function enviarParaDrive() {
 // "PCDF/2026 - Cebraspe - prova objetiva" e "PCDF/2026 - Cebraspe - gabarito prova objetiva"
 let padr = null;   // { itens: [{it, ident, nomeProva, nomeGab, erro}], i, fase }
 const PAPEL = { objetiva: ["prova objetiva", "gabarito prova objetiva"], subjetiva: ["prova subjetiva", "padrão de resposta prova subjetiva"], peca: ["peça prática", "padrão de resposta peça prática"] };
-function montarNomes(x) {
-  const d = x.ident || {}, base = [[d.orgao, d.ano].filter(Boolean).join("/"), d.banca].filter(Boolean).join(" - ") || x.it.nome;
-  // o nome da peça a redigir não entra no nome do arquivo (seria "spoiler" da prova); peças do mesmo concurso ganham (2), (3)…
-  x.nomeProva = `${base} - ${PAPEL[x.it.tipo][0]}`;
-  x.nomeGab = x.it.gab ? `${base} - ${PAPEL[x.it.tipo][1]}` : "";
+function baseIdent(x) { const d = x.ident || {}; return [[d.orgao, d.ano].filter(Boolean).join("/"), d.banca].filter(Boolean).join(" - ") || x.it.nome; }
+// monta os nomes de todos os arquivos: o nome da peça a redigir não entra (seria "spoiler");
+// arquivo sem par que a IA reconheceu como gabarito/espelho vira gabarito e se junta à prova do mesmo concurso;
+// provas repetidas do mesmo concurso na mesma pasta ganham (2), (3)…
+function ajustarNomes(itens) {
+  const prontos = itens.filter(x => x.ident || x.erro);
+  const ehGab = x => !x.it.gab && (x.it.soGab || (x.ident && x.ident.papel === "gabarito"));
+  const nome = (x, base, papel, n) => `${base} - ${PAPEL[x.it.tipo][papel]}${n > 1 ? ` (${n})` : ""}`;
+  const cont = {};
+  prontos.filter(x => !ehGab(x)).forEach(x => {
+    const base = baseIdent(x), k = x.it.tipo + "|" + x.it.pastaCargo + "|" + base;
+    x.n = cont[k] = (cont[k] || 0) + 1; x.base = base; x.gabSolto = null;
+    x.nomeProva = nome(x, base, 0, x.n); x.nomeGab = x.it.gab ? nome(x, base, 1, x.n) : "";
+  });
+  const contG = {};
+  prontos.filter(ehGab).forEach(g => {
+    const base = baseIdent(g);
+    const par = prontos.find(p => !ehGab(p) && !p.it.gab && !p.gabSolto && p.it.tipo === g.it.tipo && p.it.pastaCargo === g.it.pastaCargo && p.ident && g.ident && p.ident.orgao === g.ident.orgao && p.ident.ano === g.ident.ano);
+    if (par) { par.gabSolto = g; g.parDe = par.base; g.nomeProva = nome(g, par.base, 1, par.n); return; }
+    const k = g.it.tipo + "|" + g.it.pastaCargo + "|" + base; contG[k] = (contG[k] || 0) + 1;
+    g.parDe = ""; g.nomeProva = nome(g, base, 1, contG[k]); g.nomeGab = "";
+  });
 }
 async function iniciarPadronizacao(area) {
   if (!repo || !repo.itens) return;
-  padr = { area, fase: "identificando", itens: repo.itens.map(it => ({ it })), i: 0 };
+  padr = { area, fase: "identificando", itens: [...repo.itens, ...(repo.soltos || [])].map(it => ({ it })), i: 0 };
   desenharEstudo(area);
   for (const x of padr.itens) {
     if (!padr) return;
@@ -130,9 +148,8 @@ async function iniciarPadronizacao(area) {
       if (!r.ok) throw new Error(/desconhecida/i.test(r.erro || "") ? "atualize o Apps Script" : r.erro);
       x.ident = r;
     } catch (e) { x.erro = e.message; }
-    montarNomes(x); padr.i++;
-    // nomes repetidos na mesma pasta ganham um número
-    const vistos = {}; padr.itens.filter(y => y.nomeProva).forEach(y => { const k = y.it.tipo + y.it.pastaCargo + y.nomeProva; vistos[k] = (vistos[k] || 0) + 1; if (vistos[k] > 1 && !/\(\d\)$/.test(y.nomeProva)) { y.nomeProva += ` (${vistos[k]})`; if (y.nomeGab) y.nomeGab += ` (${vistos[k]})`; } });
+    if (!padr) return;
+    padr.i++; ajustarNomes(padr.itens);
     if (padr && ["provas", "pecas"].includes(estudoAba)) desenharEstudo(estudoAba);
   }
   if (padr) { padr.fase = "conferir"; desenharEstudo(estudoAba); }
@@ -142,7 +159,7 @@ function htmlPadronizar() {
   const TIPOS = { objetiva: "Provas objetivas", subjetiva: "Provas subjetivas", peca: "Peças jurídicas" };
   return `<div class="est-prog"><button type="button" class="mini" id="padrSair">‹ Voltar</button><b>Padronizar nomes dos arquivos</b></div>
     <p class="note">${p.fase === "identificando" ? `A IA está lendo as provas para identificar órgão, ano e banca: ${p.i} de ${total}… (só na primeira vez; depois fica guardado)` : p.fase === "renomeando" ? "Renomeando no Drive…" : "Confira e corrija os nomes antes de renomear. Formato: ÓRGÃO/ANO - Banca - tipo."}</p>
-    ${p.itens.map((x, k) => `<div class="padr-item"><p class="note">${esc(TIPOS[x.it.tipo])} / ${esc(x.it.pastaCargo || x.it.cargo)}${x.erro ? ` · <span style="color:var(--danger)">não identificado (${esc(x.erro)})</span>` : ""}</p>
+    ${p.itens.map((x, k) => `<div class="padr-item"><p class="note">${esc(TIPOS[x.it.tipo])} / ${esc(x.it.pastaCargo || x.it.cargo)}${x.erro ? ` · <span style="color:var(--danger)">não identificado (${esc(x.erro)})</span>` : ""}${x.parDe !== undefined ? ` · <b>a IA viu que é gabarito/espelho</b>${x.parDe ? " de " + esc(x.parDe) : " (prova correspondente não encontrada)"}` : ""}</p>
       ${x.nomeProva === undefined ? `<p class="note">${esc(x.it.nome)} · aguardando…</p>` : `
       <label class="padr-l"><span class="note">${esc(x.it.nome)} →</span><input data-padr="${k}" data-papel="p" value="${esc(x.nomeProva)}"></label>
       ${x.it.gab ? `<label class="padr-l"><span class="note">${esc(x.it.gabNome.replace(/\.(pdf|docx?|jpe?g|png)$/i, ""))} →</span><input data-padr="${k}" data-papel="g" value="${esc(x.nomeGab)}"></label>` : ""}`}</div>`).join("")}
