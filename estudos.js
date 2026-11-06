@@ -294,6 +294,8 @@ function desenharEstudo(aba) {
   if (String(estudoAba).startsWith("lei") && { praticar: "lei-praticar", desempenho: "lei-hist" }[aba]) aba = { praticar: "lei-praticar", desempenho: "lei-hist" }[aba];
   // na aba do simulado, os filtros e o progresso redesenham a própria aba (sem pular para o treino)
   if (aba === "praticar" && estudoAba === "simulado" && !estudo && !(typeof cartao !== "undefined" && cartao) && !(typeof papelInfo !== "undefined" && papelInfo.disc)) aba = "simulado";
+  // enquanto o usuário cola o texto de uma lei, a tela não é redesenhada (senão o quadro de colar é recriado e perde o foco)
+  if (aba.startsWith("lei") && document.activeElement && document.activeElement.id === "leiCola") { leiUi.redesenhar = aba; return; }
   if (aba.startsWith("lei")) { estudoAba = aba; $("estudoConteudo").innerHTML = cabecalhoEstudo(aba) + `<div class="est-corpo">${htmlLei(aba)}</div>`; return; }
   estudoAba = aba;
   let corpo = "";

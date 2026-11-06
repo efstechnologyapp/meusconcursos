@@ -219,7 +219,7 @@ function htmlMinhasLeis() {
 }
 function htmlColarLei(l) {
   return `<div class="lei-colar"><p class="note"><b>Como colar:</b> 1) <a href="${esc(l.url)}" target="_blank" rel="noopener">abra a lei no site do Planalto</a>; 2) clique na página e aperte <b>Ctrl+A</b> e depois <b>Ctrl+C</b> (no celular: tocar e segurar › Selecionar tudo › Copiar); 3) clique no quadro abaixo e aperte <b>Ctrl+V</b> (ou tocar e segurar › Colar). O texto riscado (revogado) é removido sozinho.</p>
-    <div class="lei-cola" id="leiCola" data-leiid="${l.id}" contenteditable="true" aria-label="Cole aqui o texto da lei"></div><div class="actions" style="justify-content:flex-start"><button type="button" class="mini" data-leicolarfechar="1">Cancelar</button></div></div>`;
+    <div class="lei-cola" id="leiCola" data-leiid="${l.id}" contenteditable="true" aria-label="Cole aqui o texto da lei"></div><div class="actions" style="justify-content:flex-start"><button type="button" class="primary" data-leicolaragora="${l.id}">Colar o que copiei</button><button type="button" class="mini" data-leicolarfechar="1">Cancelar</button></div></div>`;
 }
 function listaFiltrada(c) {
   const L = leis[c.lei]; if (!L) return [];
@@ -444,6 +444,7 @@ document.addEventListener("click", e => {
   const d = t.dataset;
   if (d.leibaixar) { baixarLei(d.leibaixar, !!d.forcar); return; }
   if (d.leicolar) { leiUi.colar = leiUi.colar === d.leicolar ? null : d.leicolar; desenharEstudo(estudoAba); setTimeout(() => { const el = $("leiCola"); if (el) el.focus(); }, 50); return; }
+  if (d.leicolaragora) { colarDaAreaDeTransferencia(d.leicolaragora); return; }
   if (d.leicolarfechar) { leiUi.colar = null; desenharEstudo(estudoAba); return; }
   if (d.leiler) { const c = lerLeiCfg(); c.lei = d.leiler; c.cap = ""; c.busca = ""; gravarEst("leiRev", c); desenharEstudo("lei-ler"); return; }
   if (d.leiremover) { gravarEst("leisRemovidas", [...lerEst("leisRemovidas", []), d.leiremover]); gravarEst("leisExtras", lerEst("leisExtras", []).filter(l => l.id !== d.leiremover)); desenharEstudo(estudoAba); return; }
@@ -484,10 +485,26 @@ let leiBuscaT = null;
 document.addEventListener("input", e => {
   if (e.target.id === "leiBusca") { clearTimeout(leiBuscaT); const v = e.target.value; leiBuscaT = setTimeout(() => { const c = lerLeiCfg(); c.busca = v; gravarEst("leiRev", c); desenharEstudo("lei-ler"); const el = $("leiBusca"); if (el) { el.focus(); el.setSelectionRange(v.length, v.length); } }, 400); }
 });
+// botão "Colar o que copiei": lê a área de transferência direto (o navegador pede permissão na primeira vez)
+async function colarDaAreaDeTransferencia(id) {
+  try {
+    let html = "";
+    if (navigator.clipboard && navigator.clipboard.read) {
+      for (const it of await navigator.clipboard.read()) {
+        if (it.types.includes("text/html")) { html = await (await it.getType("text/html")).text(); break; }
+        if (!html && it.types.includes("text/plain")) html = esc(await (await it.getType("text/plain")).text()).replace(/\n/g, "<br>");
+      }
+    } else if (navigator.clipboard && navigator.clipboard.readText) html = esc(await navigator.clipboard.readText()).replace(/\n/g, "<br>");
+    if (!html.trim()) { toast("A área de transferência está vazia. Copie a página da lei primeiro (Ctrl+A, Ctrl+C)."); return; }
+    const el = $("leiCola"); if (el) el.textContent = "Lendo o texto colado…";
+    colarLei(id, html);
+  } catch (e) { toast("O navegador não deixou ler o que você copiou. Clique no quadro tracejado e aperte Ctrl+V."); }
+}
+document.addEventListener("focusout", e => { if (e.target.id === "leiCola" && leiUi.redesenhar) { const a = leiUi.redesenhar; leiUi.redesenhar = ""; setTimeout(() => desenharEstudo(a), 0); } });
 // colar: a área de transferência traz o HTML da página (com o riscado), que o app limpa
 document.addEventListener("paste", e => {
   const el = e.target.closest && e.target.closest("#leiCola"); if (!el) return;
   e.preventDefault();
   const dt = e.clipboardData, html = dt.getData("text/html") || esc(dt.getData("text/plain")).replace(/\n/g, "<br>");
-  el.textContent = "Lendo o texto colado…"; colarLei(el.dataset.leiid, html);
+  el.textContent = "Lendo o texto colado…"; el.blur(); colarLei(el.dataset.leiid, html);
 });
