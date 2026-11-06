@@ -5,6 +5,7 @@
 const ICONES_ESTUDO = {
   info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19.5A2 2 0 0 1 6 18h13"/><path d="M8 7h7M8 11h5"/></svg>',
   provas: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3v2h6V3"/><path d="M8.5 11l1.5 1.5 3-3M8.5 16.5h7"/></svg>',
+  lei: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M5 21h14"/><path d="M4 7h16"/><path d="M7 7l-3 7a3 3 0 0 0 6 0z"/><path d="M17 7l-3 7a3 3 0 0 0 6 0z"/></svg>',
   pecas: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8 13h8M8 17h5"/><path d="M15.5 16.5l2.5-2.5 1.5 1.5-2.5 2.5h-1.5z"/></svg>'
 };
 
@@ -44,6 +45,8 @@ function renderEstudoPagina() {
       stats: julgados.length ? [`${julgados.length} julgados`, revisar ? `${revisar} para revisar hoje` : "", sessoes.length ? `${sessoes.length} sessão(ões) · ${aprov}%` : ""].filter(Boolean).join(" · ") : "Carregando o caderno…", pend: pend("info") },
     { area: "provas", titulo: "Provas anteriores", texto: "Provas objetivas e subjetivas da pasta Provas Jurídicas: simulado com as questões originais, questões novas no estilo da banca e prova no papel com cartão-resposta.",
       stats: nProvas == null ? "Abrindo a pasta no Drive…" : `${nProvas} prova(s)${nProvas ? ` · ${respondidas(["objetiva", "subjetiva"])} respondida(s)` : ""}`, pend: pend("provas") },
+    { area: "lei", titulo: "Lei seca", texto: "Texto vigente das leis do Planalto, sem o que foi revogado: leitura artigo por artigo com revisão, questões da letra da lei e PDF da lei limpa para estudar no papel.",
+      stats: (() => { const b = lerEst("leisBaixadas", {}), n = Object.keys(b).length, s = H.filter(e => e.tipo === "lei"); return n ? `${n} lei(s) baixada(s)${s.length ? ` · ${s.length} sessão(ões)` : ""}` : "Nenhuma lei baixada ainda"; })(), pend: pend("lei") },
     { area: "pecas", titulo: "Peças práticas", texto: "Estrutura de cada peça, casos originais e inéditos, resposta digitada ou manuscrita com correção pelo espelho e avaliação da caligrafia.",
       stats: nPecas == null ? "Abrindo a pasta no Drive…" : `${nPecas} peça(s)${nPecas ? ` · ${respondidas(["peca"])} respondida(s)` : ""}`, pend: pend("pecas") }
   ];
@@ -55,7 +58,8 @@ function renderEstudoPagina() {
   if (html !== ultimoHtmlEstudo || !$("pgEstudo").innerHTML) { $("pgEstudo").innerHTML = html; ultimoHtmlEstudo = html; }   // só redesenha se mudou
 }
 function abrirAreaEstudo(area) {
-  const aba = area === "info" ? "praticar" : area;
+  estudoAba = "";   // sai da área anterior (a Lei seca mantém as telas compartilhadas dentro dela)
+  const aba = area === "info" ? "praticar" : area === "lei" ? (Object.keys(lerEst("leisBaixadas", {})).length ? "lei-ler" : "lei-leis") : area;
   carregarJulgados().then(() => { desenharEstudo(aba); if (!cadernoDriveChecado) atualizarDoDrive(); });
   desenharEstudo(aba);
   const d = $("dlgEstudo"); if (!d.open) d.showModal();
@@ -70,5 +74,5 @@ window.addEventListener("hashchange", mostrarPagina);
 // ao fechar o modal, os números dos cartões se atualizam
 document.addEventListener("close", e => { if (e.target.id === "dlgEstudo") setTimeout(renderEstudoPagina, 0); }, true);
 // quando o histórico ou a pasta terminam de carregar
-setInterval(() => { if (naPaginaEstudo() && !$("app").hidden) { carregarDadosEstudo(); if (!($("dlgEstudo") || {}).open) renderEstudoPagina(); } }, 2000);
-setTimeout(mostrarPagina, 0);   // depois que o script principal (que define $) carregar
+setInterval(() => { if (typeof $ === "function" && naPaginaEstudo() && !$("app").hidden) { carregarDadosEstudo(); if (!($("dlgEstudo") || {}).open) renderEstudoPagina(); } }, 2000);
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mostrarPagina); else mostrarPagina();   // depois que o script principal (que define $) rodar

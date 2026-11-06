@@ -511,7 +511,7 @@ function imprimirProvaReal(q) {
   setTimeout(() => window.print(), 50);
 }
 // provas impressas aguardando a resposta manuscrita: ficam em destaque até todas as questões serem corrigidas
-function impressasPendentes(area) { return lerProv("impressas", []).filter(x => !area || (area === "info" ? x.tipo === "info" : x.tipo !== "info" && (area === "pecas") === (x.tipo === "peca"))); }
+function impressasPendentes(area) { return lerProv("impressas", []).filter(x => !area || (area === "info" ? x.tipo === "info" && !x.lei : area === "lei" ? x.tipo === "info" && !!x.lei : x.tipo !== "info" && (area === "pecas") === (x.tipo === "peca"))); }
 const abaCartao = () => cartao && cartao.info ? "praticar" : "provas";
 function registrarImpressa(qs) {
   const s = sim, lista = lerProv("impressas", []);

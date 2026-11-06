@@ -250,7 +250,7 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .chip-alerta{background:#fff1d6;color:#7a5600}
 .padr-ren{flex-direction:row;align-items:center;gap:6px;float:right;font-size:13px}.padr-ren input{width:auto}
 #pgEstudo .pe-topo{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.pe-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:6px}
+.pe-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:6px}
 .pe-card{display:flex;flex-direction:column;align-items:flex-start;gap:10px;text-align:left;padding:18px;border-radius:16px;background:var(--surface);border:1px solid var(--line);box-shadow:0 1px 2px rgba(20,33,61,.04);position:relative;transition:transform .12s,box-shadow .12s,border-color .12s;min-height:190px}
 .pe-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(20,33,61,.10);border-color:var(--brand)}
 .pe-ic{width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--brand) 10%,var(--surface));color:var(--brand)}
@@ -264,6 +264,19 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .sim-box{border:2px solid color-mix(in srgb,var(--brand) 35%,var(--line));border-radius:14px;padding:14px;background:color-mix(in srgb,var(--brand) 4%,var(--surface))}
 .sim-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0}
 @media (max-width:560px){.sim-grid{grid-template-columns:1fr}}
+.lei-item{border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.lei-tit{display:flex;flex-direction:column;gap:2px}.lei-msg{color:#7a5600}
+.lei-colar{border-top:1px dashed var(--line);padding-top:8px}
+.lei-cola{min-height:90px;border:2px dashed var(--brand);border-radius:10px;padding:10px;background:var(--bg);font-size:13px;color:var(--muted);overflow:auto;max-height:160px}
+.lei-cola:empty:before{content:"Clique aqui e cole (Ctrl+V) o texto copiado da página da lei";color:var(--muted)}
+.lei-busca{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.lei-busca input[type=search]{flex:1;min-width:200px}
+.lei-art{border:1px solid var(--line);border-radius:14px;padding:16px;background:var(--surface)}
+.lei-cap{margin:0 0 8px}.lei-txt{font-size:15.5px;line-height:1.65}
+.lei-txt mark{background:#ffe58a;padding:0 2px;border-radius:3px}
+.lei-acoes{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.pr-lei{font-size:10.5pt}.pr-lei-cap{font-size:11pt;margin:14px 0 6px;text-transform:uppercase}
+.pr-lei-art{display:grid;grid-template-columns:1fr 45mm;gap:6mm;break-inside:avoid;margin:0 0 6px}.pr-lei-art p{margin:0;text-align:justify}
+.pr-lei-nota{border-left:1px dotted #999}
 .selo-resp{color:var(--ok);font-weight:600;white-space:nowrap}
 .selo-nao{color:var(--muted);font-style:italic;white-space:nowrap}
 .cart-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:6px}
@@ -619,6 +632,7 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 <script src="provas.js"></script>
 <script src="historico.js"></script>
 <script src="papel-info.js"></script>
+<script src="lei-seca.js"></script>
 <script src="pagina-estudo.js"></script>
 <script>
 const CHAVE="meus-concursos-dados";
@@ -1708,7 +1722,7 @@ iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO=74;
+const APP_VERSAO=75;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{

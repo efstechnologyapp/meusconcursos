@@ -3,7 +3,7 @@
 // A prova impressa fica na lista "impressas" (sincronizada na nuvem) até ser corrigida; o resultado vai para o histórico.
 
 let papelInfo = { gerando: null, disc: null };   // disc: { chave, k, corrigindo }
-const TITULO_MODO = { ce: "Certo ou errado", me: "Múltipla escolha", disc: "Discursiva" };
+const TITULO_MODO = { ce: "Certo ou errado", me: "Múltipla escolha", disc: "Discursiva", lacuna: "Complete a lacuna" };
 
 // gera todas as questões de uma vez e abre a impressão; opc: { lista, modo, gerador, nome, titulo }
 async function gerarProvaInfoPapel(opc) {
@@ -17,9 +17,9 @@ async function gerarProvaInfoPapel(opc) {
   for (const j of lista) {
     let q; try { q = await (o.gerador ? o.gerador(j) : gerarQuestao(j, modo)); } catch (e) { q = questaoLocal(j, modo); }   // uma de cada vez (limite do plano gratuito da IA)
     questoes.push({ jid: j.id, trib: j.trib, info: j.info || "", disc: j.disc, tit: String(j.titulo || "").slice(0, 200), q });
-    papelInfo.gerando.k++; if (estudoAba === "praticar" && !estudo) desenharEstudo("praticar");
+    papelInfo.gerando.k++; if ((estudoAba === "praticar" || estudoAba === "lei-praticar") && !estudo) desenharEstudo("praticar");
   }
-  const reg = { chave: "info-" + Date.now().toString(36), tipo: "info", modo, quando: new Date().toISOString(), nome: o.nome || `Informativos · ${TITULO_MODO[modo]} · ${questoes.length} questões`, titulo: o.titulo || "",
+  const reg = { chave: "info-" + Date.now().toString(36), tipo: "info", modo, quando: new Date().toISOString(), nome: o.nome || `Informativos · ${TITULO_MODO[modo]} · ${questoes.length} questões`, titulo: o.titulo || "", subtitulo: o.subtitulo || "", ...(o.lei ? { lei: true } : {}),
     questoes, qs: questoes.map((x, k) => ({ i: k, numero: k + 1 })), feitas: {} };
   gravarProv("impressas", [reg, ...lerProv("impressas", [])]); salvarImpressasNuvem();
   papelInfo.gerando = null; desenharEstudo("praticar");
@@ -29,7 +29,7 @@ async function gerarProvaInfoPapel(opc) {
 function imprimirProvaInfo(reg) {
   const obj = reg.modo !== "disc", ce = reg.modo === "ce";
   const discs = [...new Set(reg.questoes.map(x => x.disc))];
-  let h = `<div class="pr-capa"><h1>${esc(reg.titulo || "Simulado de jurisprudência")}</h1><p>Informativos do STF, STJ e TSE · ${esc(TITULO_MODO[reg.modo])} · ${reg.questoes.length} questões${discs.length <= 4 ? " · " + esc(discs.join(", ")) : ""}</p>
+  let h = `<div class="pr-capa"><h1>${esc(reg.titulo || "Simulado de jurisprudência")}</h1><p>${esc(reg.subtitulo || "Informativos do STF, STJ e TSE")} · ${esc(TITULO_MODO[reg.modo] || "")} · ${reg.questoes.length} questões${discs.length <= 4 ? " · " + esc(discs.join(", ")) : ""}</p>
     <div class="pr-ident"><span>Nome: ______________________________________________</span><span>Data: ____/____/______</span><span>Início: ____h____ · Término: ____h____</span></div>
     <ul class="pr-instr">${obj ? `<li>Marque as respostas no <b>cartão-resposta</b> (última folha), preenchendo totalmente o círculo com caneta esferográfica preta.</li><li>Marque uma única opção por questão; marcação dupla ou rasurada anula a questão.</li>${ce ? "<li>Julgue cada item como CERTO (C) ou ERRADO (E). No critério Cebraspe, cada item errado anula um certo; se não souber, deixe em branco.</li>" : ""}<li>Ao terminar, fotografe o cartão-resposta e envie pelo app para corrigir.</li>`
       : `<li>Use caneta esferográfica preta e letra legível: o que não puder ser lido será desconsiderado.</li><li>Responda cada questão na sua folha de texto definitivo, respeitando o limite de linhas.</li><li>Ao terminar, fotografe as folhas e envie pelo app: a IA transcreve, corrige e avalia a caligrafia.</li>`}</ul></div>`;
@@ -48,8 +48,8 @@ function imprimirProvaInfo(reg) {
   setTimeout(() => window.print(), 80);
 }
 
-function htmlImpressasInfo() {
-  const lista = impressasPendentes("info"); if (!lista.length && !papelInfo.gerando) return "";
+function htmlImpressasInfo(area) {
+  const lista = impressasPendentes(area || "info"); if (!lista.length && !papelInfo.gerando) return "";
   return `<div class="impr-box"><p class="est-sub">Provas impressas, aguardando as suas respostas</p>${papelInfo.gerando ? `<p class="note est-gerando">Criando a prova para imprimir: ${papelInfo.gerando.k} de ${papelInfo.gerando.n} questões… (a impressão abre sozinha no final)</p>` : ""}${lista.map(x => {
     const d = new Date(x.quando), quando = isNaN(d) ? "" : d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) + " às " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
     const feitas = Object.keys(x.feitas || {}).length;
@@ -73,13 +73,13 @@ function abrirCartaoInfo(chave) {
 function registrarInfoPapel(reg, res) {
   const qs = reg.questoes.map((x, k) => {
     const r = res[k] || {}, q = x.q;
-    const j = julgados.find(z => z.id === x.jid); if (j && r.nota !== undefined && (r.marcada !== "" || r.corr)) registrar(j, r.nota);
+    const j = acharItemEstudo(x.jid); if (j && r.nota !== undefined && (r.marcada !== "" || r.corr)) registrar(j, r.nota);
     return { n: k + 1, jid: x.jid, trib: x.trib, info: x.info, disc: x.disc, tit: x.tit, modo: q.tipo, nota: r.nota || 0, marcada: r.marcada || (q.tipo === "disc" ? "" : "—"), gab: q.gabarito || "",
       enun: String(q.assertiva || q.enunciado || "").slice(0, 900), ...(q.tipo === "me" ? { alts: (q.alternativas || []).map(a => String(a).slice(0, 240)) } : {}), coment: String(q.comentario || "").slice(0, 900),
       ...(r.corr ? { corr: r.corr } : {}), ...(r.texto ? { texto: String(r.texto).slice(0, 4000) } : {}) };
   });
   const ac = qs.filter(x => x.nota >= 1).length, pa = qs.filter(x => x.nota > 0 && x.nota < 1).length;
-  registrarHist({ tipo: "info", modo: reg.modo, papel: true, chave: "info:" + reg.modo + ":" + histHash(reg.questoes.map(x => x.jid).sort().join(",")), jids: reg.questoes.map(x => x.jid),
+  registrarHist({ tipo: reg.lei ? "lei" : "info", nome: reg.nome, modo: reg.modo, papel: true, chave: (reg.lei ? "lei:" : "info:") + reg.modo + ":" + histHash(reg.questoes.map(x => x.jid).sort().join(",")), jids: reg.questoes.map(x => x.jid),
     total: qs.length, acertos: ac, parciais: pa, erros: qs.length - ac - pa, nota: qs.reduce((a, x) => a + x.nota, 0) / qs.length * 10, questoes: qs });
 }
 
@@ -99,7 +99,7 @@ function htmlDiscPapel() {
   if ((q.espelho || []).length) h += `<details class="est-det"><summary>Espelho de correção</summary><ul class="est-itens">${q.espelho.map(t => `<li>${esc(t.item)} <span class="note">(${esc(String(t.pontos))} pts)</span></li>`).join("")}</ul></details>`;
   if (q.resposta_modelo) h += `<details class="est-det"><summary>Resposta-modelo</summary><p class="pre">${esc(q.resposta_modelo)}</p></details>`;
   if (feito.texto) h += `<details class="est-det"><summary>Sua resposta (transcrição da IA)</summary><p class="pre">${esc(feito.texto)}</p></details>`;
-  const j = julgados.find(z => z.id === x.jid);
+  const j = acharItemEstudo(x.jid);
   if (j) h += `<details class="est-det"><summary>O julgado</summary><p><b>${esc(j.titulo)}</b></p><p class="pre">${esc(j.tese)}</p><p class="note">${esc(j.cit)}</p></details>`;
   const prox = reg.questoes.findIndex((_, k) => !reg.feitas[k]);
   h += `<div class="actions">${prox >= 0 ? `<button type="button" class="primary" data-infodisc="${esc(reg.chave)}" data-infok="${prox}">Ir para a questão ${prox + 1}</button>` : `<button type="button" class="primary" id="discPapelSair">Concluir</button>`}</div>`;
@@ -108,7 +108,7 @@ function htmlDiscPapel() {
 async function corrigirDiscPapel(files) {
   const d = papelInfo.disc; if (!d || !files.length) return;
   const lista = lerProv("impressas", []), reg = lista.find(x => x.chave === d.chave); if (!reg) return;
-  const x = reg.questoes[d.k], q = x.q, j = julgados.find(z => z.id === x.jid);
+  const x = reg.questoes[d.k], q = x.q, j = acharItemEstudo(x.jid);
   d.corrigindo = true; desenharEstudo("praticar");
   try {
     const partes = await Promise.all([...files].slice(0, 8).map(fotoParaParte));

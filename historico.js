@@ -70,12 +70,12 @@ function registrarObjetiva() {
 
 // ---------- tela ----------
 function botaoHistorico(area) {
-  const n = (hist.lista || lerProv("historico", []) || []).filter(e => e.tipo !== "info").length;
+  const n = (hist.lista || lerProv("historico", []) || []).filter(e => e.tipo !== "info" && e.tipo !== "lei").length;
   return `<div class="actions" style="justify-content:flex-start;margin:0"><button type="button" id="histAbrir" data-histarea="${area}">Meu histórico${n ? ` (${n})` : ""}</button></div>`;
 }
 function histFiltrada() {
   const lim = hist.periodo ? Date.now() - hist.periodo * 864e5 : 0;
-  return (hist.lista || []).filter(e => e.tipo !== "info" && (hist.filtro === "tudo" || e.tipo === hist.filtro) && new Date(e.data).getTime() >= lim).sort((a, b) => new Date(a.data) - new Date(b.data));
+  return (hist.lista || []).filter(e => e.tipo !== "info" && e.tipo !== "lei" && (hist.filtro === "tudo" || e.tipo === hist.filtro) && new Date(e.data).getTime() >= lim).sort((a, b) => new Date(a.data) - new Date(b.data));
 }
 function histTentativas(e) { return (hist.lista || []).filter(x => x.chave === e.chave && x.tipo === e.tipo).sort((a, b) => new Date(a.data) - new Date(b.data)); }
 function htmlHistorico() {
@@ -195,7 +195,7 @@ function refazerHist(id) {
 }
 
 // ---------- informativos de jurisprudência: cada sessão de questões é um registro ----------
-const MODOS_CURTO = { ce: "Certo ou errado", me: "Múltipla escolha", disc: "Discursiva" };
+const MODOS_CURTO = { ce: "Certo ou errado", me: "Múltipla escolha", disc: "Discursiva", lacuna: "Complete a lacuna" };
 function registrarSessaoInfo() {
   const s = estudo; if (!s) return;
   const qs = [];
@@ -208,21 +208,21 @@ function registrarSessaoInfo() {
   if (!qs.length || qs.length === s.registradas) return;   // nada novo desde o último registro desta sessão
   s.registradas = qs.length; s.histId = s.histId || Date.now().toString(36) + Math.random().toString(36).slice(2, 6); s.histData = s.histData || new Date().toISOString();
   const ac = qs.filter(x => x.nota >= 1).length, pa = qs.filter(x => x.nota > 0 && x.nota < 1).length;
-  registrarHist({ id: s.histId, data: s.histData, tipo: "info", modo: s.modo, chave: "info:" + s.modo + ":" + histHash(s.lista.map(j => j.id).sort().join(",")), jids: s.lista.map(j => j.id),
+  registrarHist({ id: s.histId, data: s.histData, tipo: s.lei ? "lei" : "info", ...(s.simulado ? { nome: s.simulado } : {}), modo: s.modo, chave: (s.lei ? "lei:" : "info:") + s.modo + ":" + histHash(s.lista.map(j => j.id).sort().join(",")), jids: s.lista.map(j => j.id),
     total: qs.length, acertos: ac, parciais: pa, erros: qs.length - ac - pa, nota: qs.reduce((a, x) => a + x.nota, 0) / qs.length * 10, questoes: qs });
 }
 function htmlHistInfo() {
-  const H = hist.info;
+  const H = hist.info, T = H.tipo || "info";
   if (H.det) return htmlHistInfoDet();
   if (!hist.lista) { carregarHistorico(); return `<p class="note est-gerando">Carregando o seu histórico…</p>`; }
   const lim = H.periodo ? Date.now() - H.periodo * 864e5 : 0;
-  const L = hist.lista.filter(e => e.tipo === "info" && (H.filtro === "tudo" || e.modo === H.filtro) && new Date(e.data).getTime() >= lim).sort((a, b) => new Date(a.data) - new Date(b.data));
+  const L = hist.lista.filter(e => e.tipo === T && (H.filtro === "tudo" || e.modo === H.filtro) && new Date(e.data).getTime() >= lim).sort((a, b) => new Date(a.data) - new Date(b.data));
   const prog = lerEst("prog", {}), vistos = Object.values(prog).filter(p => p.prox).length, dom = Object.values(prog).filter(p => p.caixa >= 3).length;
   let h = `<div class="h-filtros">${[["tudo", "Tudo"], ["ce", "Certo ou errado"], ["me", "Múltipla escolha"], ["disc", "Discursiva"]].map(([k, n]) => `<button type="button" class="chip-sel${H.filtro === k ? " on" : ""}" data-hinfofiltro="${k}">${n}</button>`).join("")}
     <select id="hInfoPeriodo" class="h-per">${[[30, "Últimos 30 dias"], [90, "Últimos 90 dias"], [365, "Último ano"], [0, "Todo o período"]].map(([v, n]) => `<option value="${v}"${H.periodo === v ? " selected" : ""}>${n}</option>`).join("")}</select>${hist.carregando ? `<span class="note">atualizando…</span>` : ""}</div>`;
   if (!L.length) {
-    const ant = lerEst("hist", []);
-    return h + `<p class="note">${hist.lista.some(e => e.tipo === "info") ? "Nada neste filtro e período." : "Ainda não há sessões no histórico. A partir de agora, cada sessão de questões dos informativos entra aqui, com a data, as questões e o que você acertou e errou."}</p>${ant.length ? `<p class="note">Antes do histórico você respondeu ${ant.length} questões (${Math.round(ant.reduce((a, x) => a + x.nota, 0) / ant.length * 100)}% de aproveitamento) · ${vistos} de ${julgados.length} julgados já vistos · ${dom} dominados.</p>` : ""}`;
+    const ant = T === "lei" ? [] : lerEst("hist", []);
+    return h + `<p class="note">${hist.lista.some(e => e.tipo === T) ? "Nada neste filtro e período." : (T === "lei" ? "Ainda não há sessões de lei seca no histórico. Cada sessão de questões entra aqui, com a data, os artigos e o que você acertou e errou." : "Ainda não há sessões no histórico. A partir de agora, cada sessão de questões dos informativos entra aqui, com a data, as questões e o que você acertou e errou.")}</p>${ant.length ? `<p class="note">Antes do histórico você respondeu ${ant.length} questões (${Math.round(ant.reduce((a, x) => a + x.nota, 0) / ant.length * 100)}% de aproveitamento) · ${vistos} de ${julgados.length} julgados já vistos · ${dom} dominados.</p>` : ""}`;
   }
   const qsT = L.flatMap(e => e.questoes), pct = l => l.length ? l.reduce((a, x) => a + x.nota, 0) / l.length * 100 : 0;
   const notas = L.map(e => e.nota), ult = notas.slice(-5), ant = notas.slice(0, -5);
@@ -240,19 +240,19 @@ function htmlHistInfo() {
   // julgados que mais erra
   const err = {}; qsT.filter(x => x.nota < 1).forEach(x => { const e = err[x.jid] = err[x.jid] || { n: 0, x }; e.n++; e.x = x; });
   const errs = Object.values(err).sort((a, b) => b.n - a.n).slice(0, 8);
-  if (errs.length) h += `<div class="h-sec"><h4>Julgados que você mais erra</h4><ul class="h-err">${errs.map(({ n, x }) => `<li><b>${n}×</b> ${esc(x.tit)} <span class="note">(${esc(x.trib)}${x.info ? " · Info " + esc(String(x.info).split(",")[0]) : ""} · ${esc(x.disc)})</span></li>`).join("")}</ul>
+  if (errs.length) h += `<div class="h-sec"><h4>${T === "lei" ? "Artigos que você mais erra" : "Julgados que você mais erra"}</h4><ul class="h-err">${errs.map(({ n, x }) => `<li><b>${n}×</b> ${esc(x.tit)} <span class="note">(${esc(x.trib)}${x.info ? " · Info " + esc(String(x.info).split(",")[0]) : ""} · ${esc(x.disc)})</span></li>`).join("")}</ul>
     ${H.analise ? `<div class="est-det"><p class="est-sub">Análise da IA</p>${(H.analise.padroes || []).map(p => `<p><b>${esc(p.titulo)}</b> — ${esc(p.explicacao)}${p.como_corrigir ? `<br><span class="note">Como corrigir: ${esc(p.como_corrigir)}</span>` : ""}</p>`).join("")}${(H.analise.prioridades || []).length ? `<p><b>Prioridades de estudo:</b> ${esc(H.analise.prioridades.join("; "))}</p>` : ""}</div>` : ""}
-    <div class="actions" style="justify-content:flex-start"><button type="button" class="primary" id="hInfoErros">Praticar estes julgados</button><button type="button" id="hInfoAnalisar" ${H.analisando ? "disabled" : ""}>${H.analisando ? "A IA está analisando…" : "Analisar meus erros com a IA"}</button></div></div>`;
+    <div class="actions" style="justify-content:flex-start"><button type="button" class="primary" id="hInfoErros">${T === "lei" ? "Praticar estes artigos" : "Praticar estes julgados"}</button><button type="button" id="hInfoAnalisar" ${H.analisando ? "disabled" : ""}>${H.analisando ? "A IA está analisando…" : "Analisar meus erros com a IA"}</button></div></div>`;
   h += `<div class="h-sec"><h4>Minhas sessões</h4><div class="h-row h-cab"><span>Data</span><span>Sessão</span><span>Acertos</span><span></span></div>${L.slice().reverse().map(e => {
     const t = histTentativas(e), n = t.indexOf(e) + 1, tribs = [...new Set(e.questoes.map(x => x.trib))].join("/");
-    return `<button type="button" class="h-row" data-hinfodet="${esc(e.id)}"><span class="note">${histData(e.data)}</span><span><b>${esc(MODOS_CURTO[e.modo] || e.modo)} · ${e.total} ${e.total > 1 ? "questões" : "questão"}</b>${t.length > 1 ? ` <span class="chip">${n}ª tentativa</span>` : ""}<br><span class="note">${e.acertos} certa(s)${e.parciais ? ` · ${e.parciais} parcial(is)` : ""} · ${e.erros} errada(s) · ${esc(tribs)}</span></span><span class="h-nota ${histCor(e.nota)}">${Math.round(e.nota * 10)}%</span><span></span></button>`;
+    return `<button type="button" class="h-row" data-hinfodet="${esc(e.id)}"><span class="note">${histData(e.data)}</span><span><b>${e.nome ? esc(e.nome) : esc(MODOS_CURTO[e.modo] || e.modo) + " · " + e.total + (e.total > 1 ? " questões" : " questão")}</b>${t.length > 1 ? ` <span class="chip">${n}ª tentativa</span>` : ""}<br><span class="note">${e.acertos} certa(s)${e.parciais ? ` · ${e.parciais} parcial(is)` : ""} · ${e.erros} errada(s) · ${esc(tribs)}</span></span><span class="h-nota ${histCor(e.nota)}">${Math.round(e.nota * 10)}%</span><span></span></button>`;
   }).join("")}</div>`;
   return h;
 }
 function htmlHistInfoDet() {
-  const H = hist.info, e = (hist.lista || []).find(x => x.id === H.det); if (!e) { H.det = null; return htmlHistInfo(); }
+  const H = hist.info, T = H.tipo || "info", e = (hist.lista || []).find(x => x.id === H.det); if (!e) { H.det = null; return htmlHistInfo(); }
   const t = histTentativas(e);
-  let h = `<div class="est-prog"><button type="button" class="mini" id="hInfoVoltar">‹ Histórico</button><b>${esc(MODOS_CURTO[e.modo] || e.modo)} · ${e.total} ${e.total > 1 ? "questões" : "questão"}</b><span class="chip">${histDataLonga(e.data)}</span></div>`;
+  let h = `<div class="est-prog"><button type="button" class="mini" id="hInfoVoltar">‹ Histórico</button><b>${e.nome ? esc(e.nome) : esc(MODOS_CURTO[e.modo] || e.modo) + " · " + e.total + (e.total > 1 ? " questões" : " questão")}</b><span class="chip">${histDataLonga(e.data)}</span></div>`;
   if (t.length > 1) h += `<p class="h-tent"><b>Suas tentativas com estes julgados:</b> ${t.map(x => `<button type="button" class="link-x${x.id === e.id ? " on" : ""}" data-hinfodet="${esc(x.id)}">${histData(x.data)} → <b>${Math.round(x.nota * 10)}%</b></button>`).join(" · ")}</p>`;
   h += `<p class="est-res ${e.nota >= 7 ? "ok" : e.nota >= 5 ? "" : "bad"}"><b>${e.acertos}</b> certa(s)${e.parciais ? `, <b>${e.parciais}</b> parcial(is)` : ""} e <b>${e.erros}</b> errada(s) · ${Math.round(e.nota * 10)}%</p>
     <div class="h-tab">${e.questoes.map(x => {
@@ -267,16 +267,18 @@ function htmlHistInfoDet() {
     <p class="note">Ao refazer, a IA cria questões novas sobre os mesmos julgados, na mesma modalidade.</p>`;
   return h;
 }
+const acharItemEstudo = id => julgados.find(j => j.id === id) || (typeof artigoPorId === "function" ? artigoPorId(id) : null);
 function praticarJulgados(ids, modo) {
-  const lista = ids.map(id => julgados.find(j => j.id === id)).filter(Boolean);
+  const lista = ids.map(acharItemEstudo).filter(Boolean);
   if (!lista.length) { toast("Esses julgados não estão mais no caderno."); return; }
   registrarSessaoInfo();
-  estudo = { modo: modo || lerEst("filtro", { modo: "ce" }).modo, lista, i: 0, qs: {}, resp: {}, notas: [] };
+  const lei = !!(lista[0] && lista[0].lei), md = modo || (lei ? "ce" : lerEst("filtro", { modo: "ce" }).modo);
+  estudo = { modo: md, lista, i: 0, qs: {}, resp: {}, notas: [], ...(lei ? { lei: true, gerador: geradorLei(lista, md) } : {}) };
   hist.info.det = null; prepararQuestao(0); desenharEstudo("praticar"); $("estudoConteudo").scrollTop = 0;
 }
 async function analisarErrosInfo() {
   const H = hist.info, lim = H.periodo ? Date.now() - H.periodo * 864e5 : 0;
-  const qs = (hist.lista || []).filter(e => e.tipo === "info" && new Date(e.data).getTime() >= lim).flatMap(e => e.questoes);
+  const qs = (hist.lista || []).filter(e => e.tipo === T && new Date(e.data).getTime() >= lim).flatMap(e => e.questoes);
   const erradas = qs.filter(x => x.nota < 1).slice(-40);
   if (!erradas.length) return;
   H.analisando = true; desenharEstudo("desempenho");
@@ -315,7 +317,7 @@ document.addEventListener("click", e => {
   if (t.id === "hInfoAnalisar") { analisarErrosInfo(); return; }
   if (t.id === "hInfoErros") {
     const lim = H.periodo ? Date.now() - H.periodo * 864e5 : 0, cont = {};
-    (hist.lista || []).filter(x => x.tipo === "info" && new Date(x.data).getTime() >= lim).flatMap(x => x.questoes).filter(x => x.nota < 1).forEach(x => cont[x.jid] = (cont[x.jid] || 0) + 1);
+    (hist.lista || []).filter(x => x.tipo === (H.tipo || "info") && new Date(x.data).getTime() >= lim).flatMap(x => x.questoes).filter(x => x.nota < 1).forEach(x => cont[x.jid] = (cont[x.jid] || 0) + 1);
     praticarJulgados(Object.keys(cont).sort((a, b) => cont[b] - cont[a]).slice(0, 20)); return;
   }
   const e2 = t.dataset.histid && (hist.lista || []).find(x => x.id === t.dataset.histid);

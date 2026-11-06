@@ -278,7 +278,9 @@ function abrirEstudo() {
   const d = $("dlgEstudo"); if (!d.open) d.showModal();
 }
 function cabecalhoEstudo(aba) {
-  const area = aba === "provas" ? "provas" : aba === "pecas" ? "pecas" : "info";
+  const area = aba === "provas" ? "provas" : aba === "pecas" ? "pecas" : aba.startsWith("lei") ? "lei" : "info";
+  if (area === "lei") return `<div class="dlg-head"><div style="flex:1;min-width:0"><h2>Lei seca</h2><p class="sub">Texto vigente das leis do Planalto · leitura, revisão e questões da letra da lei pela IA Gemini</p></div><button type="button" class="close" data-close aria-label="Fechar">×</button></div>
+    <div class="est-abas">${[["lei-leis", "Minhas leis"], ["lei-ler", "Ler e revisar"], ["lei-praticar", "Praticar"], ["lei-hist", "Meu histórico"]].map(([k, n]) => `<button type="button" class="${aba === k ? "on" : ""}" data-estaba="${k}">${n}</button>`).join("")}</div>`;
   const sub = area === "info" ? (julgados.length ? `${julgados.length} julgados do caderno · questões e correções pela IA Gemini` : "Carregando o caderno de informativos…")
     : area === "provas" ? "Provas objetivas e subjetivas da pasta Provas Jurídicas · questões e correções pela IA Gemini" : "Peças práticas da pasta Provas Jurídicas · estrutura, casos e correção pela IA Gemini";
   // a área (informativos, provas, peças) é escolhida nos cartões da página Estudar; o modal mostra só a área aberta
@@ -288,6 +290,9 @@ function cabecalhoEstudo(aba) {
 }
 function desenharEstudo(aba) {
   aba = aba || (julgados.length ? "praticar" : "config");
+  // dentro da Lei seca, as telas compartilhadas (sessão de questões, histórico) continuam na área da lei
+  if (String(estudoAba).startsWith("lei") && { praticar: "lei-praticar", desempenho: "lei-hist" }[aba]) aba = { praticar: "lei-praticar", desempenho: "lei-hist" }[aba];
+  if (aba.startsWith("lei")) { estudoAba = aba; $("estudoConteudo").innerHTML = cabecalhoEstudo(aba) + `<div class="est-corpo">${htmlLei(aba)}</div>`; return; }
   estudoAba = aba;
   let corpo = "";
   if (aba === "provas") corpo = htmlProvas();
@@ -357,7 +362,7 @@ function prepararQuestao(i) {
   estudo.qs[i].then(q => {
     if (estudo !== s0) return;
     estudo.qs[i].pronta = q;
-    if (estudo.i === i && estudoAba === "praticar") desenharEstudo("praticar");
+    if (estudo.i === i && (estudoAba === "praticar" || estudoAba === "lei-praticar")) desenharEstudo("praticar");
     if (i <= estudo.i) prepararQuestao(i + 1);   // prepara só a próxima, uma de cada vez (o plano gratuito limita as consultas por minuto)
   });
 }
@@ -374,7 +379,7 @@ function htmlSessao() {
   const topo = (s.simulado ? `<p class="est-sub" style="margin:0">${esc(s.simulado)}</p>` : "") + `<div class="est-prog"><span>Questão ${i + 1} de ${s.lista.length}</span><span class="chip">${esc(j.trib)}${j.info ? " · Info " + esc(j.info.split(",")[0]) : ""}</span><span class="chip">${esc(j.disc)}</span></div>`;
   if (!q) {
     const seg = s.qs[i] && s.qs[i].inicio ? Math.round((Date.now() - s.qs[i].inicio) / 1000) : 0;
-    clearTimeout(htmlSessao.t); htmlSessao.t = setTimeout(() => { if (estudo === s && s.i === i && !(s.qs[i] && s.qs[i].pronta) && estudoAba === "praticar") desenharEstudo("praticar"); }, 1000);
+    clearTimeout(htmlSessao.t); htmlSessao.t = setTimeout(() => { if (estudo === s && s.i === i && !(s.qs[i] && s.qs[i].pronta) && (estudoAba === "praticar" || estudoAba === "lei-praticar")) desenharEstudo("praticar"); }, 1000);
     return topo + `<p class="note est-gerando">Criando a questão${iaLigada() ? " com a IA Gemini" : ""}… ${seg}s${seg > 15 ? "<br>A IA gratuita às vezes demora até 1 minuto; se passar disso, o app segue com uma questão simples." : ""}</p>`;
   }
   let h = topo + (q.aviso ? `<p class="note">${esc(q.aviso)}</p>` : "");
@@ -404,7 +409,7 @@ function htmlSessao() {
     }
   }
   if (r && r.nota !== undefined) {
-    h += `<details class="est-det" open><summary>O julgado</summary><p><b>${esc(j.titulo)}</b></p><p class="pre">${esc(j.tese)}</p><p class="note">${esc(j.cit)}</p></details>
+    h += `<details class="est-det" open><summary>${j.lei ? "O artigo" : "O julgado"}</summary><p><b>${esc(j.titulo)}</b></p><p class="pre">${esc(j.tese)}</p><p class="note">${esc(j.cit)}</p></details>
       <div class="actions"><button type="button" class="primary" id="estProxima">${i + 1 < s.lista.length ? "Próxima" : "Ver resultado"}</button></div>`;
   }
   return h;
@@ -477,6 +482,7 @@ document.addEventListener("click", async e => {
   const t = e.target.closest("button,[data-estaba]"); if (!t) return;
   const filtro = lerEst("filtro", { modo: "ce", discs: [], tribs: ["STF", "STJ", "TSE"], n: 10 });
   if (t.dataset.estaba) {
+    if (estudo && typeof registrarSessaoInfo === "function") registrarSessaoInfo();   // o que já foi respondido entra no histórico
     // tocar em "Provas anteriores" ou "Peças práticas" sai da prova/peça aberta e volta para a lista (o rascunho fica salvo)
     if (typeof sim !== "undefined" && sim && ["provas", "pecas"].includes(t.dataset.estaba)) sim = null;
     if (typeof padr !== "undefined" && padr && padr.fase !== "renomeando") padr = null;
