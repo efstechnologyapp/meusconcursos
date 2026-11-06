@@ -20,7 +20,8 @@ const LEIS_PADRAO = [
 ];
 let leis = {};          // id -> { meta, artigos: [{ id, rot, txt, cap }], quando, fonte }
 let leiUi = { baixando: {}, colar: null, msg: {} };
-const MATERIAS_LEI = ["Constitucional", "Penal", "Processo Penal", "Execução Penal", "Civil", "Processo Civil", "Consumidor", "Criança e Adolescente", "Administrativo", "Eleitoral", "Tributário", "Empresarial", "Ambiental", "Institucional", "Trabalho", "Outras"];
+const MATERIAS_LEI = ["Constitucional", "Penal", "Processo Penal", "Execução Penal", "Civil", "Processo Civil", "Consumidor", "Criança e Adolescente", "Administrativo", "Eleitoral", "Tributário", "Empresarial", "Ambiental", "Financeiro", "Orçamentário", "Direitos Humanos", "Digital", "Humanística", "Institucional", "Trabalho", "Outras"];
+const MATERIAS_SEMPRE = ["Financeiro", "Orçamentário", "Direitos Humanos", "Digital", "Humanística"];   // balões que aparecem mesmo sem lei
 let leiMatUser = null;   // matéria escolhida pelo usuário (sobrepõe a do catálogo/edital)
 const materiaDe = l => (leiMatUser = leiMatUser || lerEst("leiMatUser", {}))[l.id] || l.materia || "Outras";
 // do que trata a lei: a ementa oficial (tirada do texto baixado) ou, antes de baixar, um resumo pela IA
@@ -206,7 +207,7 @@ function htmlMinhasLeis() {
   const idx = lerEst("leisBaixadas", {});
   if (!leiUi.editaisLidos) { leiUi.editaisLidos = true; setTimeout(async () => { await sincronizarLeis(); await procurarLeisNosEditais(); buscarEmentasIA(); }, 0); }   // inclui na lista as leis citadas nos editais
   const fm = lerEst("leiMat", ""), cat = leiCatalogo();
-  let h = `<div class="est-chips lei-mats"><button type="button" class="chip-sel${!fm ? " on" : ""}" data-leimat="">Todas</button>${materiasUsadas(cat).map(m => `<button type="button" class="chip-sel${fm === m ? " on" : ""}" data-leimat="${esc(m)}">${esc(m)} <span class="ct">${cat.filter(l => materiaDe(l) === m).length}</span></button>`).join("")}</div>
+  let h = `<div class="est-chips lei-mats"><button type="button" class="chip-sel${!fm ? " on" : ""}" data-leimat="">Todas</button>${MATERIAS_LEI.filter(m => m !== "Outras" || materiasUsadas(cat).includes(m)).map(m => `<button type="button" class="chip-sel${fm === m ? " on" : ""}" data-leimat="${esc(m)}">${esc(m)} <span class="ct">${cat.filter(l => materiaDe(l) === m).length}</span></button>`).join("")}</div>
     <p class="note">Baixe as leis que você vai estudar. O app pega o texto vigente no site do Planalto, tira o que está revogado (riscado no site) e separa os artigos. Fica guardado neste aparelho e na nuvem do app.</p>`;
   h += cat.filter(l => !fm || materiaDe(l) === fm).map(l => {
     const b = idx[l.id], ok = !!leis[l.id] || !!b, d = b && new Date(b.quando);
@@ -214,6 +215,7 @@ function htmlMinhasLeis() {
       <div class="prov-acoes">${leiUi.baixando[l.id] ? `<span class="note est-gerando">Baixando do Planalto…</span>` : `${ok ? `<button type="button" class="primary" data-leiler="${l.id}">Ler</button><button type="button" data-leibaixar="${l.id}" data-forcar="1">Atualizar</button>` : `<button type="button" class="primary" data-leibaixar="${l.id}">Baixar do Planalto</button>`}<button type="button" data-leicolar="${l.id}">Colar o texto</button>${l.extra ? `<button type="button" class="link-x" data-leiremover="${l.id}">remover</button>` : ""}`}</div>
       ${leiUi.colar === l.id ? htmlColarLei(l) : ""}</div>`;
   }).join("");
+  if (fm && !cat.some(l => materiaDe(l) === fm)) h += `<p class="note" style="text-align:center;padding:16px 0">Nenhuma lei em ${esc(fm)} ainda. Para trazer uma lei para cá, escolha esta matéria na listinha do cartão da lei, ou adicione uma lei nova abaixo.</p>`;
   h += `<details class="est-det"><summary>+ Adicionar outra lei</summary><div class="env-grid"><label class="env-l2">Nome<input id="leiNovaNome" placeholder="ex.: Lei de Lavagem de Dinheiro (Lei 9.613/1998)"></label><label>Sigla curta<input id="leiNovaSigla" placeholder="ex.: Lavagem"></label><label>Matéria<select id="leiNovaMat">${MATERIAS_LEI.map(m => `<option>${esc(m)}</option>`).join("")}</select></label><label>Link no planalto.gov.br<input id="leiNovaUrl" placeholder="https://www.planalto.gov.br/ccivil_03/leis/l9613.htm"></label></div><div class="actions" style="justify-content:flex-start"><button type="button" class="primary" id="leiNovaAdd">Adicionar</button></div></details>`;
   return h;
 }
@@ -348,7 +350,7 @@ const LEIS_CONHECIDAS = {
   "lei:6830:1980": ["Execução Fiscal", "Lei de Execução Fiscal", "Tributário"], "lei:5172:1966": ["CTN", "Código Tributário Nacional", "Tributário"],
   "lei:9504:1997": ["Lei das Eleições", "Lei das Eleições", "Eleitoral"], "lei:9096:1995": ["Partidos", "Lei dos Partidos Políticos", "Eleitoral"],
   "lc:64:1990": ["Inelegibilidades", "Lei das Inelegibilidades (LC 64/1990)", "Eleitoral"], "lc:35:1979": ["LOMAN", "Lei Orgânica da Magistratura Nacional (LC 35/1979)", "Institucional"],
-  "lc:101:2000": ["LRF", "Lei de Responsabilidade Fiscal (LC 101/2000)", "Administrativo"], "lei:13709:2018": ["LGPD", "Lei Geral de Proteção de Dados", "Civil"],
+  "lc:101:2000": ["LRF", "Lei de Responsabilidade Fiscal (LC 101/2000)", "Financeiro"], "lei:4320:1964": ["Lei 4.320", "Normas Gerais de Direito Financeiro (Lei 4.320/1964)", "Orçamentário"], "lei:12965:2014": ["Marco Civil", "Marco Civil da Internet", "Digital"], "lei:12737:2012": ["Carolina Dieckmann", "Lei Carolina Dieckmann (crimes informáticos)", "Digital"], "dec:678:1992": ["Pacto de San José", "Convenção Americana sobre Direitos Humanos (Decreto 678/1992)", "Direitos Humanos"], "lei:13709:2018": ["LGPD", "Lei Geral de Proteção de Dados", "Digital"],
   "lei:12527:2011": ["LAI", "Lei de Acesso à Informação", "Administrativo"], "lei:12846:2013": ["Anticorrupção", "Lei Anticorrupção", "Administrativo"],
   "lei:8137:1990": ["Crimes Tributários", "Crimes contra a Ordem Tributária", "Penal"], "lei:7716:1989": ["Racismo", "Lei dos Crimes de Racismo", "Penal"],
   "lei:11101:2005": ["Falências", "Lei de Falências e Recuperação", "Empresarial"], "lei:6015:1973": ["Registros Públicos", "Lei de Registros Públicos", "Civil"],
@@ -387,11 +389,11 @@ function urlsPlanalto(k) {
 }
 // matéria pela seção do edital onde a lei aparece ("DIREITO PROCESSUAL PENAL: … Lei nº 9.296/1996 …")
 function materiaPeloContexto(trecho) {
-  const t = semAcentoEst(trecho), achados = [...t.matchAll(/(direito|nocoes de direito)\s+(processual\s+(penal|civil)|penal|civil|constitucional|administrativo|eleitoral|tributario|empresarial|comercial|ambiental|do consumidor|da crianca|financeiro|do trabalho|processual do trabalho)|execucao penal|legislacao (penal|criminal) especial/g)];
+  const t = semAcentoEst(trecho), achados = [...t.matchAll(/(direito|nocoes de direito)\s+(processual\s+(penal|civil)|penal|civil|constitucional|administrativo|eleitoral|tributario|empresarial|comercial|ambiental|do consumidor|da crianca|financeiro|do trabalho|processual do trabalho|digital|orcamentario)|direitos humanos|orcamento publico|formacao humanistica|humanistica|execucao penal|legislacao (penal|criminal) especial/g)];
   if (!achados.length) return "";
   const u = achados[achados.length - 1][0];
   return /processual penal/.test(u) ? "Processo Penal" : /processual civil/.test(u) ? "Processo Civil" : /penal|criminal/.test(u) ? (/execucao/.test(u) ? "Execução Penal" : "Penal") : /civil/.test(u) ? "Civil" : /constitucional/.test(u) ? "Constitucional"
-    : /administrativo|financeiro/.test(u) ? "Administrativo" : /eleitoral/.test(u) ? "Eleitoral" : /tributario/.test(u) ? "Tributário" : /empresarial|comercial/.test(u) ? "Empresarial" : /ambiental/.test(u) ? "Ambiental" : /consumidor/.test(u) ? "Consumidor" : /crianca/.test(u) ? "Criança e Adolescente" : /trabalho/.test(u) ? "Trabalho" : "";
+    : /direitos humanos/.test(u) ? "Direitos Humanos" : /humanistica/.test(u) ? "Humanística" : /orcament/.test(u) ? "Orçamentário" : /financeiro/.test(u) ? "Financeiro" : /digital/.test(u) ? "Digital" : /administrativo/.test(u) ? "Administrativo" : /eleitoral/.test(u) ? "Eleitoral" : /tributario/.test(u) ? "Tributário" : /empresarial|comercial/.test(u) ? "Empresarial" : /ambiental/.test(u) ? "Ambiental" : /consumidor/.test(u) ? "Consumidor" : /crianca/.test(u) ? "Criança e Adolescente" : /trabalho/.test(u) ? "Trabalho" : "";
 }
 function leisDoTexto(texto) {
   const achadas = {};
