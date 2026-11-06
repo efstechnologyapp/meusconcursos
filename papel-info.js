@@ -17,7 +17,7 @@ async function gerarProvaInfoPapel(opc) {
   for (const j of lista) {
     let q; try { q = await (o.gerador ? o.gerador(j) : gerarQuestao(j, modo)); } catch (e) { q = questaoLocal(j, modo); }   // uma de cada vez (limite do plano gratuito da IA)
     questoes.push({ jid: j.id, trib: j.trib, info: j.info || "", disc: j.disc, tit: String(j.titulo || "").slice(0, 200), q });
-    papelInfo.gerando.k++; if ((estudoAba === "praticar" || estudoAba === "lei-praticar") && !estudo) desenharEstudo("praticar");
+    papelInfo.gerando.k++; if (["praticar", "simulado", "lei-praticar"].includes(estudoAba) && !estudo) desenharEstudo(estudoAba);
   }
   const reg = { chave: "info-" + Date.now().toString(36), tipo: "info", modo, quando: new Date().toISOString(), nome: o.nome || `Informativos · ${TITULO_MODO[modo]} · ${questoes.length} questões`, titulo: o.titulo || "", subtitulo: o.subtitulo || "", ...(o.lei ? { lei: true } : {}),
     questoes, qs: questoes.map((x, k) => ({ i: k, numero: k + 1 })), feitas: {} };
@@ -149,7 +149,7 @@ function htmlSimuladoCfg() {
   if (typeof repo !== "undefined" && !repo && typeof carregarRepo === "function") carregarRepo();
   const fontes = provasDaBanca(c);
   const chip = (attr, v, n, on) => `<button type="button" class="chip-sel${on ? " on" : ""}" data-${attr}="${esc(String(v))}">${n}</button>`;
-  return `<div class="est-sec sim-box"><h4>Gerar simulado</h4>
+  return `<div class="est-sec sim-box"><h4>Simulado</h4>
     <p class="note">Uma prova completa com os julgados filtrados acima, no formato da banca e no nível do cargo. A IA segue o padrão das provas dessa banca que estão na sua pasta Provas Jurídicas.</p>
     <div class="sim-grid">
       <label>Cargo<select id="simCargo"><option value="">Qualquer cargo</option>${(typeof CARGOS !== "undefined" ? CARGOS : []).map(x => `<option${x === c.cargo ? " selected" : ""}>${esc(x)}</option>`).join("")}</select></label>

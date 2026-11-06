@@ -264,6 +264,9 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .sim-box{border:2px solid color-mix(in srgb,var(--brand) 35%,var(--line));border-radius:14px;padding:14px;background:color-mix(in srgb,var(--brand) 4%,var(--surface))}
 .sim-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0}
 @media (max-width:560px){.sim-grid{grid-template-columns:1fr}}
+.lei-mat-linha{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:4px 0}
+.lei-mat-linha .mat{font-weight:700;border-style:dashed}
+.lei-tit .chip{font-size:11px;padding:1px 7px;margin-right:4px}
 .lei-item{border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
 .lei-tit{display:flex;flex-direction:column;gap:2px}.lei-msg{color:#7a5600}
 .lei-colar{border-top:1px dashed var(--line);padding-top:8px}
@@ -1722,7 +1725,7 @@ iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO=75;
+const APP_VERSAO=76;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{

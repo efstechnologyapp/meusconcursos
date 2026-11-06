@@ -286,12 +286,14 @@ function cabecalhoEstudo(aba) {
   // a área (informativos, provas, peças) é escolhida nos cartões da página Estudar; o modal mostra só a área aberta
   const titulo = area === "info" ? "Informativos" : area === "provas" ? "Provas anteriores" : "Peças práticas";
   return `<div class="dlg-head"><div style="flex:1;min-width:0"><h2>${titulo}</h2><p class="sub">${sub}</p></div><button type="button" class="close" data-close aria-label="Fechar">×</button></div>
-    ${area === "info" ? `<div class="est-abas">${[["praticar", "Praticar"], ["revisar", "Revisar julgados"], ["erros", "Caderno de erros"], ["desempenho", "Meu histórico"], ["config", "Caderno e IA"]].map(([k, n]) => `<button type="button" class="${aba === k ? "on" : ""}" data-estaba="${k}">${n}</button>`).join("")}</div>` : ""}`;
+    ${area === "info" ? `<div class="est-abas">${[["praticar", "Praticar"], ["simulado", "Gerar simulado"], ["revisar", "Revisar julgados"], ["erros", "Caderno de erros"], ["desempenho", "Meu histórico"], ["config", "Caderno e IA"]].map(([k, n]) => `<button type="button" class="${aba === k ? "on" : ""}" data-estaba="${k}">${n}</button>`).join("")}</div>` : ""}`;
 }
 function desenharEstudo(aba) {
   aba = aba || (julgados.length ? "praticar" : "config");
   // dentro da Lei seca, as telas compartilhadas (sessão de questões, histórico) continuam na área da lei
   if (String(estudoAba).startsWith("lei") && { praticar: "lei-praticar", desempenho: "lei-hist" }[aba]) aba = { praticar: "lei-praticar", desempenho: "lei-hist" }[aba];
+  // na aba do simulado, os filtros e o progresso redesenham a própria aba (sem pular para o treino)
+  if (aba === "praticar" && estudoAba === "simulado" && !estudo && !(typeof cartao !== "undefined" && cartao) && !(typeof papelInfo !== "undefined" && papelInfo.disc)) aba = "simulado";
   if (aba.startsWith("lei")) { estudoAba = aba; $("estudoConteudo").innerHTML = cabecalhoEstudo(aba) + `<div class="est-corpo">${htmlLei(aba)}</div>`; return; }
   estudoAba = aba;
   let corpo = "";
@@ -299,6 +301,7 @@ function desenharEstudo(aba) {
   else if (aba === "pecas") corpo = htmlPecas();
   else if (aba === "config") corpo = htmlConfigEstudo();
   else if (!julgados.length) corpo = `<p class="note">Primeiro junte o caderno na aba <b>Caderno e IA</b>.</p>`;
+  else if (aba === "simulado") corpo = htmlAbaSimulado();
   else if (aba === "praticar") corpo = typeof cartao !== "undefined" && cartao && cartao.info ? htmlCartao() : typeof papelInfo !== "undefined" && papelInfo.disc ? htmlDiscPapel() : estudo ? htmlSessao() : htmlPreparar();
   else if (aba === "revisar") corpo = htmlRevisar();
   else if (aba === "erros") corpo = htmlErros();
@@ -333,15 +336,28 @@ function htmlPreparar() {
   const concursos = itens.filter(x => andamento(x).ativo && disciplinasDoConcurso(x).length);
   return `${typeof htmlImpressasInfo === "function" ? htmlImpressasInfo() : ""}${vencidos ? `<p class="est-aviso">${vencidos} julgado(s) para revisar hoje — eles entram primeiro na sessão.</p>` : ""}
     <div class="est-sec"><h4>Modalidade</h4><div class="est-opts">${Object.entries(MODOS).map(([k, n]) => `<button type="button" class="opt${filtro.modo === k ? " on" : ""}" data-estmodo="${k}">${n}</button>`).join("")}</div></div>
-    ${anosDoCaderno().length > 1 ? `<div class="est-sec"><h4>Ano <span class="note">${(filtro.anos || []).length ? "" : "(todos)"}</span></h4><div class="est-chips">${anosDoCaderno().map(a => `<button type="button" class="chip-sel${(filtro.anos || []).includes(a) ? " on" : ""}" data-estano="${a}">${a} (${julgados.filter(j => grupoAno(j) === a).length})</button>`).join("")}</div></div>` : ""}
+    ${htmlFiltrosJulgados(filtro)}
+    <div class="est-sec"><h4>Quantidade de questões</h4><div class="est-chips">${[5, 10, 20, 30].map(n => `<button type="button" class="chip-sel${filtro.n === n ? " on" : ""}" data-estn="${n}">${n}</button>`).join("")}</div></div>
+    <p class="note">${iaLigada() ? "As questões e as correções das discursivas são feitas pela IA Gemini, do Google, a partir do julgado." : esc(iaIndisponivel || "Sem conexão com a IA: as questões serão simples, feitas a partir das teses.")}</p>
+    <div class="actions"><button type="button" class="primary" id="estComecar">Começar</button></div>
+    <p class="note">Para uma prova completa no padrão da banca (no app ou no papel), use a aba <b>Gerar simulado</b>.</p>`;
+}
+// filtros de ano, tribunal e disciplina (valem para o treino e para o simulado)
+function htmlFiltrosJulgados(filtro) {
+  const discs = [...new Set(julgados.map(j => j.disc))];
+  const concursos = itens.filter(x => andamento(x).ativo && disciplinasDoConcurso(x).length);
+  return `    ${anosDoCaderno().length > 1 ? `<div class="est-sec"><h4>Ano <span class="note">${(filtro.anos || []).length ? "" : "(todos)"}</span></h4><div class="est-chips">${anosDoCaderno().map(a => `<button type="button" class="chip-sel${(filtro.anos || []).includes(a) ? " on" : ""}" data-estano="${a}">${a} (${julgados.filter(j => grupoAno(j) === a).length})</button>`).join("")}</div></div>` : ""}
     <div class="est-sec"><h4>Tribunais</h4><div class="est-chips">${["STF", "STJ", "TSE"].map(t => `<button type="button" class="chip-sel${filtro.tribs.includes(t) ? " on" : ""}" data-esttrib="${t}">${t} (${julgados.filter(j => j.trib === t).length})</button>`).join("")}</div></div>
     <div class="est-sec"><h4>Disciplinas <span class="note">${filtro.discs.length ? "" : "(todas)"}</span></h4>
       ${concursos.length ? `<label class="est-conc">Focar nas matérias do concurso<select id="estConcurso"><option value="">—</option>${concursos.map(x => `<option value="${esc(x.id)}">${esc(x.nome)}</option>`).join("")}</select></label>` : ""}
       <div class="est-chips">${discs.map(d => { const n = julgados.filter(j => j.disc === d && filtro.tribs.includes(j.trib) && (!(filtro.anos || []).length || filtro.anos.includes(grupoAno(j)))).length; return `<button type="button" class="chip-sel${filtro.discs.includes(d) ? " on" : ""}" data-estdisc="${esc(d)}">${esc(d)} <span class="ct">${n}</span></button>`; }).join("")}</div></div>
-    <p class="note">Julgados que entram na sessão com esses filtros: <b>${julgados.filter(j => (!filtro.discs.length || filtro.discs.includes(j.disc)) && filtro.tribs.includes(j.trib) && (!(filtro.anos || []).length || filtro.anos.includes(grupoAno(j)))).length}</b></p>
-    <div class="est-sec"><h4>Quantidade de questões</h4><div class="est-chips">${[5, 10, 20, 30].map(n => `<button type="button" class="chip-sel${filtro.n === n ? " on" : ""}" data-estn="${n}">${n}</button>`).join("")}</div></div>
-    <p class="note">${iaLigada() ? "As questões e as correções das discursivas são feitas pela IA Gemini, do Google, a partir do julgado." : esc(iaIndisponivel || "Sem conexão com a IA: as questões serão simples, feitas a partir das teses.")}</p>
-    <div class="actions"><button type="button" class="primary" id="estComecar">Começar treino rápido</button></div>
+    <p class="note">Julgados que entram na sessão com esses filtros: <b>${julgados.filter(j => (!filtro.discs.length || filtro.discs.includes(j.disc)) && filtro.tribs.includes(j.trib) && (!(filtro.anos || []).length || filtro.anos.includes(grupoAno(j)))).length}</b></p>`;
+}
+// aba "Gerar simulado": os mesmos filtros + a configuração do simulado
+function htmlAbaSimulado() {
+  const filtro = lerEst("filtro", { modo: "ce", discs: [], tribs: ["STF", "STJ", "TSE"], n: 10 });
+  return `${typeof htmlImpressasInfo === "function" ? htmlImpressasInfo() : ""}<p class="note">Escolha os julgados que entram no simulado e, embaixo, o cargo, a banca e o formato.</p>
+    ${htmlFiltrosJulgados(filtro)}
     ${typeof htmlSimuladoCfg === "function" ? htmlSimuladoCfg() : ""}`;
 }
 function iniciarSessao(soErros) {

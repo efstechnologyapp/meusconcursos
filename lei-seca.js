@@ -3,23 +3,28 @@
 // o usuário cola o texto copiado da página (o app recebe a formatação e tira o que está riscado = revogado).
 
 const LEIS_PADRAO = [
-  { id: "cf", sigla: "CF", nome: "Constituição Federal", url: "https://www.planalto.gov.br/ccivil_03/constituicao/constituicao.htm" },
-  { id: "cp", sigla: "CP", nome: "Código Penal", url: "https://www.planalto.gov.br/ccivil_03/decreto-lei/del2848compilado.htm" },
-  { id: "cpp", sigla: "CPP", nome: "Código de Processo Penal", url: "https://www.planalto.gov.br/ccivil_03/decreto-lei/del3689compilado.htm" },
-  { id: "cc", sigla: "CC", nome: "Código Civil", url: "https://www.planalto.gov.br/ccivil_03/leis/2002/l10406compilada.htm" },
-  { id: "cpc", sigla: "CPC", nome: "Código de Processo Civil", url: "https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2015/lei/l13105.htm" },
-  { id: "lep", sigla: "LEP", nome: "Lei de Execução Penal (Lei 7.210/1984)", url: "https://www.planalto.gov.br/ccivil_03/leis/l7210.htm" },
-  { id: "drogas", sigla: "Lei de Drogas", nome: "Lei de Drogas (Lei 11.343/2006)", url: "https://www.planalto.gov.br/ccivil_03/_ato2004-2006/2006/lei/l11343.htm" },
-  { id: "eca", sigla: "ECA", nome: "Estatuto da Criança e do Adolescente (Lei 8.069/1990)", url: "https://www.planalto.gov.br/ccivil_03/leis/l8069.htm" },
-  { id: "mariapenha", sigla: "Maria da Penha", nome: "Lei Maria da Penha (Lei 11.340/2006)", url: "https://www.planalto.gov.br/ccivil_03/_ato2004-2006/2006/lei/l11340.htm" },
-  { id: "improbidade", sigla: "LIA", nome: "Lei de Improbidade Administrativa (Lei 8.429/1992)", url: "https://www.planalto.gov.br/ccivil_03/leis/l8429.htm" },
-  { id: "abuso", sigla: "Abuso de Autoridade", nome: "Lei de Abuso de Autoridade (Lei 13.869/2019)", url: "https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2019/lei/l13869.htm" },
-  { id: "orcrim", sigla: "Org. Criminosas", nome: "Lei das Organizações Criminosas (Lei 12.850/2013)", url: "https://www.planalto.gov.br/ccivil_03/_ato2011-2014/2013/lei/l12850.htm" },
-  { id: "intercept", sigla: "Interceptação", nome: "Lei de Interceptação Telefônica (Lei 9.296/1996)", url: "https://www.planalto.gov.br/ccivil_03/leis/l9296.htm" },
-  { id: "ce", sigla: "Cód. Eleitoral", nome: "Código Eleitoral (Lei 4.737/1965)", url: "https://www.planalto.gov.br/ccivil_03/leis/l4737compilado.htm" }
+  { id: "cf", materia: "Constitucional", sigla: "CF", nome: "Constituição Federal", url: "https://www.planalto.gov.br/ccivil_03/constituicao/constituicao.htm" },
+  { id: "cp", materia: "Penal", sigla: "CP", nome: "Código Penal", url: "https://www.planalto.gov.br/ccivil_03/decreto-lei/del2848compilado.htm" },
+  { id: "cpp", materia: "Processo Penal", sigla: "CPP", nome: "Código de Processo Penal", url: "https://www.planalto.gov.br/ccivil_03/decreto-lei/del3689compilado.htm" },
+  { id: "cc", materia: "Civil", sigla: "CC", nome: "Código Civil", url: "https://www.planalto.gov.br/ccivil_03/leis/2002/l10406compilada.htm" },
+  { id: "cpc", materia: "Processo Civil", sigla: "CPC", nome: "Código de Processo Civil", url: "https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2015/lei/l13105.htm" },
+  { id: "lep", materia: "Execução Penal", sigla: "LEP", nome: "Lei de Execução Penal (Lei 7.210/1984)", url: "https://www.planalto.gov.br/ccivil_03/leis/l7210.htm" },
+  { id: "drogas", materia: "Penal", sigla: "Lei de Drogas", nome: "Lei de Drogas (Lei 11.343/2006)", url: "https://www.planalto.gov.br/ccivil_03/_ato2004-2006/2006/lei/l11343.htm" },
+  { id: "eca", materia: "Criança e Adolescente", sigla: "ECA", nome: "Estatuto da Criança e do Adolescente (Lei 8.069/1990)", url: "https://www.planalto.gov.br/ccivil_03/leis/l8069.htm" },
+  { id: "mariapenha", materia: "Penal", sigla: "Maria da Penha", nome: "Lei Maria da Penha (Lei 11.340/2006)", url: "https://www.planalto.gov.br/ccivil_03/_ato2004-2006/2006/lei/l11340.htm" },
+  { id: "improbidade", materia: "Administrativo", sigla: "LIA", nome: "Lei de Improbidade Administrativa (Lei 8.429/1992)", url: "https://www.planalto.gov.br/ccivil_03/leis/l8429.htm" },
+  { id: "abuso", materia: "Penal", sigla: "Abuso de Autoridade", nome: "Lei de Abuso de Autoridade (Lei 13.869/2019)", url: "https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2019/lei/l13869.htm" },
+  { id: "orcrim", materia: "Penal", sigla: "Org. Criminosas", nome: "Lei das Organizações Criminosas (Lei 12.850/2013)", url: "https://www.planalto.gov.br/ccivil_03/_ato2011-2014/2013/lei/l12850.htm" },
+  { id: "intercept", materia: "Processo Penal", sigla: "Interceptação", nome: "Lei de Interceptação Telefônica (Lei 9.296/1996)", url: "https://www.planalto.gov.br/ccivil_03/leis/l9296.htm" },
+  { id: "ce", materia: "Eleitoral", sigla: "Cód. Eleitoral", nome: "Código Eleitoral (Lei 4.737/1965)", url: "https://www.planalto.gov.br/ccivil_03/leis/l4737compilado.htm" }
 ];
 let leis = {};          // id -> { meta, artigos: [{ id, rot, txt, cap }], quando, fonte }
 let leiUi = { baixando: {}, colar: null, msg: {} };
+const MATERIAS_LEI = ["Constitucional", "Penal", "Processo Penal", "Execução Penal", "Civil", "Processo Civil", "Criança e Adolescente", "Administrativo", "Eleitoral", "Tributário", "Trabalho", "Outras"];
+const materiaDe = l => l.materia || "Outras";
+const materiasUsadas = lista => MATERIAS_LEI.filter(m => lista.some(l => materiaDe(l) === m));
+// select de leis agrupado por matéria
+const optsLeis = (lista, atual) => materiasUsadas(lista).map(m => `<optgroup label="${esc(m)}">${lista.filter(l => materiaDe(l) === m).map(l => `<option value="${l.id}"${l.id === atual ? " selected" : ""}>${esc(l.nome)}</option>`).join("")}</optgroup>`).join("");
 const lerLeiCfg = () => ({ lei: "", cap: "", busca: "", soDificeis: false, pos: {}, ...lerEst("leiRev", {}) });
 const leiCatalogo = () => [...LEIS_PADRAO, ...lerEst("leisExtras", [])];
 const marcasLei = () => lerEst("leiMarc", {});   // artigoId -> { rev: data, dif: true }
@@ -118,14 +123,16 @@ function htmlLei(aba) {
 const leisProntas = () => leiCatalogo().filter(l => leis[l.id]);
 function htmlMinhasLeis() {
   const idx = lerEst("leisBaixadas", {});
-  let h = `<p class="note">Baixe as leis que você vai estudar. O app pega o texto vigente no site do Planalto, tira o que está revogado (riscado no site) e separa os artigos. Fica guardado neste aparelho e na nuvem do app.</p>`;
-  h += leiCatalogo().map(l => {
+  const fm = lerEst("leiMat", ""), cat = leiCatalogo();
+  let h = `<div class="est-chips lei-mats"><button type="button" class="chip-sel${!fm ? " on" : ""}" data-leimat="">Todas</button>${materiasUsadas(cat).map(m => `<button type="button" class="chip-sel${fm === m ? " on" : ""}" data-leimat="${esc(m)}">${esc(m)} <span class="ct">${cat.filter(l => materiaDe(l) === m).length}</span></button>`).join("")}</div>
+    <p class="note">Baixe as leis que você vai estudar. O app pega o texto vigente no site do Planalto, tira o que está revogado (riscado no site) e separa os artigos. Fica guardado neste aparelho e na nuvem do app.</p>`;
+  h += cat.filter(l => !fm || materiaDe(l) === fm).map(l => {
     const b = idx[l.id], ok = !!leis[l.id] || !!b, d = b && new Date(b.quando);
-    return `<div class="lei-item"><div class="lei-tit"><b>${esc(l.nome)}</b><span class="note">${ok ? `✓ ${b ? b.n : leis[l.id].artigos.length} artigos · ${b && b.fonte === "colado" ? "texto colado" : "do Planalto"}${d && !isNaN(d) ? " em " + d.toLocaleDateString("pt-BR") : ""}` : "ainda não baixada"}${leiUi.msg[l.id] ? ` · <span class="lei-msg">${esc(leiUi.msg[l.id])}</span>` : ""}</span></div>
+    return `<div class="lei-item"><div class="lei-tit"><b>${esc(l.nome)}</b><span class="note"><span class="chip">${esc(materiaDe(l))}</span> ${ok ? `✓ ${b ? b.n : leis[l.id].artigos.length} artigos · ${b && b.fonte === "colado" ? "texto colado" : "do Planalto"}${d && !isNaN(d) ? " em " + d.toLocaleDateString("pt-BR") : ""}` : "ainda não baixada"}${leiUi.msg[l.id] ? ` · <span class="lei-msg">${esc(leiUi.msg[l.id])}</span>` : ""}</span></div>
       <div class="prov-acoes">${leiUi.baixando[l.id] ? `<span class="note est-gerando">Baixando do Planalto…</span>` : `${ok ? `<button type="button" class="primary" data-leiler="${l.id}">Ler</button><button type="button" data-leibaixar="${l.id}" data-forcar="1">Atualizar</button>` : `<button type="button" class="primary" data-leibaixar="${l.id}">Baixar do Planalto</button>`}<button type="button" data-leicolar="${l.id}">Colar o texto</button>${l.extra ? `<button type="button" class="link-x" data-leiremover="${l.id}">remover</button>` : ""}`}</div>
       ${leiUi.colar === l.id ? htmlColarLei(l) : ""}</div>`;
   }).join("");
-  h += `<details class="est-det"><summary>+ Adicionar outra lei</summary><div class="env-grid"><label class="env-l2">Nome<input id="leiNovaNome" placeholder="ex.: Lei de Lavagem de Dinheiro (Lei 9.613/1998)"></label><label>Sigla curta<input id="leiNovaSigla" placeholder="ex.: Lavagem"></label><label>Link no planalto.gov.br<input id="leiNovaUrl" placeholder="https://www.planalto.gov.br/ccivil_03/leis/l9613.htm"></label></div><div class="actions" style="justify-content:flex-start"><button type="button" class="primary" id="leiNovaAdd">Adicionar</button></div></details>`;
+  h += `<details class="est-det"><summary>+ Adicionar outra lei</summary><div class="env-grid"><label class="env-l2">Nome<input id="leiNovaNome" placeholder="ex.: Lei de Lavagem de Dinheiro (Lei 9.613/1998)"></label><label>Sigla curta<input id="leiNovaSigla" placeholder="ex.: Lavagem"></label><label>Matéria<select id="leiNovaMat">${MATERIAS_LEI.map(m => `<option>${esc(m)}</option>`).join("")}</select></label><label>Link no planalto.gov.br<input id="leiNovaUrl" placeholder="https://www.planalto.gov.br/ccivil_03/leis/l9613.htm"></label></div><div class="actions" style="justify-content:flex-start"><button type="button" class="primary" id="leiNovaAdd">Adicionar</button></div></details>`;
   return h;
 }
 function htmlColarLei(l) {
@@ -145,7 +152,7 @@ function htmlLerLei() {
   const L = leis[c.lei], lista = listaFiltrada(c), mk = marcasLei(), chave = [c.lei, c.cap, c.busca, c.soDificeis ? 1 : 0].join("|");
   const pos = Math.min((c.pos || {})[chave] || 0, Math.max(0, lista.length - 1)), a = lista[pos];
   const revisados = L.artigos.filter(x => mk[x.id] && mk[x.id].rev).length, dificeis = L.artigos.filter(x => mk[x.id] && mk[x.id].dif).length;
-  let h = `<div class="sim-grid"><label>Lei<select id="leiSel">${prontas.map(l => `<option value="${l.id}"${l.id === c.lei ? " selected" : ""}>${esc(l.nome)}</option>`).join("")}</select></label>
+  let h = `<div class="sim-grid"><label>Lei<select id="leiSel">${optsLeis(prontas, c.lei)}</select></label>
     <label>Parte da lei<select id="leiCap"><option value="">A lei inteira</option>${capitulosDe(L).map(x => `<option${x === c.cap ? " selected" : ""}>${esc(x.length > 110 ? x.slice(0, 110) + "…" : x)}</option>`).join("")}</select></label></div>
     <div class="lei-busca"><input id="leiBusca" type="search" placeholder="Buscar no texto (ex.: flagrante, prazo, 48 horas)" value="${esc(c.busca)}"><label class="chk"><input type="checkbox" id="leiSoDif"${c.soDificeis ? " checked" : ""}> só os difíceis (${dificeis})</label></div>
     <p class="note">${lista.length} artigo(s) · ${revisados} de ${L.artigos.length} revisados nesta lei${L.fonte === "colado" ? " · texto colado" : ""}</p>`;
@@ -177,7 +184,7 @@ function htmlPrepLei() {
   const caps = usa.length === 1 ? capitulosDe(leis[usa[0]]) : [];
   const chip = (attr, v, n, on) => `<button type="button" class="chip-sel${on ? " on" : ""}" data-${attr}="${esc(String(v))}">${n}</button>`;
   const base = artigosParaPraticar(c);
-  h += `<div class="est-sec"><h4>Leis</h4><div class="est-chips">${prontas.map(l => chip("leipl", l.id, esc(l.sigla), usa.includes(l.id))).join("")}</div></div>
+  h += `<div class="est-sec"><h4>Leis <span class="note">(toque na matéria para marcar todas as leis dela)</span></h4>${materiasUsadas(prontas).map(m => { const ls = prontas.filter(l => materiaDe(l) === m), todas = ls.every(l => usa.includes(l.id)); return `<div class="lei-mat-linha"><button type="button" class="chip-sel mat${todas ? " on" : ""}" data-leiplmat="${esc(m)}">${esc(m)}</button>${ls.map(l => chip("leipl", l.id, esc(l.sigla), usa.includes(l.id))).join("")}</div>`; }).join("")}</div>
     ${caps.length ? `<div class="est-sec"><h4>Parte da lei</h4><select id="leiPratCap"><option value="">A lei inteira</option>${caps.map(x => `<option${x === c.cap ? " selected" : ""}>${esc(x.length > 110 ? x.slice(0, 110) + "…" : x)}</option>`).join("")}</select></div>` : ""}
     <div class="est-sec"><h4>Quais artigos</h4><div class="est-chips">${chip("leiso", "", "Todos", !c.so)}${chip("leiso", "dif", "Só os difíceis", c.so === "dif")}${chip("leiso", "rev", "Só os já revisados", c.so === "rev")}${chip("leiso", "nao", "Ainda não revisados", c.so === "nao")}</div></div>
     <div class="est-sec"><h4>Formato</h4><div class="est-opts">${Object.entries(MODOS_LEI).map(([k, n]) => `<button type="button" class="opt${c.modo === k ? " on" : ""}" data-leimodo="${k}">${n}</button>`).join("")}</div></div>
@@ -250,7 +257,7 @@ document.addEventListener("click", e => {
   if (t.id === "leiNovaAdd") {
     const nome = $("leiNovaNome").value.trim(), url = $("leiNovaUrl").value.trim(), sigla = $("leiNovaSigla").value.trim() || nome.slice(0, 20);
     if (!nome || !/^https?:\/\/(www\.)?planalto\.gov\.br\//i.test(url)) { toast("Informe o nome e um link do planalto.gov.br."); return; }
-    gravarEst("leisExtras", [...lerEst("leisExtras", []), { id: "x" + Date.now().toString(36), sigla, nome, url, extra: true }]); desenharEstudo(estudoAba); return;
+    gravarEst("leisExtras", [...lerEst("leisExtras", []), { id: "x" + Date.now().toString(36), sigla, nome, url, materia: $("leiNovaMat").value, extra: true }]); desenharEstudo(estudoAba); return;
   }
   if (t.id === "leiAnt") { moverLei(-1); return; }
   if (t.id === "leiProx") { moverLei(1); return; }
@@ -265,6 +272,8 @@ document.addEventListener("click", e => {
   }
   if (d.leipraticar) { const j = artigoPorId(d.leipraticar); if (!j) return; registrarSessaoInfo(); const md = lerLeiPrat().modo; estudo = { modo: md === "ce" ? "ce" : "me", lista: [j], i: 0, qs: {}, resp: {}, notas: [], gerador: geradorLei([j], md, lerLeiPrat().banca), lei: true }; prepararQuestao(0); desenharEstudo("lei-praticar"); return; }
   const c = lerLeiPrat();
+  if (d.leimat !== undefined && t.closest(".lei-mats")) { gravarEst("leiMat", d.leimat); desenharEstudo("lei-leis"); return; }
+  if (d.leiplmat) { const ls = leisProntas().filter(l => materiaDe(l) === d.leiplmat).map(l => l.id), atual = c.leis.filter(id => leis[id]); const todas = ls.every(id => atual.includes(id)); c.leis = todas ? atual.filter(id => !ls.includes(id)) : [...new Set([...atual, ...ls])]; if (!c.leis.length) c.leis = [ls[0]]; c.cap = ""; gravarEst("leiPrat", c); desenharEstudo("lei-praticar"); return; }
   if (d.leipl) { const prontas = leisProntas(), atual = c.leis.filter(id => leis[id]).length ? c.leis.filter(id => leis[id]) : [prontas[0].id]; c.leis = atual.includes(d.leipl) ? atual.filter(x => x !== d.leipl) : [...atual, d.leipl]; if (!c.leis.length) c.leis = [d.leipl]; c.cap = ""; gravarEst("leiPrat", c); desenharEstudo("lei-praticar"); return; }
   if (d.leiso !== undefined && t.closest(".est-chips")) { c.so = d.leiso; gravarEst("leiPrat", c); desenharEstudo("lei-praticar"); return; }
   if (d.leimodo) { c.modo = d.leimodo; gravarEst("leiPrat", c); desenharEstudo("lei-praticar"); return; }
