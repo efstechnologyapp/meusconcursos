@@ -95,3 +95,21 @@ O app lê o caderno de informativos direto do Google Docs no Drive e usa a IA Ge
 4. **Implantar → Gerenciar implantações → lápis (Editar) → Versão: Nova versão → Implantar.** A URL `/exec` continua a mesma.
 
 Se o app mostrar "atualize o script", é porque a nova versão ainda não foi implantada.
+
+## Provas anteriores e peças práticas (pasta "Provas Jurídicas")
+
+No Drive da conta que publicou o Apps Script, crie a pasta **Provas Jurídicas** com esta organização:
+
+```
+Provas Jurídicas/
+├── Provas objetivas/   → Juiz / Promotor / Delegado / Serventuário da Justiça
+├── Provas subjetivas/  → Juiz / Promotor / Delegado / Serventuário da Justiça
+└── Peças jurídicas/    → Juiz / Promotor / Delegado / Serventuário da Justiça
+```
+
+- Em cada pasta de cargo, coloque a prova e o gabarito/espelho em PDF (ou Google Docs) com o mesmo começo de nome, por exemplo: `TJMG 2022 - prova.pdf` e `TJMG 2022 - gabarito.pdf`; `TJMG 2022 - sentença cível.pdf` e `TJMG 2022 - espelho sentença cível.pdf`. O app reconhece como gabarito os arquivos com "gabarito", "espelho" ou "padrão de resposta" no nome. Se o gabarito estiver dentro do próprio PDF da prova, basta o arquivo da prova.
+- PDFs de até uns 15 MB (o limite do Gemini para arquivos enviados junto do pedido é 20 MB).
+- O app cria dentro dela a pasta **_app (não apagar)**, onde guarda as provas já lidas pela IA para não reprocessar.
+- (Opcional) Se a pasta tiver outro nome, crie a propriedade do script `REPOSITORIO_ID` com o ID da pasta.
+
+Depois de colar o novo `Codigo.gs`, implante uma nova versão (Implantar → Gerenciar implantações → lápis → Nova versão → Implantar).

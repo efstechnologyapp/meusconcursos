@@ -277,14 +277,20 @@ function abrirEstudo() {
   const d = $("dlgEstudo"); if (!d.open) d.showModal();
 }
 function cabecalhoEstudo(aba) {
-  return `<div class="dlg-head"><div style="flex:1;min-width:0"><h2>Estudar informativos</h2><p class="sub">${julgados.length ? `${julgados.length} julgados do caderno · questões e correções pela IA Gemini` : "Carregando o caderno de informativos…"}</p></div><button type="button" class="close" data-close aria-label="Fechar">×</button></div>
-    <div class="est-abas">${[["praticar", "Praticar"], ["revisar", "Revisar julgados"], ["erros", "Caderno de erros"], ["desempenho", "Desempenho"], ["config", "Caderno e IA"]].map(([k, n]) => `<button type="button" class="${aba === k ? "on" : ""}" data-estaba="${k}">${n}</button>`).join("")}</div>`;
+  const area = aba === "provas" ? "provas" : aba === "pecas" ? "pecas" : "info";
+  const sub = area === "info" ? (julgados.length ? `${julgados.length} julgados do caderno · questões e correções pela IA Gemini` : "Carregando o caderno de informativos…")
+    : area === "provas" ? "Provas objetivas e subjetivas da pasta Provas Jurídicas · questões e correções pela IA Gemini" : "Peças práticas da pasta Provas Jurídicas · estrutura, casos e correção pela IA Gemini";
+  return `<div class="dlg-head"><div style="flex:1;min-width:0"><h2>Estudar</h2><p class="sub">${sub}</p></div><button type="button" class="close" data-close aria-label="Fechar">×</button></div>
+    <div class="est-areas">${[["praticar", "info", "Informativos"], ["provas", "provas", "Provas anteriores"], ["pecas", "pecas", "Peças práticas"]].map(([k, a, n]) => `<button type="button" class="${area === a ? "on" : ""}" data-estaba="${k}">${n}</button>`).join("")}</div>
+    ${area === "info" ? `<div class="est-abas">${[["praticar", "Praticar"], ["revisar", "Revisar julgados"], ["erros", "Caderno de erros"], ["desempenho", "Desempenho"], ["config", "Caderno e IA"]].map(([k, n]) => `<button type="button" class="${aba === k ? "on" : ""}" data-estaba="${k}">${n}</button>`).join("")}</div>` : ""}`;
 }
 function desenharEstudo(aba) {
   aba = aba || (julgados.length ? "praticar" : "config");
   estudoAba = aba;
   let corpo = "";
-  if (aba === "config") corpo = htmlConfigEstudo();
+  if (aba === "provas") corpo = htmlProvas();
+  else if (aba === "pecas") corpo = htmlPecas();
+  else if (aba === "config") corpo = htmlConfigEstudo();
   else if (!julgados.length) corpo = `<p class="note">Primeiro junte o caderno na aba <b>Caderno e IA</b>.</p>`;
   else if (aba === "praticar") corpo = estudo ? htmlSessao() : htmlPreparar();
   else if (aba === "revisar") corpo = htmlRevisar();

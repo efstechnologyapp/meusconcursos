@@ -42,7 +42,14 @@ Ficam fora do formulário do concurso. Ao abrir o concurso na tela inicial, cada
 
 ## Estudar informativos
 
-Botão **Estudar informativos** na tela inicial. O app lê o caderno de informativos direto do Google Docs no Drive do projeto (pelo Apps Script; também é possível usar outro arquivo .md/.txt/PDF) e separa os julgados por disciplina e tribunal (STF, STJ, TSE). Modalidades: certo/errado (Cebraspe), múltipla escolha (FGV) e discursiva com caso concreto. A IA Gemini (chave guardada no Apps Script) cria as questões a partir do julgado e corrige a discursiva com nota, itens do espelho e resposta-modelo; sem a IA, o app gera questões simples a partir das teses e a discursiva é autocorrigida pelo espelho. Revisão espaçada (erros voltam em 1 dia; acertos em 3, 7, 15, 30), caderno de erros, desempenho por disciplina e foco nas matérias de um concurso cadastrado.
+Botão **Estudar informativos** na tela inicial. O app lê o caderno de informativos direto do Google Docs no Drive do projeto (pelo Apps Script; também é possível usar outro arquivo .md/.txt/PDF) e separa os julgados por disciplina e tribunal (STF, STJ, TSE). Filtros por ano (pelo sumário do caderno ou pela data do julgamento), tribunal e disciplina. Modalidades: certo/errado (Cebraspe), múltipla escolha (FGV) e discursiva com caso concreto. A IA Gemini (chave guardada no Apps Script) cria as questões a partir do julgado e corrige a discursiva com nota, itens do espelho e resposta-modelo; sem a IA, o app gera questões simples a partir das teses e a discursiva é autocorrigida pelo espelho. Aba **Revisar julgados**: leitura um a um (tese em destaque, texto completo e citação), com filtros por ano, disciplina, tribunal e busca no texto, marcação de revisado e botão para praticar o julgado. Revisão espaçada (erros voltam em 1 dia; acertos em 3, 7, 15, 30), caderno de erros, desempenho por disciplina e foco nas matérias de um concurso cadastrado.
+
+## Provas anteriores e peças práticas
+
+Em **Estudar**, as áreas **Provas anteriores** e **Peças práticas** usam a pasta **Provas Jurídicas** do Drive do projeto (organizada por tipo e por cargo; veja CONFIGURAR-LOGIN.md). A IA Gemini lê o PDF da prova e do gabarito/espelho:
+- **Objetivas:** simulado com as questões originais e o gabarito oficial (anuladas não contam), explicação do gabarito pela IA e questões inéditas no estilo da prova; resultado por disciplina.
+- **Subjetivas:** responder as questões originais e receber nota, itens do espelho oficial e resposta esperada; ou questões inéditas no mesmo estilo.
+- **Peças práticas:** seção **Estrutura das peças** (elementos com fundamento legal, o que conter, dicas, erros comuns e esqueleto) por tipo de peça e cargo; **Praticar peças** com o caso original ou um caso inédito, roteiro da estrutura ao lado, rascunho salvo e correção com nota, espelho e checagem da estrutura.
 
 ## Google Agenda
 
@@ -76,6 +83,7 @@ Os concursos ficam salvos no navegador e sincronizados com a nuvem da conta. O e
 | `manifest.json` | Nome, cores e ícones para o Chrome instalar como app |
 | `edital.js` | Lê o PDF do edital e encontra os dados da prova |
 | `boleto.js` | Lê o boleto em PDF (linha digitável, vencimento e valor) |
+| `provas.js` | Provas anteriores e peças práticas a partir da pasta Provas Jurídicas |
 | `estudos.js` | Estudar informativos: questões, correção com IA e revisão espaçada |
 | `agenda.js` | Grava as provas no Google Agenda do usuário |
 | `viagem.js` | Transporte (voos com conexões ou carro) e hospedagem de cada viagem |

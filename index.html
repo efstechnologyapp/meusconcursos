@@ -191,6 +191,17 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 /* Estudar informativos */
 .topo-acoes{display:flex;gap:8px;flex-wrap:wrap}
 .dlg-estudo{width:min(760px,calc(100vw - 16px))}
+.est-areas{display:flex;gap:6px;flex-wrap:wrap}
+.est-areas button{font-weight:700;border-radius:999px;padding:7px 14px}
+.est-areas button.on{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.prov-item{border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.prov-tit{display:flex;flex-direction:column;gap:2px}
+.prov-acoes{display:flex;gap:8px;flex-wrap:wrap}
+.pec-estr{display:flex;flex-direction:column;gap:10px}
+.pec-elem{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:10px;font-size:14px}
+.pec-elem ul{margin:4px 0 0;padding-left:18px}
+.pec-el-tit{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pec-roteiro{margin:0;padding-left:20px;font-size:14px;display:flex;flex-direction:column;gap:3px}
 .est-abas{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:8px}
 .est-abas button{border:none;background:transparent;font-weight:600;color:var(--muted);padding:6px 10px;border-radius:8px}
 .est-abas button.on{background:var(--chip);color:var(--ink)}
@@ -371,7 +382,7 @@ fieldset{border:none;padding:0;margin:0;display:contents}
       <h1>Meus <mark>Concursos</mark></h1>
       <p class="sub" id="resumo">Carregando seus concursos…</p>
     </div>
-    <div class="topo-acoes"><button id="btnEstudo" type="button">Estudar informativos</button><button class="primary" id="btnNovo" type="button">+ Novo concurso</button></div>
+    <div class="topo-acoes"><button id="btnEstudo" type="button">Estudar</button><button class="primary" id="btnNovo" type="button">+ Novo concurso</button></div>
   </header>
 
   <p class="section-label" id="lblProx" hidden>Em andamento</p>
@@ -492,6 +503,7 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 <script src="viagem.js"></script>
 <script src="agenda.js"></script>
 <script src="estudos.js"></script>
+<script src="provas.js"></script>
 <script>
 const CHAVE="meus-concursos-dados";
 const MESES=["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
@@ -1554,7 +1566,7 @@ iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO=47;
+const APP_VERSAO=48;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{
