@@ -5,12 +5,22 @@
 let repo = null, repoCarregando = false, sim = null, pecaEstr = {};
 const LOTE = 15;   // questões objetivas extraídas por vez
 const ESTRUTURAS_PADRAO = {
-  "Juiz": ["Sentença cível", "Sentença criminal"],
-  "Promotor": ["Denúncia", "Alegações finais (Ministério Público)", "Parecer do Ministério Público"],
-  "Delegado": ["Relatório final de inquérito policial", "Representação por prisão preventiva", "Auto de prisão em flagrante"],
-  "Serventuário da Justiça": ["Certidão", "Mandado judicial"]
+  "Juiz de Direito": ["Sentença cível", "Sentença criminal"],
+  "Promotor de Justiça": ["Denúncia", "Alegações finais (Ministério Público)", "Parecer do Ministério Público"],
+  "Delegado de Polícia": ["Relatório final de inquérito policial", "Representação por prisão preventiva", "Auto de prisão em flagrante"],
+  "Analista Judiciário": ["Certidão", "Mandado judicial"]
 };
-const lerProv = (b, p) => lerEst("prov-" + b, p), gravarProv = (b, v) => gravarEst("prov-" + b, v);
+const CARGOS = Object.keys(ESTRUTURAS_PADRAO);
+function cargoPadrao(nome) {
+  const n = semAcentoEst(nome);
+  if (/delegad/.test(n)) return "Delegado de Polícia";
+  if (/juiz|juiza|magistr/.test(n)) return "Juiz de Direito";
+  if (/promot|ministerio publico|\bmp\b|procurador/.test(n)) return "Promotor de Justiça";
+  if (/servent|analista|tecnico|oficial de justica|escrevente|escriv|cartor/.test(n)) return "Analista Judiciário";
+  return nome;
+}
+// filtros gravados com os nomes antigos ("Juiz", "Delegado"…) passam para os nomes novos
+const lerProv = (b, p) => { const v = lerEst("prov-" + b, p); if (v && typeof v.cargo === "string" && v.cargo) v.cargo = cargoPadrao(v.cargo); return v; }, gravarProv = (b, v) => gravarEst("prov-" + b, v);
 
 async function postLongo(obj, ms) {
   return Promise.race([postScript({ sessao: usuarioAtual.sessao, ...obj }), new Promise((_, f) => setTimeout(() => f(new Error("o servidor demorou demais")), ms || 300000))]);
@@ -20,6 +30,8 @@ async function carregarRepo(forcar) {
   repoCarregando = true;
   try {
     const r = await postLongo({ acao: "repositorio" }, 120000);
+    // o nome da pasta do cargo pode variar ("Delegado de Polícia", "Magistratura", "Ministério Público"…): agrupa no cargo-padrão
+    if (r.ok) (r.itens || []).forEach(i => { i.pastaCargo = i.cargo; i.cargo = cargoPadrao(i.cargo); });
     repo = r.ok ? r : { erro: /desconhecida/i.test(r.erro || "") ? "O Apps Script ainda não tem o repositório de provas: atualize o script (veja CONFIGURAR-LOGIN.md)." : r.erro, itens: [] };
   } catch (e) { repo = { erro: "Sem conexão com o servidor.", itens: [] }; }
   repoCarregando = false;
@@ -55,24 +67,118 @@ async function completarProva(it) {   // em segundo plano, lote por lote
   }
 }
 
+// ---------- enviar provas para o Drive ----------
+let envio = { aberto: false, enviando: false, msg: "" };
+function htmlEnvio(tipoPadrao) {
+  const cargos = CARGOS;
+  const fc = (tipoPadrao === "peca" ? lerProv("filtroPeca", {}) : lerProv("filtro", {})).cargo || "";
+  return `<details class="est-det env-box" id="envBox"${envio.aberto ? " open" : ""}><summary>+ Enviar prova para o Drive</summary>
+    <div class="env-grid">
+      <label>Tipo<select id="envTipo">${[["objetiva", "Prova objetiva"], ["subjetiva", "Prova subjetiva"], ["peca", "Peça prática"]].map(([k, n]) => `<option value="${k}"${k === tipoPadrao ? " selected" : ""}>${n}</option>`).join("")}</select></label>
+      <label>Cargo<select id="envCargo">${cargos.map(c => `<option${c === fc ? " selected" : ""}>${c}</option>`).join("")}</select></label>
+      <label class="env-l2">Identificação da prova<input id="envNome" placeholder="ex.: PCPB 2021 – Delegado (Cebraspe)"></label>
+      <label class="env-l2">Arquivo da prova<input id="envProva" type="file" accept="application/pdf,.pdf,.doc,.docx,image/*"></label>
+      <label class="env-l2">Gabarito / espelho / padrão de resposta <span class="note">(opcional)</span><input id="envGab" type="file" accept="application/pdf,.pdf,.doc,.docx,image/*"></label>
+    </div>
+    <p class="note">Os arquivos vão para <b>Provas Jurídicas / tipo / cargo</b> com o mesmo nome (ex.: "PCPB 2021 – Delegado - prova.pdf" e "… - padrão de resposta.pdf"), para o app formar o par sozinho. Até uns 15 MB por arquivo.</p>
+    <div class="actions" style="justify-content:flex-start"><button type="button" class="primary" id="envEnviar" ${envio.enviando ? "disabled" : ""}>${envio.enviando ? "Enviando…" : "Enviar para o Drive"}</button><span class="note" id="envMsg">${esc(envio.msg)}</span></div>
+  </details>`;
+}
+const lerBase64 = f => new Promise((ok, falha) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1]); r.onerror = falha; r.readAsDataURL(f); });
+async function enviarParaDrive() {
+  const tipo = $("envTipo").value, cargo = $("envCargo").value, nome = $("envNome").value.trim(), fp = $("envProva").files[0], fg = $("envGab").files[0];
+  const msg = t => { envio.msg = t; const el = $("envMsg"); if (el) el.textContent = t; };
+  if (!nome) return msg("Informe a identificação da prova.");
+  if (!fp) return msg("Escolha o arquivo da prova.");
+  for (const f of [fp, fg].filter(Boolean)) if (f.size > 18 * 1024 * 1024) return msg(`"${f.name}" tem ${(f.size / 1048576).toFixed(1)} MB; o limite é de uns 15 MB.`);
+  envio.enviando = true; envio.aberto = true; msg("Enviando a prova…"); desenharEstudo(estudoAba);
+  try {
+    const partes = [["prova", fp], ["gabarito", fg]].filter(x => x[1]);
+    let destino = "";
+    for (const [papel, f] of partes) {
+      msg(papel === "prova" ? "Enviando a prova…" : "Enviando o gabarito…");
+      const r = await postLongo({ acao: "enviarProva", tipo, cargo, nome, papel, nomeArquivo: f.name, mime: f.type || "application/pdf", base64: await lerBase64(f) }, 300000);
+      if (!r.ok) throw new Error(/desconhecida/i.test(r.erro || "") ? "o Apps Script ainda não tem o envio de provas: atualize o script." : r.erro);
+      destino = r.pasta;
+    }
+    envio = { aberto: false, enviando: false, msg: "" };
+    toast(`Enviado para ${destino}.`);
+    const fl = tipo === "peca" ? lerProv("filtroPeca", {}) : lerProv("filtro", {});
+    if (tipo === "peca") gravarProv("filtroPeca", { ...fl, cargo, aba: "praticar" }); else gravarProv("filtro", { ...fl, tipo, cargo });
+    repo = null; carregarRepo(true); desenharEstudo(tipo === "peca" ? "pecas" : "provas");
+  } catch (e) { envio.enviando = false; envio.msg = "Não foi possível enviar: " + e.message; desenharEstudo(estudoAba); }
+}
+
+// ---------- padronizar nomes dos arquivos ----------
+// "PCDF/2026 - Cebraspe - prova objetiva" e "PCDF/2026 - Cebraspe - gabarito prova objetiva"
+let padr = null;   // { itens: [{it, ident, nomeProva, nomeGab, erro}], i, fase }
+const PAPEL = { objetiva: ["prova objetiva", "gabarito prova objetiva"], subjetiva: ["prova subjetiva", "padrão de resposta prova subjetiva"], peca: ["peça prática", "padrão de resposta peça prática"] };
+function montarNomes(x) {
+  const d = x.ident || {}, base = [[d.orgao, d.ano].filter(Boolean).join("/"), d.banca].filter(Boolean).join(" - ") || x.it.nome;
+  // o nome da peça a redigir não entra no nome do arquivo (seria "spoiler" da prova); peças do mesmo concurso ganham (2), (3)…
+  x.nomeProva = `${base} - ${PAPEL[x.it.tipo][0]}`;
+  x.nomeGab = x.it.gab ? `${base} - ${PAPEL[x.it.tipo][1]}` : "";
+}
+async function iniciarPadronizacao(area) {
+  if (!repo || !repo.itens) return;
+  padr = { area, fase: "identificando", itens: repo.itens.map(it => ({ it })), i: 0 };
+  desenharEstudo(area);
+  for (const x of padr.itens) {
+    if (!padr) return;
+    try {
+      const r = await postLongo({ acao: "identificarProva", prova: x.it.id, gab: x.it.gab, tipo: x.it.tipo }, 180000);
+      if (!r.ok) throw new Error(/desconhecida/i.test(r.erro || "") ? "atualize o Apps Script" : r.erro);
+      x.ident = r;
+    } catch (e) { x.erro = e.message; }
+    montarNomes(x); padr.i++;
+    // nomes repetidos na mesma pasta ganham um número
+    const vistos = {}; padr.itens.filter(y => y.nomeProva).forEach(y => { const k = y.it.tipo + y.it.pastaCargo + y.nomeProva; vistos[k] = (vistos[k] || 0) + 1; if (vistos[k] > 1 && !/\(\d\)$/.test(y.nomeProva)) { y.nomeProva += ` (${vistos[k]})`; if (y.nomeGab) y.nomeGab += ` (${vistos[k]})`; } });
+    if (padr && ["provas", "pecas"].includes(estudoAba)) desenharEstudo(estudoAba);
+  }
+  if (padr) { padr.fase = "conferir"; desenharEstudo(estudoAba); }
+}
+function htmlPadronizar() {
+  const p = padr, total = p.itens.length;
+  const TIPOS = { objetiva: "Provas objetivas", subjetiva: "Provas subjetivas", peca: "Peças jurídicas" };
+  return `<div class="est-prog"><button type="button" class="mini" id="padrSair">‹ Voltar</button><b>Padronizar nomes dos arquivos</b></div>
+    <p class="note">${p.fase === "identificando" ? `A IA está lendo as provas para identificar órgão, ano e banca: ${p.i} de ${total}… (só na primeira vez; depois fica guardado)` : p.fase === "renomeando" ? "Renomeando no Drive…" : "Confira e corrija os nomes antes de renomear. Formato: ÓRGÃO/ANO - Banca - tipo."}</p>
+    ${p.itens.map((x, k) => `<div class="padr-item"><p class="note">${esc(TIPOS[x.it.tipo])} / ${esc(x.it.pastaCargo || x.it.cargo)}${x.erro ? ` · <span style="color:var(--danger)">não identificado (${esc(x.erro)})</span>` : ""}</p>
+      ${x.nomeProva === undefined ? `<p class="note">${esc(x.it.nome)} · aguardando…</p>` : `
+      <label class="padr-l"><span class="note">${esc(x.it.nome)} →</span><input data-padr="${k}" data-papel="p" value="${esc(x.nomeProva)}"></label>
+      ${x.it.gab ? `<label class="padr-l"><span class="note">${esc(x.it.gabNome.replace(/\.(pdf|docx?|jpe?g|png)$/i, ""))} →</span><input data-padr="${k}" data-papel="g" value="${esc(x.nomeGab)}"></label>` : ""}`}</div>`).join("")}
+    <div class="actions"><button type="button" id="padrSair">Cancelar</button><button type="button" class="primary" id="padrRenomear" ${p.fase !== "conferir" ? "disabled" : ""}>Renomear no Drive</button></div>`;
+}
+async function renomearPadronizados() {
+  const lista = [];
+  padr.itens.forEach(x => { if (x.nomeProva) lista.push({ id: x.it.id, nome: x.nomeProva }); if (x.it.gab && x.nomeGab) lista.push({ id: x.it.gab, nome: x.nomeGab }); });
+  padr.fase = "renomeando"; desenharEstudo(estudoAba);
+  try {
+    const r = await postLongo({ acao: "renomear", lista }, 300000);
+    if (!r.ok) throw new Error(r.erro);
+    toast(`${r.feitos} arquivo(s) renomeado(s)${r.erros.length ? `; ${r.erros.length} com problema` : ""}.`);
+    const area = padr.area; padr = null; repo = null; carregarRepo(true); desenharEstudo(area);
+  } catch (e) { padr.fase = "conferir"; toast("Não foi possível renomear: " + e.message); desenharEstudo(estudoAba); }
+}
+
 // ---------- telas ----------
 function htmlProvas() {
+  if (padr) return htmlPadronizar();
   if (sim && sim.it.tipo !== "peca") return htmlSimulado();
   if (!repo) { carregarRepo(); return `<p class="note est-gerando">Abrindo a pasta Provas Jurídicas no Drive…</p>`; }
   if (repo.erro) return `<p class="note">${esc(repo.erro)}</p><div class="actions" style="justify-content:flex-start"><button type="button" id="provRecarregar">Tentar de novo</button></div>`;
   const f = lerProv("filtro", { tipo: "objetiva", cargo: "" });
   const itens = repo.itens.filter(i => i.tipo === f.tipo);
-  const cargos = [...new Set(repo.itens.filter(i => i.tipo !== "peca").map(i => i.cargo))];
+  const cargos = [...new Set([...CARGOS, ...repo.itens.filter(i => i.tipo !== "peca").map(i => i.cargo)])];
   const lista = itens.filter(i => !f.cargo || i.cargo === f.cargo);
   const res = lerProv("resultados", {});
-  return `<div class="est-opts"><button type="button" class="opt${f.tipo === "objetiva" ? " on" : ""}" data-provtipo="objetiva">Provas objetivas</button><button type="button" class="opt${f.tipo === "subjetiva" ? " on" : ""}" data-provtipo="subjetiva">Provas subjetivas</button></div>
-    <div class="est-chips"><button type="button" class="chip-sel${!f.cargo ? " on" : ""}" data-provcargo="">Todos os cargos</button>${cargos.map(c => `<button type="button" class="chip-sel${f.cargo === c ? " on" : ""}" data-provcargo="${esc(c)}">${esc(c)}</button>`).join("")}</div>
+  return `${htmlEnvio(f.tipo)}<div class="est-opts"><button type="button" class="opt${f.tipo === "objetiva" ? " on" : ""}" data-provtipo="objetiva">Provas objetivas</button><button type="button" class="opt${f.tipo === "subjetiva" ? " on" : ""}" data-provtipo="subjetiva">Provas subjetivas</button></div>
+    ${seletorCargo("provCargoSel", cargos, f.cargo)}
     ${lista.length ? lista.map(i => {
       const r = res[i.id];
-      return `<div class="prov-item"><div class="prov-tit"><b>${esc(i.nome)}</b><span class="note">${esc(i.cargo)}${i.gab ? " · gabarito: " + esc(i.gabNome) : " · sem gabarito separado"}${r ? ` · última vez: ${r.acertos}/${r.total} (${Math.round(r.acertos / Math.max(1, r.total) * 100)}%)` : ""}</span></div>
+      return `<div class="prov-item"><div class="prov-tit"><b>${esc(i.nome)}</b><span class="note">${esc(i.pastaCargo || i.cargo)}${i.gab ? " · gabarito: " + esc(i.gabNome) : " · sem gabarito separado"}${r ? ` · última vez: ${r.acertos}/${r.total} (${Math.round(r.acertos / Math.max(1, r.total) * 100)}%)` : ""}</span></div>
         <div class="prov-acoes"><button type="button" class="primary" data-provsim="${esc(i.id)}">${i.tipo === "objetiva" ? "Simulado com as questões originais" : "Responder as questões originais"}</button><button type="button" data-provnovas="${esc(i.id)}">Questões novas no estilo desta prova</button></div></div>`;
     }).join("") : `<p class="note">Nenhuma prova ${f.tipo === "objetiva" ? "objetiva" : "subjetiva"}${f.cargo ? " de " + esc(f.cargo) : ""} na pasta. Coloque os PDFs em <b>Provas Jurídicas / ${f.tipo === "objetiva" ? "Provas objetivas" : "Provas subjetivas"} / ${esc(f.cargo || "cargo")}</b>.</p>`}
-    <p class="note">Pasta no Drive: <b>${esc(repo.raiz || "Provas Jurídicas")}</b>. Prova e gabarito são reconhecidos pelo nome (ex.: "TJMG 2022 - prova.pdf" e "TJMG 2022 - gabarito.pdf"). <button type="button" class="link-x" id="provRecarregar" style="color:var(--brand)">Atualizar lista</button></p>`;
+    <p class="note">Pasta no Drive: <b>${esc(repo.raiz || "Provas Jurídicas")}</b>. Prova e gabarito são reconhecidos pelo nome (ex.: "TJMG 2022 - prova.pdf" e "TJMG 2022 - gabarito.pdf"). <button type="button" class="link-x" id="provRecarregar" style="color:var(--brand)">Atualizar lista</button> · <button type="button" class="link-x" id="padrIniciar" style="color:var(--brand)">Padronizar nomes dos arquivos</button></p>`;
 }
 
 async function iniciarSimulado(id, novas) {
@@ -109,7 +215,7 @@ function questaoAtual() {
 }
 function htmlSimulado() {
   const s = sim, nTotal = s.novas ? 10 : (s.total || s.qs.length);
-  const topo = `<div class="est-prog"><button type="button" class="link-x" id="provSair" style="color:var(--brand)">‹ Voltar às provas</button><span><b>${esc(s.it.nome)}</b></span>${s.novas ? `<span class="chip">questões inéditas no estilo da prova</span>` : ""}</div>`;
+  const topo = `<div class="est-prog"><button type="button" class="mini" id="provSair">‹ Voltar às provas</button><span><b>${esc(s.it.nome)}</b></span>${s.novas ? `<span class="chip">questões inéditas no estilo da prova</span>` : ""}</div>`;
   if (s.erro) return topo + `<p class="note">Não consegui ler esta prova: ${esc(s.erro)}</p>`;
   if (s.carregando) return topo + `<p class="note est-gerando">${esc(s.carregando)}<br>A primeira leitura de cada prova pela IA pode levar até 1 ou 2 minutos; depois fica guardada.</p>`;
   if (s.i >= nTotal) return topo + htmlFimSimulado();
@@ -178,14 +284,15 @@ function htmlFimSimulado() {
 
 // ---------- peças práticas ----------
 function htmlPecas() {
+  if (padr) return htmlPadronizar();
   if (sim && sim.it.tipo === "peca") return htmlPecaAtiva();
   if (!repo) { carregarRepo(); return `<p class="note est-gerando">Abrindo a pasta Provas Jurídicas no Drive…</p>`; }
   const f = lerProv("filtroPeca", { cargo: "", aba: "estrutura" });
   const pecas = (repo.itens || []).filter(i => i.tipo === "peca");
-  const cargos = [...new Set([...Object.keys(ESTRUTURAS_PADRAO), ...pecas.map(i => i.cargo).filter(c => c !== "Geral")])];
-  const tipos = [...new Set([...(f.cargo ? ESTRUTURAS_PADRAO[f.cargo] || [] : Object.values(ESTRUTURAS_PADRAO).flat()), ...Object.values(lerProv("tiposVistos", {})).filter(x => !f.cargo || x.cargo === f.cargo).map(x => x.tipo)])];
+  const cargos = [...new Set([...CARGOS, ...pecas.map(i => i.cargo).filter(c => c !== "Geral")])];
+  const tipos = [...new Set([...(f.cargo ? ESTRUTURAS_PADRAO[f.cargo] || [] : Object.values(ESTRUTURAS_PADRAO).flat()), ...Object.values(lerProv("tiposVistos", {})).filter(x => !f.cargo || cargoPadrao(x.cargo || "") === f.cargo).map(x => x.tipo)])];
   let h = `<div class="est-opts"><button type="button" class="opt${f.aba === "estrutura" ? " on" : ""}" data-pecaaba="estrutura">Estrutura das peças</button><button type="button" class="opt${f.aba === "praticar" ? " on" : ""}" data-pecaaba="praticar">Praticar peças</button></div>
-    <div class="est-chips"><button type="button" class="chip-sel${!f.cargo ? " on" : ""}" data-pecacargo="">Todos os cargos</button>${cargos.map(c => `<button type="button" class="chip-sel${f.cargo === c ? " on" : ""}" data-pecacargo="${esc(c)}">${esc(c)}</button>`).join("")}</div>`;
+    ${seletorCargo("pecaCargoSel", cargos, f.cargo)}`;
   if (f.aba === "estrutura") {
     const aberto = f.tipoAberto;
     h += `<p class="note">Escolha a peça para ver os elementos que a banca espera, com o fundamento legal, o que cada parte deve conter, os erros mais comuns e um esqueleto para treinar.</p>
@@ -194,10 +301,12 @@ function htmlPecas() {
     return h;
   }
   const lista = pecas.filter(i => !f.cargo || i.cargo === f.cargo);
+  h += htmlEnvio("peca");
   if (repo.erro) return h + `<p class="note">${esc(repo.erro)}</p>`;
-  h += lista.length ? lista.map(i => `<div class="prov-item"><div class="prov-tit"><b>${esc(i.nome)}</b><span class="note">${esc(i.cargo)}${i.gab ? " · espelho: " + esc(i.gabNome) : " · sem espelho separado"}</span></div>
+  h += lista.length ? lista.map(i => `<div class="prov-item"><div class="prov-tit"><b>${esc(i.nome)}</b><span class="note">${esc(i.pastaCargo || i.cargo)}${i.gab ? " · espelho: " + esc(i.gabNome) : " · sem espelho separado"}</span></div>
       <div class="prov-acoes"><button type="button" class="primary" data-provsim="${esc(i.id)}">Fazer esta peça</button><button type="button" data-pecanova="${esc(i.id)}">Caso novo no estilo desta peça</button></div></div>`).join("")
     : `<p class="note">Nenhuma peça${f.cargo ? " de " + esc(f.cargo) : ""} na pasta. Coloque os PDFs em <b>Provas Jurídicas / Peças jurídicas / ${esc(f.cargo || "cargo")}</b>.</p>`;
+  h += `<p class="note"><button type="button" class="link-x" id="provRecarregar" style="color:var(--brand)">Atualizar lista</button> · <button type="button" class="link-x" id="padrIniciar" style="color:var(--brand)">Padronizar nomes dos arquivos</button></p>`;
   return h;
 }
 function htmlEstrutura(tipo) {
@@ -230,7 +339,7 @@ async function carregarEstrutura(tipo, refazer) {
 }
 function htmlPecaAtiva() {
   const s = sim;
-  const topo = `<div class="est-prog"><button type="button" class="link-x" id="provSair" style="color:var(--brand)">‹ Voltar às peças</button><span><b>${esc(s.it.nome)}</b></span>${s.novas ? `<span class="chip">caso inédito</span>` : ""}</div>`;
+  const topo = `<div class="est-prog"><button type="button" class="mini" id="provSair">‹ Voltar às peças</button><span><b>${esc(s.it.nome)}</b></span>${s.novas ? `<span class="chip">caso inédito</span>` : ""}</div>`;
   if (s.erro) return topo + `<p class="note">Não consegui ler esta peça: ${esc(s.erro)}</p>`;
   if (s.carregando) return topo + `<p class="note est-gerando">${esc(s.carregando)}<br>A primeira leitura de cada peça pela IA pode levar até 1 ou 2 minutos; depois fica guardada.</p>`;
   const q = questaoAtual();
@@ -269,17 +378,27 @@ async function corrigirEscrita(q, texto) {
 }
 
 // ---------- eventos ----------
+function seletorCargo(id, cargos, atual) {
+  return `<label class="sel-cargo">Cargo <select id="${id}"><option value="">Todos os cargos</option>${cargos.map(c => `<option${c === atual ? " selected" : ""}>${esc(c)}</option>`).join("")}</select></label>`;
+}
+document.addEventListener("change", e => {
+  const id = e.target.id;
+  if (id === "provCargoSel") { const f = lerProv("filtro", { tipo: "objetiva", cargo: "" }); f.cargo = e.target.value; gravarProv("filtro", f); desenharEstudo("provas"); }
+  if (id === "pecaCargoSel") { const f = lerProv("filtroPeca", { cargo: "", aba: "estrutura" }); f.cargo = e.target.value; f.tipoAberto = ""; gravarProv("filtroPeca", f); desenharEstudo("pecas"); }
+});
 document.addEventListener("click", async e => {
   if (!e.target.closest("#estudoConteudo")) return;
   const t = e.target.closest("button"); if (!t) return;
   const f = lerProv("filtro", { tipo: "objetiva", cargo: "" }), fp = lerProv("filtroPeca", { cargo: "", aba: "estrutura" });
   if (t.dataset.provtipo) { f.tipo = t.dataset.provtipo; gravarProv("filtro", f); desenharEstudo("provas"); return; }
-  if (t.dataset.provcargo !== undefined) { f.cargo = t.dataset.provcargo; gravarProv("filtro", f); desenharEstudo("provas"); return; }
   if (t.dataset.pecaaba) { fp.aba = t.dataset.pecaaba; gravarProv("filtroPeca", fp); desenharEstudo("pecas"); return; }
-  if (t.dataset.pecacargo !== undefined) { fp.cargo = t.dataset.pecacargo; fp.tipoAberto = ""; gravarProv("filtroPeca", fp); desenharEstudo("pecas"); return; }
   if (t.dataset.pecatipo) { fp.tipoAberto = fp.tipoAberto === t.dataset.pecatipo ? "" : t.dataset.pecatipo; gravarProv("filtroPeca", fp); desenharEstudo("pecas"); return; }
   if (t.dataset.pecarefazer) { delete pecaEstr[t.dataset.pecarefazer]; carregarEstrutura(t.dataset.pecarefazer, true); desenharEstudo("pecas"); return; }
   if (t.dataset.copiaresq) { const s = pecaEstr[t.dataset.copiaresq]; try { await navigator.clipboard.writeText(s.estrutura.esqueleto); toast("Esqueleto copiado."); } catch (err) {} return; }
+  if (t.id === "envEnviar") { enviarParaDrive(); return; }
+  if (t.id === "padrIniciar") { iniciarPadronizacao(estudoAba); return; }
+  if (t.id === "padrSair") { const a = padr && padr.area; padr = null; desenharEstudo(a || estudoAba); return; }
+  if (t.id === "padrRenomear" && padr) { renomearPadronizados(); return; }
   if (t.id === "provRecarregar") { repo = null; carregarRepo(true); desenharEstudo(estudoAba); return; }
   if (t.dataset.provsim) { iniciarSimulado(t.dataset.provsim, false); return; }
   if (t.dataset.provnovas) { iniciarSimulado(t.dataset.provnovas, true); return; }
@@ -317,8 +436,14 @@ document.addEventListener("click", async e => {
   }
 });
 document.addEventListener("input", e => {
+  if (e.target.dataset && e.target.dataset.padr !== undefined && padr) { const x = padr.itens[+e.target.dataset.padr]; if (e.target.dataset.papel === "p") x.nomeProva = e.target.value; else x.nomeGab = e.target.value; return; }
   if (e.target.id !== "provTexto" || !sim) return;
   gravarProv(rascunhoKey(), e.target.value);
   const el = $("provLinhas"), q = questaoAtual(); const l = Math.ceil(e.target.value.length / 75);
   if (el) el.textContent = `(~${l} linha${l === 1 ? "" : "s"}${q && q.linhas ? " de " + q.linhas : ""})`;
 });
+
+document.addEventListener("toggle", e => { if (e.target.id === "envBox") envio.aberto = e.target.open; }, true);
+
+// fechar a janela de estudo também sai da prova/peça aberta (o rascunho fica salvo)
+document.addEventListener("close", e => { if (e.target.id === "dlgEstudo") { sim = null; padr = null; } }, true);
