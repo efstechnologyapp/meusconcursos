@@ -281,9 +281,10 @@ function cabecalhoEstudo(aba) {
   const area = aba === "provas" ? "provas" : aba === "pecas" ? "pecas" : "info";
   const sub = area === "info" ? (julgados.length ? `${julgados.length} julgados do caderno · questões e correções pela IA Gemini` : "Carregando o caderno de informativos…")
     : area === "provas" ? "Provas objetivas e subjetivas da pasta Provas Jurídicas · questões e correções pela IA Gemini" : "Peças práticas da pasta Provas Jurídicas · estrutura, casos e correção pela IA Gemini";
-  return `<div class="dlg-head"><div style="flex:1;min-width:0"><h2>Estudar</h2><p class="sub">${sub}</p></div><button type="button" class="close" data-close aria-label="Fechar">×</button></div>
-    <div class="est-areas">${[["praticar", "info", "Informativos"], ["provas", "provas", "Provas anteriores"], ["pecas", "pecas", "Peças práticas"]].map(([k, a, n]) => `<button type="button" class="${area === a ? "on" : ""}" data-estaba="${k}">${n}</button>`).join("")}</div>
-    ${area === "info" ? `<div class="est-abas">${[["praticar", "Praticar"], ["revisar", "Revisar julgados"], ["erros", "Caderno de erros"], ["desempenho", "Desempenho"], ["config", "Caderno e IA"]].map(([k, n]) => `<button type="button" class="${aba === k ? "on" : ""}" data-estaba="${k}">${n}</button>`).join("")}</div>` : ""}`;
+  // a área (informativos, provas, peças) é escolhida nos cartões da página Estudar; o modal mostra só a área aberta
+  const titulo = area === "info" ? "Informativos" : area === "provas" ? "Provas anteriores" : "Peças práticas";
+  return `<div class="dlg-head"><div style="flex:1;min-width:0"><h2>${titulo}</h2><p class="sub">${sub}</p></div><button type="button" class="close" data-close aria-label="Fechar">×</button></div>
+    ${area === "info" ? `<div class="est-abas">${[["praticar", "Praticar"], ["revisar", "Revisar julgados"], ["erros", "Caderno de erros"], ["desempenho", "Meu histórico"], ["config", "Caderno e IA"]].map(([k, n]) => `<button type="button" class="${aba === k ? "on" : ""}" data-estaba="${k}">${n}</button>`).join("")}</div>` : ""}`;
 }
 function desenharEstudo(aba) {
   aba = aba || (julgados.length ? "praticar" : "config");
@@ -293,10 +294,10 @@ function desenharEstudo(aba) {
   else if (aba === "pecas") corpo = htmlPecas();
   else if (aba === "config") corpo = htmlConfigEstudo();
   else if (!julgados.length) corpo = `<p class="note">Primeiro junte o caderno na aba <b>Caderno e IA</b>.</p>`;
-  else if (aba === "praticar") corpo = estudo ? htmlSessao() : htmlPreparar();
+  else if (aba === "praticar") corpo = typeof cartao !== "undefined" && cartao && cartao.info ? htmlCartao() : typeof papelInfo !== "undefined" && papelInfo.disc ? htmlDiscPapel() : estudo ? htmlSessao() : htmlPreparar();
   else if (aba === "revisar") corpo = htmlRevisar();
   else if (aba === "erros") corpo = htmlErros();
-  else corpo = htmlDesempenho();
+  else corpo = typeof htmlHistInfo === "function" ? htmlHistInfo() : htmlDesempenho();
   $("estudoConteudo").innerHTML = cabecalhoEstudo(aba) + `<div class="est-corpo">${corpo}</div>`;
 }
 let estudoAba = "praticar";
@@ -325,7 +326,7 @@ function htmlPreparar() {
   const prog = lerEst("prog", {}), hoje = hojeISO();
   const vencidos = julgados.filter(j => prog[j.id] && prog[j.id].prox <= hoje).length;
   const concursos = itens.filter(x => andamento(x).ativo && disciplinasDoConcurso(x).length);
-  return `${vencidos ? `<p class="est-aviso">${vencidos} julgado(s) para revisar hoje — eles entram primeiro na sessão.</p>` : ""}
+  return `${typeof htmlImpressasInfo === "function" ? htmlImpressasInfo() : ""}${vencidos ? `<p class="est-aviso">${vencidos} julgado(s) para revisar hoje — eles entram primeiro na sessão.</p>` : ""}
     <div class="est-sec"><h4>Modalidade</h4><div class="est-opts">${Object.entries(MODOS).map(([k, n]) => `<button type="button" class="opt${filtro.modo === k ? " on" : ""}" data-estmodo="${k}">${n}</button>`).join("")}</div></div>
     ${anosDoCaderno().length > 1 ? `<div class="est-sec"><h4>Ano <span class="note">${(filtro.anos || []).length ? "" : "(todos)"}</span></h4><div class="est-chips">${anosDoCaderno().map(a => `<button type="button" class="chip-sel${(filtro.anos || []).includes(a) ? " on" : ""}" data-estano="${a}">${a} (${julgados.filter(j => grupoAno(j) === a).length})</button>`).join("")}</div></div>` : ""}
     <div class="est-sec"><h4>Tribunais</h4><div class="est-chips">${["STF", "STJ", "TSE"].map(t => `<button type="button" class="chip-sel${filtro.tribs.includes(t) ? " on" : ""}" data-esttrib="${t}">${t} (${julgados.filter(j => j.trib === t).length})</button>`).join("")}</div></div>
@@ -335,12 +336,14 @@ function htmlPreparar() {
     <p class="note">Julgados que entram na sessão com esses filtros: <b>${julgados.filter(j => (!filtro.discs.length || filtro.discs.includes(j.disc)) && filtro.tribs.includes(j.trib) && (!(filtro.anos || []).length || filtro.anos.includes(grupoAno(j)))).length}</b></p>
     <div class="est-sec"><h4>Quantidade de questões</h4><div class="est-chips">${[5, 10, 20, 30].map(n => `<button type="button" class="chip-sel${filtro.n === n ? " on" : ""}" data-estn="${n}">${n}</button>`).join("")}</div></div>
     <p class="note">${iaLigada() ? "As questões e as correções das discursivas são feitas pela IA Gemini, do Google, a partir do julgado." : esc(iaIndisponivel || "Sem conexão com a IA: as questões serão simples, feitas a partir das teses.")}</p>
-    <div class="actions"><button type="button" class="primary" id="estComecar">Começar</button></div>`;
+    <div class="actions"><button type="button" class="primary" id="estComecar">Começar treino rápido</button></div>
+    ${typeof htmlSimuladoCfg === "function" ? htmlSimuladoCfg() : ""}`;
 }
 function iniciarSessao(soErros) {
   const filtro = lerEst("filtro", { modo: "ce", discs: [], tribs: ["STF", "STJ", "TSE"], n: 10 });
   const lista = escolherJulgados({ ...filtro, soErros }, soErros ? 30 : filtro.n);
   if (!lista.length) { toast("Nenhum julgado com esses filtros."); return; }
+  registrarSessaoInfo();
   estudo = { modo: filtro.modo, lista, i: 0, qs: {}, resp: {}, notas: [] };
   prepararQuestao(0);
   desenharEstudo("praticar");
@@ -348,7 +351,7 @@ function iniciarSessao(soErros) {
 function prepararQuestao(i) {
   if (!estudo || i >= estudo.lista.length || estudo.qs[i]) return;
   const j = estudo.lista[i];
-  estudo.qs[i] = gerarQuestao(j, estudo.modo).catch(e => { const q = questaoLocal(j, estudo.modo); q.aviso = "A IA não respondeu (" + e.message + "); questão simples gerada pelo app."; return q; });
+  estudo.qs[i] = (estudo.gerador ? estudo.gerador(j) : gerarQuestao(j, estudo.modo)).catch(e => { const q = questaoLocal(j, estudo.modo); q.aviso = "A IA não respondeu (" + e.message + "); questão simples gerada pelo app."; return q; });
   estudo.qs[i].inicio = Date.now();
   const s0 = estudo;
   estudo.qs[i].then(q => {
@@ -361,13 +364,14 @@ function prepararQuestao(i) {
 function htmlSessao() {
   const s = estudo, i = s.i;
   if (i >= s.lista.length) {
+    if (typeof registrarSessaoInfo === "function") registrarSessaoInfo();
     const tot = s.notas.reduce((a, b) => a + b, 0);
     return `<div class="est-fim"><div class="vb-n">${Math.round(tot / s.notas.length * 100)}%</div><p>${s.notas.filter(n => n >= 1).length} acerto(s), ${s.notas.filter(n => n > 0 && n < 1).length} parcial(is) e ${s.notas.filter(n => n === 0).length} erro(s) em ${s.notas.length} questões.</p>
       <p class="note">Os julgados que você errou voltam amanhã; os que acertou, em alguns dias.</p>
       <div class="actions" style="justify-content:center"><button type="button" id="estNova" class="primary">Nova sessão</button></div></div>`;
   }
   const j = s.lista[i], q = s.qs[i] && s.qs[i].pronta, r = s.resp[i];
-  const topo = `<div class="est-prog"><span>Questão ${i + 1} de ${s.lista.length}</span><span class="chip">${esc(j.trib)}${j.info ? " · Info " + esc(j.info.split(",")[0]) : ""}</span><span class="chip">${esc(j.disc)}</span></div>`;
+  const topo = (s.simulado ? `<p class="est-sub" style="margin:0">${esc(s.simulado)}</p>` : "") + `<div class="est-prog"><span>Questão ${i + 1} de ${s.lista.length}</span><span class="chip">${esc(j.trib)}${j.info ? " · Info " + esc(j.info.split(",")[0]) : ""}</span><span class="chip">${esc(j.disc)}</span></div>`;
   if (!q) {
     const seg = s.qs[i] && s.qs[i].inicio ? Math.round((Date.now() - s.qs[i].inicio) / 1000) : 0;
     clearTimeout(htmlSessao.t); htmlSessao.t = setTimeout(() => { if (estudo === s && s.i === i && !(s.qs[i] && s.qs[i].pronta) && estudoAba === "praticar") desenharEstudo("praticar"); }, 1000);
@@ -489,6 +493,7 @@ document.addEventListener("click", async e => {
       return;
     }
     // praticar só este julgado, na modalidade escolhida em Praticar
+    registrarSessaoInfo();
     estudo = { modo: filtro.modo, lista: [j], i: 0, qs: {}, resp: {}, notas: [] };
     prepararQuestao(0); desenharEstudo("praticar"); return;
   }
@@ -499,7 +504,7 @@ document.addEventListener("click", async e => {
   if (t.dataset.estn) { filtro.n = +t.dataset.estn; gravarEst("filtro", filtro); desenharEstudo("praticar"); return; }
   if (t.id === "estComecar") { iniciarSessao(false); return; }
   if (t.id === "estPraticarErros") { iniciarSessao(true); return; }
-  if (t.id === "estNova") { estudo = null; desenharEstudo("praticar"); return; }
+  if (t.id === "estNova") { registrarSessaoInfo(); estudo = null; desenharEstudo("praticar"); return; }
   if (t.id === "estBtnCad") { $("estArqCad").click(); return; }
   if (t.id === "estAtualizarDrive") { atualizarDoDrive(true); return; }
   if (t.id === "estVoltarDrive") { gravarEst("caderno", { ...(lerEst("caderno", {})), fonte: "drive", modificado: "" }); atualizarDoDrive(true); return; }

@@ -78,6 +78,15 @@ function eventosDasFases() {
       ev.chave = `${x.id}:${f.uid}`;
       out.push(ev);
     });
+    // boleto pendente: evento no dia do vencimento, com notificação na véspera (9h) e no dia (8h)
+    if (x.status === STATUS[1] && x.boleto_venc && /^\d{4}-\d{2}-\d{2}$/.test(x.boleto_venc) && diasAte(x.boleto_venc) >= 0) {
+      const ev = { summary: `Boleto vence hoje – ${x.nome}`, location: "", description: [x.boleto_valor && "Valor: " + x.boleto_valor, x.boleto_linha && "Código: " + x.boleto_linha, "Pague antes para não perder a inscrição.", "Criado pelo app Meus Concursos."].filter(Boolean).join("\n"),
+        start: { dateTime: `${x.boleto_venc}T09:00:00-03:00`, timeZone: "America/Sao_Paulo" }, end: { dateTime: `${x.boleto_venc}T09:30:00-03:00`, timeZone: "America/Sao_Paulo" },
+        lembretes: [{ method: "popup", minutes: 1440 }, { method: "popup", minutes: 60 }] };
+      ev.sig = JSON.stringify([ev.summary, ev.description, ev.start, ev.end, corAgenda(), "b1"]);
+      ev.chave = `${x.id}:boleto`;
+      out.push(ev);
+    }
   }
   return out;
 }
@@ -98,7 +107,7 @@ async function sincronizarAgenda(forcar) {
   const desejados = eventosDasFases();
   const assinatura = hashTexto(desejados.map(e => e.chave + e.sig).join("|"));
   let ultima = ""; try { ultima = localStorage.getItem(chaveAssinaturaAgenda()) || ""; } catch (e) {}
-  if (!forcar && assinatura === ultima) { statusAgenda(`Agenda em dia: ${desejados.length} prova(s) com data no seu Google Agenda.`); return; }
+  if (!forcar && assinatura === ultima) { statusAgenda(`Agenda em dia: ${desejados.filter(e => !/:boleto$/.test(e.chave)).length} prova(s) com data${desejados.some(e => /:boleto$/.test(e.chave)) ? " e o(s) vencimento(s) de boleto" : ""} no seu Google Agenda.`); return; }
   const token = tokenAgenda();
   if (!token) { statusAgenda("Há mudanças para gravar no Google Agenda.", true); return; }
   agendaRodando = true; statusAgenda("Atualizando o Google Agenda…");
@@ -114,7 +123,7 @@ async function sincronizarAgenda(forcar) {
     for (const ev of desejados) {
       const corpo = { summary: ev.summary, location: ev.location, description: ev.description, start: ev.start, end: ev.end,
         ...(corAgenda() ? { colorId: corAgenda() } : {}),   // sem cor escolhida: o evento usa a cor da agenda
-        reminders: { useDefault: false, overrides: [{ method: "popup", minutes: 1440 }, { method: "popup", minutes: 180 }] },
+        reminders: { useDefault: false, overrides: ev.lembretes || [{ method: "popup", minutes: 1440 }, { method: "popup", minutes: 180 }] },
         extendedProperties: { private: { meusConcursos: "1", chave: ev.chave, sig: hashTexto(ev.sig) } } };
       const at = existentes[ev.chave]; delete existentes[ev.chave];
       if (!at) { await apiAgenda(token, "POST", API_AGENDA, corpo); criados++; }
@@ -123,7 +132,7 @@ async function sincronizarAgenda(forcar) {
     for (const e of Object.values(existentes)) { await apiAgenda(token, "DELETE", `${API_AGENDA}/${e.id}`); removidos++; }
     try { localStorage.setItem(chaveAssinaturaAgenda(), assinatura); } catch (e) {}
     const mud = [criados && `${criados} criado(s)`, atualizados && `${atualizados} atualizado(s)`, removidos && `${removidos} removido(s)`].filter(Boolean).join(", ");
-    statusAgenda(`Agenda em dia: ${desejados.length} prova(s) com data no seu Google Agenda${mud ? " (" + mud + " agora)" : ""}.`);
+    statusAgenda(`Agenda em dia: ${desejados.filter(e => !/:boleto$/.test(e.chave)).length} prova(s) com data${desejados.some(e => /:boleto$/.test(e.chave)) ? " e o(s) vencimento(s) de boleto" : ""} no seu Google Agenda${mud ? " (" + mud + " agora)" : ""}.`);
   } catch (e) {
     if (e.token) statusAgenda("O acesso ao Google Agenda expirou.", true);
     else if (e.permissao) statusAgenda("O Google recusou: " + e.message + " Verifique se a API do Google Agenda está ativada no projeto (veja CONFIGURAR-LOGIN.md).", true);

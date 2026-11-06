@@ -25,6 +25,25 @@ const lerProv = (b, p) => { const v = lerEst("prov-" + b, p); if (v && typeof v.
 async function postLongo(obj, ms) {
   return Promise.race([postScript({ sessao: usuarioAtual.sessao, ...obj }), new Promise((_, f) => setTimeout(() => f(new Error("o servidor demorou demais")), ms || 300000))]);
 }
+// da prova mais antiga para a mais recente (ano do nome: "PCPB/2021 - …"); sem ano vão para o fim; empate: órgão, depois parte/número
+const anoDoNome = n => { const m = String(n || "").match(/(?:^|[\/\s_-])((?:19|20)\d{2})(?!\d)/); return m ? +m[1] : 9999; };
+const ordemCronologica = (a, b) => anoDoNome(a.nome) - anoDoNome(b.nome) || String(a.nome).localeCompare(String(b.nome), "pt-BR", { numeric: true });
+// selo na lista: "respondida em 06/11 · nota 7,5" (do histórico, que vale para todos os aparelhos); só as questões originais da prova
+function seloRespondida(i) {
+  const L = (typeof hist !== "undefined" && hist.lista || []).filter(e => e.prova === i.id && !e.novas && e.tipo !== "info").sort((a, b) => new Date(a.data) - new Date(b.data));
+  if (!L.length) return typeof hist !== "undefined" && hist.lista && !(lerProv("resultados", {})[i.id]) ? ` · <span class="selo-nao">○ ainda não respondida</span>` : "";
+  const u = L[L.length - 1], d = new Date(u.data), data = isNaN(d) ? "" : d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" });
+  let txt;
+  if (i.tipo === "objetiva") txt = `${u.acertos}/${u.total} (${Math.round(u.nota * 10)}%)`;
+  else if (i.tipo === "peca") txt = "nota " + String(Math.round(u.nota * 10) / 10).replace(".", ",");
+  else {   // subjetiva: média das questões respondidas na data da última resposta
+    const dia = u.data.slice(0, 10), mesmas = L.filter(e => e.data.slice(0, 10) === dia), porQ = {};
+    mesmas.forEach(e => porQ[e.numero] = e.nota);
+    const ns = Object.values(porQ); txt = `${ns.length} ${ns.length > 1 ? "questões" : "questão"} · média ${String(Math.round(ns.reduce((a, b) => a + b, 0) / ns.length * 10) / 10).replace(".", ",")}`;
+  }
+  const vezes = i.tipo === "subjetiva" ? new Set(L.map(e => e.data.slice(0, 10))).size : L.length;
+  return ` · <span class="selo-resp">✓ respondida em ${data} · ${txt}${vezes > 1 ? ` · ${vezes}ª vez` : ""}</span>`;
+}
 async function carregarRepo(forcar) {
   if (repoCarregando || (repo && !forcar)) return;
   repoCarregando = true;
@@ -32,7 +51,7 @@ async function carregarRepo(forcar) {
     const r = await postLongo({ acao: "repositorio" }, 120000);
     // o nome da pasta do cargo pode variar ("Delegado de Polícia", "Magistratura", "Ministério Público"…): agrupa no cargo-padrão
     if (r.ok) (r.itens || []).forEach(i => { i.pastaCargo = i.cargo; i.cargo = cargoPadrao(i.cargo); });
-    if (r.ok) { r.soltos = (r.itens || []).filter(i => i.soGab); r.itens = (r.itens || []).filter(i => !i.soGab); }
+    if (r.ok) { r.soltos = (r.itens || []).filter(i => i.soGab); r.itens = (r.itens || []).filter(i => !i.soGab).sort(ordemCronologica); }
     repo = r.ok ? r : { erro: /desconhecida/i.test(r.erro || "") ? "O Apps Script ainda não tem o repositório de provas: atualize o script (veja CONFIGURAR-LOGIN.md)." : r.erro, itens: [] };
   } catch (e) { repo = { erro: "Sem conexão com o servidor.", itens: [] }; }
   repoCarregando = false;
@@ -264,7 +283,7 @@ function htmlProvas() {
     ${seletorCargo("provCargoSel", cargos, f.cargo)}
     ${lista.length ? lista.map(i => {
       const r = res[i.id];
-      return `<div class="prov-item"><div class="prov-tit"><b>${esc(i.nome)}</b><span class="note">${esc(i.pastaCargo || i.cargo)}${i.gab ? " · gabarito: " + esc(i.gabNome) : " · sem gabarito separado"}${r ? ` · última vez: ${r.acertos}/${r.total} (${Math.round(r.acertos / Math.max(1, r.total) * 100)}%)` : ""}</span></div>
+      return `<div class="prov-item"><div class="prov-tit"><b>${esc(i.nome)}</b><span class="note">${esc(i.pastaCargo || i.cargo)}${i.gab ? " · gabarito: " + esc(i.gabNome) : " · sem gabarito separado"}${seloRespondida(i) || (r ? ` · última vez: ${r.acertos}/${r.total} (${Math.round(r.acertos / Math.max(1, r.total) * 100)}%)` : "")}</span></div>
         <div class="prov-acoes"><button type="button" class="primary" data-provsim="${esc(i.id)}">${i.tipo === "objetiva" ? "Simulado com as questões originais" : "Responder as questões originais"}</button><button type="button" data-provnovas="${esc(i.id)}">Questões novas no estilo desta prova</button>${i.tipo === "objetiva" ? `<button type="button" data-provimpr="${esc(i.id)}" ${imprimindo[i.id] ? "disabled" : ""}>${imprimindo[i.id] ? esc(imprimindo[i.id]) : "Imprimir prova + cartão-resposta"}</button>` : ""}${botaoSeparar(i)}</div></div>`;
     }).join("") : `<p class="note">Nenhuma prova ${f.tipo === "objetiva" ? "objetiva" : "subjetiva"}${f.cargo ? " de " + esc(f.cargo) : ""} na pasta. Coloque os PDFs em <b>Provas Jurídicas / ${f.tipo === "objetiva" ? "Provas objetivas" : "Provas subjetivas"} / ${esc(f.cargo || "cargo")}</b>.</p>`}
     <p class="note">Pasta no Drive: <b>${esc(repo.raiz || "Provas Jurídicas")}</b>. Prova e gabarito são reconhecidos pelo nome (ex.: "TJMG 2022 - prova.pdf" e "TJMG 2022 - gabarito.pdf"). <button type="button" class="link-x" id="provRecarregar" style="color:var(--brand)">Atualizar lista</button> · <button type="button" class="link-x" id="padrIniciar" style="color:var(--brand)">Padronizar nomes dos arquivos</button></p>`;
@@ -401,7 +420,7 @@ function htmlPecas() {
   const lista = pecas.filter(i => !f.cargo || i.cargo === f.cargo);
   h += htmlEnvio("peca");
   if (repo.erro) return h + `<p class="note">${esc(repo.erro)}</p>`;
-  h += lista.length ? lista.map(i => `<div class="prov-item"><div class="prov-tit"><b>${esc(i.nome)}</b><span class="note">${esc(i.pastaCargo || i.cargo)}${i.gab ? " · espelho: " + esc(i.gabNome) : " · sem espelho separado"}</span></div>
+  h += lista.length ? lista.map(i => `<div class="prov-item"><div class="prov-tit"><b>${esc(i.nome)}</b><span class="note">${esc(i.pastaCargo || i.cargo)}${i.gab ? " · espelho: " + esc(i.gabNome) : " · sem espelho separado"}${seloRespondida(i)}</span></div>
       <div class="prov-acoes"><button type="button" class="primary" data-provsim="${esc(i.id)}">Fazer esta peça</button><button type="button" data-pecanova="${esc(i.id)}">Caso novo no estilo desta peça</button>${botaoSeparar(i)}</div></div>`).join("")
     : `<p class="note">Nenhuma peça${f.cargo ? " de " + esc(f.cargo) : ""} na pasta. Coloque os PDFs em <b>Provas Jurídicas / Peças jurídicas / ${esc(f.cargo || "cargo")}</b>.</p>`;
   h += `<p class="note"><button type="button" class="link-x" id="provRecarregar" style="color:var(--brand)">Atualizar lista</button> · <button type="button" class="link-x" id="padrIniciar" style="color:var(--brand)">Padronizar nomes dos arquivos</button></p>`;
@@ -492,7 +511,8 @@ function imprimirProvaReal(q) {
   setTimeout(() => window.print(), 50);
 }
 // provas impressas aguardando a resposta manuscrita: ficam em destaque até todas as questões serem corrigidas
-function impressasPendentes(area) { return lerProv("impressas", []).filter(x => !area || (area === "pecas") === (x.tipo === "peca")); }
+function impressasPendentes(area) { return lerProv("impressas", []).filter(x => !area || (area === "info" ? x.tipo === "info" : x.tipo !== "info" && (area === "pecas") === (x.tipo === "peca"))); }
+const abaCartao = () => cartao && cartao.info ? "praticar" : "provas";
 function registrarImpressa(qs) {
   const s = sim, lista = lerProv("impressas", []);
   const idx = s.it.tipo === "peca" || s.novas ? [s.i] : qs.map(q => s.qs.indexOf(q));
@@ -575,14 +595,14 @@ function abrirCartao(chave) {
 }
 const letrasDe = q => (q.alternativas || []).length && q.tipo !== "ce" ? q.alternativas.map(a => a.letra) : ["C", "E"];
 function htmlCartao() {
-  const c = cartao, topo = `<div class="est-prog"><button type="button" class="mini" id="cartSair">‹ Voltar às provas</button><b>${esc(c.it.nome)}</b><span class="chip">cartão-resposta</span></div>`;
+  const c = cartao, topo = `<div class="est-prog"><button type="button" class="mini" id="cartSair">‹ Voltar</button><b>${esc(c.it.nome)}</b><span class="chip">cartão-resposta</span></div>`;
   if (c.carregando) return topo + `<p class="note est-gerando">Abrindo a prova…</p>`;
   if (!c.qs.length) return topo + `<p class="note">Não encontrei as questões desta prova neste aparelho. Use "Imprimir prova + cartão-resposta" de novo para o app ler a prova.</p>`;
   if (c.resultado) {
     const r = c.resultado;
     return topo + `<div class="est-fim"><div class="vb-n">${Math.round(r.acertos / Math.max(1, r.total) * 100)}%</div><p><b>${r.acertos}</b> certa(s), <b>${r.erradas.length}</b> errada(s) e ${r.branco} em branco, de ${r.total} questões válidas${r.anuladas ? ` (${r.anuladas} anulada(s) não contam)` : ""}.</p>${r.liquida != null ? `<p class="note">Nota líquida no critério Cebraspe (certas − erradas): <b>${r.liquida}</b></p>` : ""}</div>
       ${r.erradas.length ? `<div class="est-sec"><h4>Questões que você errou</h4>${r.erradas.map(q => `<details class="est-det"><summary>Questão ${esc(String(q.numero))} · você: <b>${esc(c.resp[q.numero] || "—")}</b> · gabarito: <b>${esc(q.gabarito)}</b>${q.disciplina ? ` <span class="note">${esc(q.disciplina)}</span>` : ""}</summary><p class="pre">${esc(q.enunciado)}</p>${(q.alternativas || []).map(a => `<p class="${a.letra === q.gabarito ? "h-ok" : a.letra === c.resp[q.numero] ? "h-bad" : ""}">(${esc(a.letra)}) ${esc(a.texto)}</p>`).join("")}</details>`).join("")}</div>` : ""}
-      <p class="note">O resultado entrou no seu histórico.</p><div class="actions"><button type="button" class="primary" id="cartSair">Voltar às provas</button></div>`;
+      <p class="note">O resultado entrou no seu histórico.</p><div class="actions"><button type="button" class="primary" id="cartSair">Voltar</button></div>`;
   }
   const preenchidas = c.qs.filter(q => c.resp[q.numero]).length;
   return topo + `<div class="est-det manu-box"><p class="est-sub">1. Envie a foto do cartão-resposta</p><p class="note">A IA lê as marcações. Confira e corrija abaixo o que ela leu antes de corrigir. Pode mandar mais de uma foto se o cartão tiver várias partes.</p>
@@ -593,7 +613,7 @@ function htmlCartao() {
 }
 async function lerCartaoFoto(files) {
   const c = cartao; if (!c || !files.length) return;
-  c.lendo = true; desenharEstudo("provas");
+  c.lendo = true; desenharEstudo(abaCartao());
   try {
     const partes = await Promise.all([...files].slice(0, 6).map(fotoParaParte));
     const p = `As imagens são fotos de um CARTÃO-RESPOSTA de prova objetiva preenchido à mão (círculos com letras; a resposta é o círculo pintado/preenchido). As questões são numeradas: ${c.qs.map(q => `${q.numero} (${letrasDe(q).join("/")})`).join(", ")}. Para cada número, diga qual letra está marcada. Se nenhuma estiver marcada, ou se houver mais de uma, ou rasura, use "". Responda em JSON: {"respostas": {"<número>": "<letra ou vazio>"}, "observacao": string curta sobre a legibilidade da foto}`;
@@ -601,7 +621,7 @@ async function lerCartaoFoto(files) {
     let n = 0; Object.entries(r.respostas || {}).forEach(([k, v]) => { const q = c.qs.find(x => String(x.numero) === String(k)); const L = String(v || "").trim().toUpperCase(); if (q && letrasDe(q).includes(L)) { c.resp[q.numero] = L; n++; } });
     toast(`A IA leu ${n} de ${c.qs.length} marcações. Confira antes de corrigir.${r.observacao ? " " + r.observacao : ""}`);
   } catch (e) { toast("A IA não conseguiu ler o cartão (" + e.message + "). Lance as respostas à mão."); }
-  c.lendo = false; if (cartao === c) desenharEstudo("provas");
+  c.lendo = false; if (cartao === c) desenharEstudo(abaCartao());
 }
 function corrigirCartao() {
   const c = cartao; let acertos = 0, branco = 0, anuladas = 0; const erradas = [], questoes = [];
@@ -615,9 +635,10 @@ function corrigirCartao() {
   const ce = c.qs.every(q => q.tipo === "ce" || !(q.alternativas || []).length);
   const respondidas = acertos + erradas.length, total = respondidas + branco;
   c.resultado = { acertos, erradas, branco, anuladas, total, liquida: ce ? acertos - erradas.length : null };
-  registrarHist({ tipo: "objetiva", prova: c.it.id, nome: c.it.nome, novas: false, papel: true, chave: c.it.id, acertos, total, nota: acertos / Math.max(1, total) * 10, questoes });
+  if (c.info) registrarInfoPapel(c.reg, c.qs.map(q => ({ marcada: c.resp[q.numero] || "", nota: c.resp[q.numero] && c.resp[q.numero] === String(q.gabarito || "").toUpperCase() ? 1 : 0 })));
+  else registrarHist({ tipo: "objetiva", prova: c.it.id, nome: c.it.nome, novas: false, papel: true, chave: c.it.id, acertos, total, nota: acertos / Math.max(1, total) * 10, questoes });
   const lista = lerProv("impressas", []); gravarProv("impressas", lista.filter(x => x.chave !== c.chave)); salvarImpressasNuvem();
-  desenharEstudo("provas"); $("estudoConteudo").scrollTop = 0;
+  desenharEstudo(abaCartao()); $("estudoConteudo").scrollTop = 0;
 }
 
 // fotos ficam com até 2000 px no lado maior (legível para a IA e leve para enviar)
@@ -679,7 +700,7 @@ document.addEventListener("click", async e => {
   if (t.id === "provRecarregar") { repo = null; carregarRepo(true); desenharEstudo(estudoAba); return; }
   if (t.dataset.provimpr) { imprimirObjetiva(t.dataset.provimpr); return; }
   if (t.dataset.impcartao) { abrirCartao(t.dataset.impcartao); return; }
-  if (t.id === "cartSair") { cartao = null; desenharEstudo("provas"); return; }
+  if (t.id === "cartSair") { const aba = abaCartao(); cartao = null; desenharEstudo(aba); return; }
   if (t.id === "cartFotoBtn") { $("cartFotos").click(); return; }
   if (t.id === "cartCorrigir" && cartao) { corrigirCartao(); return; }
   if (t.dataset.imprabrir) { retomarImpressa(t.dataset.imprabrir, t.dataset.impri); return; }
