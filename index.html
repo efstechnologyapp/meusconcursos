@@ -271,6 +271,9 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .lei-edit-l{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 10px;border-top:1px solid var(--line);font-size:13.5px}.lei-edit-l:first-child{border-top:0}
 .lei-item{border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
 .lei-tit{display:flex;flex-direction:column;gap:2px}.lei-msg{color:#7a5600}
+.lei-ementa{font-weight:400;color:var(--muted,#5b6475);font-size:13px}
+.lei-matsel{width:auto!important;min-width:0!important;display:inline-block;min-height:0;height:auto;vertical-align:middle;font:inherit;font-size:11px;background:var(--chip);color:var(--ink);border:1px solid transparent;border-radius:999px;padding:1px 18px 1px 7px;margin-right:4px;cursor:pointer;appearance:none;-webkit-appearance:none;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-position:calc(100% - 9px) 55%,calc(100% - 5px) 55%;background-size:4px 4px;background-repeat:no-repeat}
+.lei-matsel:hover{border-color:var(--line,#cfd5df)}
 .lei-colar{border-top:1px dashed var(--line);padding-top:8px}
 .lei-cola{min-height:90px;border:2px dashed var(--brand);border-radius:10px;padding:10px;background:var(--bg);font-size:13px;color:var(--muted);overflow:auto;max-height:160px}
 .lei-cola:empty:before{content:"Clique aqui e cole (Ctrl+V) o texto copiado da página da lei";color:var(--muted)}
@@ -1727,7 +1730,7 @@ iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO = 78;
+const APP_VERSAO = 79;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{

@@ -21,7 +21,23 @@ const LEIS_PADRAO = [
 let leis = {};          // id -> { meta, artigos: [{ id, rot, txt, cap }], quando, fonte }
 let leiUi = { baixando: {}, colar: null, msg: {} };
 const MATERIAS_LEI = ["Constitucional", "Penal", "Processo Penal", "Execução Penal", "Civil", "Processo Civil", "Consumidor", "Criança e Adolescente", "Administrativo", "Eleitoral", "Tributário", "Empresarial", "Ambiental", "Institucional", "Trabalho", "Outras"];
-const materiaDe = l => l.materia || "Outras";
+let leiMatUser = null;   // matéria escolhida pelo usuário (sobrepõe a do catálogo/edital)
+const materiaDe = l => (leiMatUser = leiMatUser || lerEst("leiMatUser", {}))[l.id] || l.materia || "Outras";
+// do que trata a lei: a ementa oficial (tirada do texto baixado) ou, antes de baixar, um resumo pela IA
+const ementaDe = l => (lerEst("leiEmenta", {})[l.id] || {}).txt || "";
+const RE_EMENTA = /^(Disp[õo]e|Institui|Estabelece|Regulamenta|Regula|Define|Altera|Cria|Aprova|Trata|Organiza|Torna|Codifica|Consolida|Introduz|Acrescenta|Modifica)\b/i;
+async function buscarEmentasIA() {
+  if (leiUi.ementaPedida || typeof iaLigada !== "function" || !iaLigada()) return;
+  const em = lerEst("leiEmenta", {}), faltam = leiCatalogo().filter(l => !em[l.id]);
+  if (!faltam.length) return;
+  leiUi.ementaPedida = true;
+  try {
+    const r = await gemini(`Para cada lei brasileira abaixo, escreva em uma frase curta (até 18 palavras) do que ela trata, seguindo a ementa oficial da lei (ex.: "Dispõe sobre normas gerais de contratação de consórcios públicos"). Não invente: se não souber, deixe vazio.\n${faltam.map(l => `${l.id}: ${l.nome}`).join("\n")}\nResponda só com JSON: {"ementas":{"<id>":"<frase>"}}`);
+    const e2 = lerEst("leiEmenta", {});
+    Object.entries((r && r.ementas) || {}).forEach(([id, t]) => { if (t && !e2[id] && faltam.some(l => l.id === id)) e2[id] = { txt: String(t).trim().replace(/\.$/, ""), fonte: "ia" }; });
+    gravarEst("leiEmenta", e2); if (estudoAba === "lei-leis") desenharEstudo("lei-leis");
+  } catch (e) { console.warn("ementas", e); }
+}
 const materiasUsadas = lista => MATERIAS_LEI.filter(m => lista.some(l => materiaDe(l) === m));
 // select de leis agrupado por matéria
 const optsLeis = (lista, atual) => materiasUsadas(lista).map(m => `<optgroup label="${esc(m)}">${lista.filter(l => materiaDe(l) === m).map(l => `<option value="${l.id}"${l.id === atual ? " selected" : ""}>${esc(l.nome)}</option>`).join("")}</optgroup>`).join("");
@@ -43,10 +59,11 @@ function artigosDoHtml(html) {
   let blocos = [...doc.querySelectorAll("p,h1,h2,h3,h4,h5,h6,li,td")].filter(e => !e.querySelector("p,div,li,td")).map(e => e.textContent);
   if (blocos.length < 5) blocos = (doc.body ? doc.body.textContent : String(html)).split(/\n+/);
   const linhas = blocos.flatMap(b => textoLimpo(b).split("\n")).map(l => l.replace(RE_NOTA, "").replace(/\s{2,}/g, " ").trim()).filter(Boolean);
-  const arts = []; let cap = [], atual = null, comecou = false, espera = "";
+  const arts = []; let cap = [], atual = null, comecou = false, espera = "", ementa = "";
   for (const l of linhas) {
     if (/^(Bras[íi]lia,|Este texto n[ãa]o substitui|Rio de Janeiro,\s*\d)/i.test(l) && comecou) { atual = null; espera = "fim"; continue; }
     if (espera === "fim") continue;
+    if (!comecou && !ementa && RE_EMENTA.test(l) && l.length < 600) ementa = l.replace(/\.$/, "");
     const m = l.match(RE_ART);
     if (m) {
       comecou = true;
@@ -62,14 +79,17 @@ function artigosDoHtml(html) {
     if (atual && comecou) atual.txt += "\n" + l;
   }
   // artigo sem texto (só "revogado") sai da lista
-  return arts.filter(a => a.txt.replace(a.rot, "").replace(/[\s.()–-]|revogad[oa]|vetad[oa]/gi, "").length > 3);
+  const r = arts.filter(a => a.txt.replace(a.rot, "").replace(/[\s.()–-]|revogad[oa]|vetad[oa]/gi, "").length > 3);
+  r.ementa = ementa; return r;
 }
 
 // ---------- guardar / carregar ----------
 async function guardarLei(meta, html, info) {
   // id estável: rótulo do artigo + ordem entre os de mesmo rótulo (a CF repete "Art. 1º" no ADCT)
   const vistos = {};
-  const artigos = artigosDoHtml(html).map(a => { const r = a.rot.replace(/\W+/g, ""); vistos[r] = (vistos[r] || 0) + 1; return { ...a, id: `lei:${meta.id}:${r}${vistos[r] > 1 ? "_" + vistos[r] : ""}` }; });
+  const brutos = artigosDoHtml(html);
+  if (brutos.ementa) { const em = lerEst("leiEmenta", {}); em[meta.id] = { txt: brutos.ementa, fonte: "lei" }; gravarEst("leiEmenta", em); }
+  const artigos = brutos.map(a => { const r = a.rot.replace(/\W+/g, ""); vistos[r] = (vistos[r] || 0) + 1; return { ...a, id: `lei:${meta.id}:${r}${vistos[r] > 1 ? "_" + vistos[r] : ""}` }; });
   if (artigos.length < 3) throw new Error("não encontrei artigos nesse texto");
   const reg = { meta, artigos, quando: info.quando || new Date().toISOString(), fonte: info.fonte || "" };
   await arq("gravar", "lei:" + meta.id, reg).catch(() => {});
@@ -124,13 +144,13 @@ function htmlLei(aba) {
 const leisProntas = () => leiCatalogo().filter(l => leis[l.id]);
 function htmlMinhasLeis() {
   const idx = lerEst("leisBaixadas", {});
-  if (!leiUi.editaisLidos) { leiUi.editaisLidos = true; setTimeout(procurarLeisNosEditais, 0); }   // inclui na lista as leis citadas nos editais
+  if (!leiUi.editaisLidos) { leiUi.editaisLidos = true; setTimeout(async () => { await procurarLeisNosEditais(); buscarEmentasIA(); }, 0); }   // inclui na lista as leis citadas nos editais
   const fm = lerEst("leiMat", ""), cat = leiCatalogo();
   let h = `<div class="est-chips lei-mats"><button type="button" class="chip-sel${!fm ? " on" : ""}" data-leimat="">Todas</button>${materiasUsadas(cat).map(m => `<button type="button" class="chip-sel${fm === m ? " on" : ""}" data-leimat="${esc(m)}">${esc(m)} <span class="ct">${cat.filter(l => materiaDe(l) === m).length}</span></button>`).join("")}</div>
     <p class="note">Baixe as leis que você vai estudar. O app pega o texto vigente no site do Planalto, tira o que está revogado (riscado no site) e separa os artigos. Fica guardado neste aparelho e na nuvem do app.</p>`;
   h += cat.filter(l => !fm || materiaDe(l) === fm).map(l => {
     const b = idx[l.id], ok = !!leis[l.id] || !!b, d = b && new Date(b.quando);
-    return `<div class="lei-item"><div class="lei-tit"><b>${esc(l.nome)}</b><span class="note"><span class="chip">${esc(materiaDe(l))}</span> ${ok ? `✓ ${b ? b.n : leis[l.id].artigos.length} artigos · ${b && b.fonte === "colado" ? "texto colado" : "do Planalto"}${d && !isNaN(d) ? " em " + d.toLocaleDateString("pt-BR") : ""}` : "ainda não baixada"}${leiUi.msg[l.id] ? ` · <span class="lei-msg">${esc(leiUi.msg[l.id])}</span>` : ""}</span></div>
+    return `<div class="lei-item"><div class="lei-tit"><span><b>${esc(l.nome)}</b>${ementaDe(l) ? `<span class="lei-ementa"> — ${esc(ementaDe(l))}</span>` : ""}</span><span class="note"><select class="lei-matsel" data-leimatsel="${l.id}" title="Mudar a matéria desta lei">${MATERIAS_LEI.map(m => `<option${m === materiaDe(l) ? " selected" : ""}>${esc(m)}</option>`).join("")}</select> ${ok ? `✓ ${b ? b.n : leis[l.id].artigos.length} artigos · ${b && b.fonte === "colado" ? "texto colado" : "do Planalto"}${d && !isNaN(d) ? " em " + d.toLocaleDateString("pt-BR") : ""}` : "ainda não baixada"}${leiUi.msg[l.id] ? ` · <span class="lei-msg">${esc(leiUi.msg[l.id])}</span>` : ""}</span></div>
       <div class="prov-acoes">${leiUi.baixando[l.id] ? `<span class="note est-gerando">Baixando do Planalto…</span>` : `${ok ? `<button type="button" class="primary" data-leiler="${l.id}">Ler</button><button type="button" data-leibaixar="${l.id}" data-forcar="1">Atualizar</button>` : `<button type="button" class="primary" data-leibaixar="${l.id}">Baixar do Planalto</button>`}<button type="button" data-leicolar="${l.id}">Colar o texto</button>${l.extra ? `<button type="button" class="link-x" data-leiremover="${l.id}">remover</button>` : ""}`}</div>
       ${leiUi.colar === l.id ? htmlColarLei(l) : ""}</div>`;
   }).join("");
@@ -396,6 +416,7 @@ document.addEventListener("click", e => {
 });
 document.addEventListener("change", e => {
   const id = e.target.id;
+  if (e.target.dataset && e.target.dataset.leimatsel) { const mu = lerEst("leiMatUser", {}); mu[e.target.dataset.leimatsel] = e.target.value; gravarEst("leiMatUser", mu); leiMatUser = mu; toast(`Lei movida para ${e.target.value}.`); desenharEstudo("lei-leis"); return; }
   if (id === "leiSel" || id === "leiCap" || id === "leiSoDif") { const c = lerLeiCfg(); if (id === "leiSel") { c.lei = e.target.value; c.cap = ""; } else if (id === "leiCap") c.cap = e.target.value; else c.soDificeis = e.target.checked; gravarEst("leiRev", c); desenharEstudo("lei-ler"); }
   if (id === "leiPratCap" || id === "leiBanca") { const c = lerLeiPrat(); c[id === "leiPratCap" ? "cap" : "banca"] = e.target.value; gravarEst("leiPrat", c); desenharEstudo("lei-praticar"); }
 });
