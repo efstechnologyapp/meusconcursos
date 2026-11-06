@@ -28,6 +28,7 @@ function carregarDadosEstudo() {
   carregarJulgados().then(() => { renderEstudoPagina(); if (!cadernoDriveChecado) atualizarDoDrive(); });
   if (!repo) carregarRepo();
   carregarHistorico();
+  if (typeof sincronizarLeis === "function") sincronizarLeis();
 }
 let ultimoHtmlEstudo = "";
 function renderEstudoPagina() {

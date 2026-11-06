@@ -34,11 +34,46 @@ function salvarImpressasNuvem() {
   if (!usuarioAtual || !usuarioAtual.sessao) return;
   postScript({ acao: "impressasSalvar", sessao: usuarioAtual.sessao, impressas: lerProv("impressas", []) }).catch(() => {});
 }
+// cópia das folhas que fica no Drive: bem mais leve que a enviada para a IA corrigir (até 1600 px, tons de cinza,
+// JPEG mais compactado — cerca de 150 a 300 KB por folha, com a letra ainda legível). PDF vira uma imagem por página.
+const LADO_GUARDAR = 1600, QUALIDADE_GUARDAR = 0.6;
+function canvasLeve(origem, w, h) {
+  const k = Math.min(1, LADO_GUARDAR / Math.max(w, h)), c = document.createElement("canvas");
+  c.width = Math.round(w * k); c.height = Math.round(h * k);
+  const ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+  ctx.filter = "grayscale(1)"; ctx.drawImage(origem, 0, 0, c.width, c.height);
+  return { mime_type: "image/jpeg", data: c.toDataURL("image/jpeg", QUALIDADE_GUARDAR).split(",")[1] };
+}
+async function fotosParaGuardar(fotos) {
+  const saida = [];
+  for (const f of fotos) {
+    const d = f.inline_data || f;
+    try {
+      if (/pdf/.test(d.mime_type)) {
+        const pdfjs = await carregarPdfJs(), bin = atob(d.data), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+        const pdf = await pdfjs.getDocument({ data: u8 }).promise;
+        for (let i = 1; i <= Math.min(pdf.numPages, 12 - saida.length); i++) {
+          const pg = await pdf.getPage(i), v0 = pg.getViewport({ scale: 1 }), v = pg.getViewport({ scale: LADO_GUARDAR / Math.max(v0.width, v0.height) });
+          const c = document.createElement("canvas"); c.width = Math.round(v.width); c.height = Math.round(v.height);
+          await pg.render({ canvasContext: c.getContext("2d"), viewport: v }).promise;
+          saida.push(canvasLeve(c, c.width, c.height));
+        }
+      } else {
+        const img = await new Promise((ok, falha) => { const i = new Image(); i.onload = () => ok(i); i.onerror = falha; i.src = "data:" + d.mime_type + ";base64," + d.data; });
+        const leve = canvasLeve(img, img.width, img.height);
+        saida.push(leve.data.length < d.data.length ? leve : d);
+      }
+    } catch (e) { saida.push(d); }   // se não der para reduzir, guarda como veio
+    if (saida.length >= 12) break;
+  }
+  return saida.slice(0, 12);
+}
 async function registrarHist(e, fotos) {
   e.id = e.id || Date.now().toString(36) + Math.random().toString(36).slice(2, 6); e.data = e.data || new Date().toISOString();
   hist.lista = [...(hist.lista || lerProv("historico", []) || []).filter(x => x.id !== e.id), e]; gravarProv("historico", hist.lista);
   try {
-    const r = await postScript({ acao: "historicoAdd", sessao: usuarioAtual.sessao, entrada: e, ...(fotos && fotos.length ? { fotos: fotos.map(f => f.inline_data) } : {}) });
+    const guardar = fotos && fotos.length ? await fotosParaGuardar(fotos) : [];
+    const r = await postScript({ acao: "historicoAdd", sessao: usuarioAtual.sessao, entrada: e, ...(guardar.length ? { fotos: guardar } : {}) });
     if (!r.ok) throw new Error(r.erro);
     const k = hist.lista.findIndex(x => x.id === e.id); if (k >= 0) hist.lista[k] = r.entrada; gravarProv("historico", hist.lista);
   } catch (err) { gravarProv("histFila", [...lerProv("histFila", []).filter(x => x.id !== e.id), e]); }

@@ -86,17 +86,18 @@ function artigosDoHtml(html) {
 // ---------- guardar / carregar ----------
 async function guardarLei(meta, html, info) {
   // id estável: rótulo do artigo + ordem entre os de mesmo rótulo (a CF repete "Art. 1º" no ADCT)
-  const vistos = {};
   const brutos = artigosDoHtml(html);
   if (brutos.ementa) { const em = lerEst("leiEmenta", {}); em[meta.id] = { txt: brutos.ementa, fonte: "lei" }; gravarEst("leiEmenta", em); }
-  const artigos = brutos.map(a => { const r = a.rot.replace(/\W+/g, ""); vistos[r] = (vistos[r] || 0) + 1; return { ...a, id: `lei:${meta.id}:${r}${vistos[r] > 1 ? "_" + vistos[r] : ""}` }; });
+  const artigos = comIds(meta.id, brutos);
   if (artigos.length < 3) throw new Error("não encontrei artigos nesse texto");
   const reg = { meta, artigos, quando: info.quando || new Date().toISOString(), fonte: info.fonte || "" };
   await arq("gravar", "lei:" + meta.id, reg).catch(() => {});
   leis[meta.id] = reg;
   const idx = lerEst("leisBaixadas", {}); idx[meta.id] = { n: artigos.length, quando: reg.quando, fonte: reg.fonte }; gravarEst("leisBaixadas", idx);
+  if (!info.daNuvem) enviarTextoLei(meta.id, reg);
   return reg;
 }
+function comIds(id, arts) { const vistos = {}; return arts.map(a => { const r = a.rot.replace(/\W+/g, ""); vistos[r] = (vistos[r] || 0) + 1; return { ...a, id: `lei:${id}:${r}${vistos[r] > 1 ? "_" + vistos[r] : ""}` }; }); }
 async function carregarLeisLocais() {
   const idx = lerEst("leisBaixadas", {});
   for (const id of Object.keys(idx)) if (!leis[id]) { const r = await arq("ler", "lei:" + id).catch(() => null); if (r) leis[id] = r; }
@@ -123,15 +124,74 @@ async function colarLei(id, html) {
   try {
     const reg = await guardarLei(meta, html, { fonte: "colado" });
     leiUi.colar = null; leiUi.msg[id] = `${reg.artigos.length} artigos (texto colado)`;
-    postScript({ acao: "leiSalvar", sessao: usuarioAtual.sessao, url: meta.url, html: String(html).slice(0, 8000000) }).catch(() => {});   // para os outros aparelhos
     toast(`${meta.sigla}: ${reg.artigos.length} artigos prontos.`);
   } catch (e) { leiUi.msg[id] = "Não reconheci a lei no texto colado: " + e.message + ". Copie a página inteira (Ctrl+A, Ctrl+C)."; }
   desenharEstudo(estudoAba);
 }
 
+// ---------- mesma lista de leis em qualquer aparelho ----------
+// O texto já separado em artigos vai para a pasta do usuário no Drive (leis/lei_<id>.json), junto com a lista
+// (leis adicionadas e removidas, matéria escolhida, resumos e marcas de revisão). Outro aparelho baixa tudo sozinho.
+const LEI_NUVEM = ["leisExtras", "leisRemovidas", "leiMatUser", "leiEmenta", "leiMarc"];
+const estadoLeiLocal = () => Object.fromEntries(LEI_NUVEM.map(k => [k, lerEst(k, k === "leisExtras" || k === "leisRemovidas" ? [] : {})]));
+let leiNuvem = { feito: false, rodando: false, enviado: "", textos: null };
+// formato enxuto para a nuvem: sem ids (refeitos aqui), sem os dados da lei (já estão na lista) e com cada título guardado uma vez só; o servidor ainda compacta (gzip)
+function empacotarLei(reg) { const caps = [], pos = {}; return { q: reg.quando, f: reg.fonte, c: caps, a: reg.artigos.map(a => { if (!(a.cap in pos)) { pos[a.cap] = caps.length; caps.push(a.cap); } return [a.rot, a.txt, pos[a.cap]]; }) }; }
+function desempacotarLei(id, p) { const meta = leiCatalogo().find(l => l.id === id); return { meta, quando: p.q, fonte: p.f, artigos: comIds(id, p.a.map(([rot, txt, c]) => ({ rot, txt, cap: p.c[c] || "" }))) }; }
+async function enviarTextoLei(id, reg) {
+  if (!usuarioAtual || !usuarioAtual.sessao) return;
+  try { const r = await postLongo({ acao: "leiTextoSalvar", id, lei: empacotarLei(reg) }, 240000); if (r.ok && leiNuvem.textos) leiNuvem.textos.push(id); } catch (e) { console.warn("lei nuvem", e); }
+}
+async function sincronizarLeis() {
+  if (leiNuvem.feito || leiNuvem.rodando || typeof usuarioAtual === "undefined" || !usuarioAtual || !usuarioAtual.sessao) return;
+  leiNuvem.rodando = true;
+  try {
+    const r = await postScript({ acao: "leiEstado", sessao: usuarioAtual.sessao });
+    if (!r.ok) throw new Error(r.erro || "falha");
+    const rem = r.estado || {}, loc = estadoLeiLocal();
+    // junta: o que está na nuvem vale (é o mais recente); o que só existe neste aparelho é mantido
+    const porId = (a, b) => { const m = {}; [...a, ...b].forEach(l => { if (l && l.id) m[l.id] = { ...(m[l.id] || {}), ...l }; }); return Object.values(m); };
+    const removidas = [...new Set([...(rem.leisRemovidas || []), ...loc.leisRemovidas])];
+    gravarEst("leisRemovidas", removidas);
+    gravarEst("leisExtras", porId(loc.leisExtras, rem.leisExtras || []).filter(l => !removidas.includes(l.id)));
+    gravarEst("leiMatUser", { ...loc.leiMatUser, ...(rem.leiMatUser || {}) }); leiMatUser = null;
+    const em = { ...loc.leiEmenta }; Object.entries(rem.leiEmenta || {}).forEach(([id, e]) => { if (!em[id] || em[id].fonte !== "lei" || e.fonte === "lei") em[id] = e; }); gravarEst("leiEmenta", em);
+    gravarEst("leiMarc", { ...loc.leiMarc, ...(rem.leiMarc || {}) });
+    leiNuvem.textos = r.textos || []; leiNuvem.feito = true;
+    await carregarLeisLocais();
+    // textos que só este aparelho tem sobem; os que só a nuvem tem descem
+    const idx = lerEst("leisBaixadas", {});
+    for (const id of Object.keys(idx)) if (leis[id] && !leiNuvem.textos.includes(id)) await enviarTextoLei(id, leis[id]);
+    for (const id of leiNuvem.textos) {
+      if (leis[id] || !leiCatalogo().some(l => l.id === id)) continue;
+      leiUi.baixando[id] = true; if (estudoAba.startsWith("lei")) desenharEstudo(estudoAba);
+      try {
+        const t = await postLongo({ acao: "leiTexto", id }, 240000);
+        if (t.ok && t.lei && t.lei.a) {
+          const reg = desempacotarLei(id, t.lei); await arq("gravar", "lei:" + id, reg).catch(() => {}); leis[id] = reg;
+          const ix = lerEst("leisBaixadas", {}); ix[id] = { n: reg.artigos.length, quando: reg.quando, fonte: reg.fonte }; gravarEst("leisBaixadas", ix);
+        }
+      } catch (e) { console.warn("lei", id, e); }
+      delete leiUi.baixando[id];
+    }
+    salvarEstadoLei();
+  } catch (e) { console.warn("sincronizar leis", e); }
+  leiNuvem.rodando = false;
+  if (typeof estudoAba === "string" && estudoAba.startsWith("lei") && ($("dlgEstudo") || {}).open) desenharEstudo(estudoAba);
+  if (typeof renderEstudoPagina === "function") renderEstudoPagina();
+}
+function salvarEstadoLei() {
+  if (!leiNuvem.feito || !usuarioAtual || !usuarioAtual.sessao) return;
+  const est = estadoLeiLocal(), j = JSON.stringify(est);
+  if (j === leiNuvem.enviado) return;
+  leiNuvem.enviado = j; postScript({ acao: "leiEstadoSalvar", sessao: usuarioAtual.sessao, estado: est }).catch(() => { leiNuvem.enviado = ""; });
+}
+setInterval(salvarEstadoLei, 4000);   // qualquer mudança na lista vai para a nuvem em poucos segundos
+
 // ---------- telas ----------
 function htmlLei(aba) {
   if (!leiUi.carregou) { leiUi.carregou = true; carregarLeisLocais().then(() => desenharEstudo(estudoAba)); }
+  if (!leiNuvem.feito) setTimeout(sincronizarLeis, 0);
   if (aba === "lei-leis") return htmlMinhasLeis();
   if (aba === "lei-ler") return htmlLerLei();
   if (aba === "lei-hist") { hist.info.tipo = "lei"; const h = htmlHistInfo(); hist.info.tipo = "info"; return h; }
@@ -144,7 +204,7 @@ function htmlLei(aba) {
 const leisProntas = () => leiCatalogo().filter(l => leis[l.id]);
 function htmlMinhasLeis() {
   const idx = lerEst("leisBaixadas", {});
-  if (!leiUi.editaisLidos) { leiUi.editaisLidos = true; setTimeout(async () => { await procurarLeisNosEditais(); buscarEmentasIA(); }, 0); }   // inclui na lista as leis citadas nos editais
+  if (!leiUi.editaisLidos) { leiUi.editaisLidos = true; setTimeout(async () => { await sincronizarLeis(); await procurarLeisNosEditais(); buscarEmentasIA(); }, 0); }   // inclui na lista as leis citadas nos editais
   const fm = lerEst("leiMat", ""), cat = leiCatalogo();
   let h = `<div class="est-chips lei-mats"><button type="button" class="chip-sel${!fm ? " on" : ""}" data-leimat="">Todas</button>${materiasUsadas(cat).map(m => `<button type="button" class="chip-sel${fm === m ? " on" : ""}" data-leimat="${esc(m)}">${esc(m)} <span class="ct">${cat.filter(l => materiaDe(l) === m).length}</span></button>`).join("")}</div>
     <p class="note">Baixe as leis que você vai estudar. O app pega o texto vigente no site do Planalto, tira o que está revogado (riscado no site) e separa os artigos. Fica guardado neste aparelho e na nuvem do app.</p>`;
