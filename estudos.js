@@ -260,7 +260,7 @@ function registrar(j, nota) {   // nota: 1 acerto, 0.5 parcial, 0 erro
   if (nota >= 1) p.acertos++; else if (nota === 0) p.erros++;
   const d = new Date(); d.setDate(d.getDate() + INTERVALOS[p.caixa]); p.prox = d.toISOString().slice(0, 10); p.ultimo = hojeISO(); p.ultNota = nota;
   prog[j.id] = p; gravarEst("prog", prog);
-  const hist = lerEst("hist", []); hist.push({ d: hojeISO(), disc: j.disc, trib: j.trib, modo: estudo && estudo.modo, nota }); gravarEst("hist", hist.slice(-3000));
+  const hist = lerEst("hist", []); hist.push({ d: hojeISO(), disc: j.disc, trib: j.trib, modo: estudo && estudo.modo, nota, t: Date.now() }); gravarEst("hist", hist.slice(-3000));
 }
 function escolherJulgados(filtro, n) {
   const prog = lerEst("prog", {}), hoje = hojeISO();

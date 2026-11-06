@@ -131,68 +131,48 @@ async function colarLei(id, html) {
 }
 
 // ---------- mesma lista de leis em qualquer aparelho ----------
-// O texto já separado em artigos vai para a pasta do usuário no Drive (leis/lei_<id>.json), junto com a lista
-// (leis adicionadas e removidas, matéria escolhida, resumos e marcas de revisão). Outro aparelho baixa tudo sozinho.
-const LEI_NUVEM = ["leisExtras", "leisRemovidas", "leiMatUser", "leiEmenta", "leiMarc"];
-const estadoLeiLocal = () => Object.fromEntries(LEI_NUVEM.map(k => [k, lerEst(k, k === "leisExtras" || k === "leisRemovidas" ? [] : {})]));
-let leiNuvem = { feito: false, rodando: false, enviado: "", textos: null };
+// A lista (leis adicionadas e removidas, matéria escolhida, resumos, marcas) vai pela sincronização geral do estudo
+// (sincronia.js). Aqui fica só o texto de cada lei já separado em artigos, na pasta do usuário (leis/lei_<id>.json.gz).
+let leiNuvem = { textos: null, rodando: false };
 // formato enxuto para a nuvem: sem ids (refeitos aqui), sem os dados da lei (já estão na lista) e com cada título guardado uma vez só; o servidor ainda compacta (gzip)
 function empacotarLei(reg) { const caps = [], pos = {}; return { q: reg.quando, f: reg.fonte, c: caps, a: reg.artigos.map(a => { if (!(a.cap in pos)) { pos[a.cap] = caps.length; caps.push(a.cap); } return [a.rot, a.txt, pos[a.cap]]; }) }; }
 function desempacotarLei(id, p) { const meta = leiCatalogo().find(l => l.id === id); return { meta, quando: p.q, fonte: p.f, artigos: comIds(id, p.a.map(([rot, txt, c]) => ({ rot, txt, cap: p.c[c] || "" }))) }; }
 async function enviarTextoLei(id, reg) {
   if (!usuarioAtual || !usuarioAtual.sessao) return;
-  try { const r = await postLongo({ acao: "leiTextoSalvar", id, lei: empacotarLei(reg) }, 240000); if (r.ok && leiNuvem.textos) leiNuvem.textos.push(id); } catch (e) { console.warn("lei nuvem", e); }
+  try { const r = await postLongo({ acao: "leiTextoSalvar", id, lei: empacotarLei(reg) }, 240000); if (r.ok && leiNuvem.textos && !leiNuvem.textos.includes(id)) leiNuvem.textos.push(id); } catch (e) { console.warn("lei nuvem", e); }
 }
-async function sincronizarLeis() {
-  if (leiNuvem.feito || leiNuvem.rodando || typeof usuarioAtual === "undefined" || !usuarioAtual || !usuarioAtual.sessao) return;
-  leiNuvem.rodando = true;
+// chamada pela sincronização geral com a lista de textos que estão na nuvem
+async function sincronizarTextosLeis(textos) {
+  if (leiNuvem.rodando || !Array.isArray(textos)) return;
+  leiNuvem.rodando = true; leiNuvem.textos = textos.slice();
   try {
-    const r = await postScript({ acao: "leiEstado", sessao: usuarioAtual.sessao });
-    if (!r.ok) throw new Error(r.erro || "falha");
-    const rem = r.estado || {}, loc = estadoLeiLocal();
-    // junta: o que está na nuvem vale (é o mais recente); o que só existe neste aparelho é mantido
-    const porId = (a, b) => { const m = {}; [...a, ...b].forEach(l => { if (l && l.id) m[l.id] = { ...(m[l.id] || {}), ...l }; }); return Object.values(m); };
-    const removidas = [...new Set([...(rem.leisRemovidas || []), ...loc.leisRemovidas])];
-    gravarEst("leisRemovidas", removidas);
-    gravarEst("leisExtras", porId(loc.leisExtras, rem.leisExtras || []).filter(l => !removidas.includes(l.id)));
-    gravarEst("leiMatUser", { ...loc.leiMatUser, ...(rem.leiMatUser || {}) }); leiMatUser = null;
-    const em = { ...loc.leiEmenta }; Object.entries(rem.leiEmenta || {}).forEach(([id, e]) => { if (!em[id] || em[id].fonte !== "lei" || e.fonte === "lei") em[id] = e; }); gravarEst("leiEmenta", em);
-    gravarEst("leiMarc", { ...loc.leiMarc, ...(rem.leiMarc || {}) });
-    leiNuvem.textos = r.textos || []; leiNuvem.feito = true;
     await carregarLeisLocais();
     // textos que só este aparelho tem sobem; os que só a nuvem tem descem
     const idx = lerEst("leisBaixadas", {});
     for (const id of Object.keys(idx)) if (leis[id] && !leiNuvem.textos.includes(id)) await enviarTextoLei(id, leis[id]);
+    let mudou = false;
     for (const id of leiNuvem.textos) {
       if (leis[id] || !leiCatalogo().some(l => l.id === id)) continue;
-      leiUi.baixando[id] = true; if (estudoAba.startsWith("lei")) desenharEstudo(estudoAba);
+      leiUi.baixando[id] = true; if (String(estudoAba).startsWith("lei")) desenharEstudo(estudoAba);
       try {
         const t = await postLongo({ acao: "leiTexto", id }, 240000);
         if (t.ok && t.lei && t.lei.a) {
-          const reg = desempacotarLei(id, t.lei); await arq("gravar", "lei:" + id, reg).catch(() => {}); leis[id] = reg;
+          const reg = desempacotarLei(id, t.lei); await arq("gravar", "lei:" + id, reg).catch(() => {}); leis[id] = reg; mudou = true;
           const ix = lerEst("leisBaixadas", {}); ix[id] = { n: reg.artigos.length, quando: reg.quando, fonte: reg.fonte }; gravarEst("leisBaixadas", ix);
         }
       } catch (e) { console.warn("lei", id, e); }
       delete leiUi.baixando[id];
     }
-    salvarEstadoLei();
-  } catch (e) { console.warn("sincronizar leis", e); }
+    if (mudou && String(estudoAba).startsWith("lei") && ($("dlgEstudo") || {}).open) desenharEstudo(estudoAba);
+    if (mudou && typeof renderEstudoPagina === "function") renderEstudoPagina();
+  } catch (e) { console.warn("textos das leis", e); }
   leiNuvem.rodando = false;
-  if (typeof estudoAba === "string" && estudoAba.startsWith("lei") && ($("dlgEstudo") || {}).open) desenharEstudo(estudoAba);
-  if (typeof renderEstudoPagina === "function") renderEstudoPagina();
 }
-function salvarEstadoLei() {
-  if (!leiNuvem.feito || !usuarioAtual || !usuarioAtual.sessao) return;
-  const est = estadoLeiLocal(), j = JSON.stringify(est);
-  if (j === leiNuvem.enviado) return;
-  leiNuvem.enviado = j; postScript({ acao: "leiEstadoSalvar", sessao: usuarioAtual.sessao, estado: est }).catch(() => { leiNuvem.enviado = ""; });
-}
-setInterval(salvarEstadoLei, 4000);   // qualquer mudança na lista vai para a nuvem em poucos segundos
+const sincronizarLeis = () => typeof sincronizarEstudo === "function" ? sincronizarEstudo() : Promise.resolve();
 
 // ---------- telas ----------
 function htmlLei(aba) {
   if (!leiUi.carregou) { leiUi.carregou = true; carregarLeisLocais().then(() => desenharEstudo(estudoAba)); }
-  if (!leiNuvem.feito) setTimeout(sincronizarLeis, 0);
   if (aba === "lei-leis") return htmlMinhasLeis();
   if (aba === "lei-ler") return htmlLerLei();
   if (aba === "lei-hist") { hist.info.tipo = "lei"; const h = htmlHistInfo(); hist.info.tipo = "info"; return h; }

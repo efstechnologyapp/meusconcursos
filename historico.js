@@ -23,11 +23,16 @@ async function carregarHistorico(forcar) {
     const r = await postScript({ acao: "historico", sessao: usuarioAtual.sessao });
     if (r.ok) {
       hist.lista = r.itens || []; gravarProv("historico", hist.lista);
-      // a lista da nuvem é a que vale (assim, o que foi removido num aparelho some nos outros).
-      // Só na primeira vez, as provas que existiam apenas neste aparelho sobem para a nuvem.
-      const local = lerProv("impressas", []), nuvem = r.impressas || [];
-      if (lerProv("impressasNuvemOk", false)) gravarProv("impressas", nuvem);
-      else { const junta = [...nuvem, ...local.filter(x => !nuvem.some(y => y.chave === x.chave))]; gravarProv("impressas", junta); gravarProv("impressasNuvemOk", true); if (junta.length !== nuvem.length) salvarImpressasNuvem(); }
+      // junta a lista da nuvem com a deste aparelho, tirando as que foram removidas em qualquer aparelho
+      // (a remoção vai para a nuvem como um "removida", para não ser trazida de volta por outro aparelho)
+      const nuvem = r.impressas || [], remL = [...nuvem.filter(x => x.removida), ...lerProv("impressasRemovidas", [])];
+      // removida só se a remoção for mais nova que a impressão (a mesma prova pode ser impressa de novo depois)
+      const apagada = x => remL.some(t => t.chave === x.chave && String(t.quando || "") >= String(x.quando || ""));
+      const ativas = nuvem.filter(x => !x.removida), local = lerProv("impressas", []);
+      const junta = [...ativas, ...local.filter(x => !ativas.some(y => y.chave === x.chave))].filter(x => !apagada(x));
+      gravarProv("impressasRemovidas", [...new Map([...nuvem.filter(x => x.removida), ...lerProv("impressasRemovidas", [])].map(x => [x.chave, x])).values()]);
+      gravarProv("impressas", junta); gravarProv("impressasConhecidas", junta.map(x => x.chave));
+      if (junta.length !== ativas.length || ativas.some(apagada)) salvarImpressasNuvem();
     }
   } catch (e) { /* sem conexão: fica com a cópia deste aparelho */ }
   hist.carregando = false;
@@ -35,8 +40,19 @@ async function carregarHistorico(forcar) {
 }
 function salvarImpressasNuvem() {
   if (!usuarioAtual || !usuarioAtual.sessao) return;
-  postScript({ acao: "impressasSalvar", sessao: usuarioAtual.sessao, impressas: lerProv("impressas", []) }).catch(() => {});
+  const atuais = lerProv("impressas", []), agora = new Date().toISOString();
+  // o que sumiu desde a última vez foi removido aqui: vira "removida" na nuvem (guarda as 20 mais recentes)
+  const sumiram = lerProv("impressasConhecidas", []).filter(c => !atuais.some(x => x.chave === c)).map(chave => ({ chave, removida: true, quando: agora }));
+  const rem = [...new Map([...lerProv("impressasRemovidas", []), ...sumiram].filter(x => !atuais.some(y => y.chave === x.chave)).map(x => [x.chave, x])).values()]
+    .sort((a, b) => String(b.quando).localeCompare(String(a.quando))).slice(0, 20);
+  gravarProv("impressasRemovidas", rem); gravarProv("impressasConhecidas", atuais.map(x => x.chave));
+  postScript({ acao: "impressasSalvar", sessao: usuarioAtual.sessao, impressas: [...atuais.slice(0, 30), ...rem] }).catch(() => {});
 }
+// ao voltar para o app (celular que ficou aberto em segundo plano), busca de novo o histórico e as provas impressas
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible" || typeof usuarioAtual === "undefined" || !usuarioAtual || !usuarioAtual.sessao) return;
+  carregarHistorico(true).then(() => { if (typeof renderEstudoPagina === "function") renderEstudoPagina(); });
+});
 // cópia das folhas que fica no Drive: bem mais leve que a enviada para a IA corrigir (até 1600 px, tons de cinza,
 // JPEG mais compactado — cerca de 150 a 300 KB por folha, com a letra ainda legível). PDF vira uma imagem por página.
 const LADO_GUARDAR = 1600, QUALIDADE_GUARDAR = 0.6;
