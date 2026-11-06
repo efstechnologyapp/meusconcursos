@@ -125,10 +125,10 @@ async function separarProvaGabarito(id) {
     if (it.tipo === "objetiva" && g.total && qs.length < g.total) throw new Error(`a leitura parou em ${qs.length} de ${g.total} questões; tente de novo`);
     const temResp = it.tipo === "objetiva" ? qs.some(q => q.gabarito) : qs.some(q => (q.espelho || []).length || q.resposta_esperada);
     if (!temResp) throw new Error("a IA não encontrou respostas dentro deste arquivo");
-    const base = it.nome.replace(/\s*-\s*(prova objetiva|prova subjetiva|pe[çc]a pr[áa]tica)(\s*\(\d+\))?\s*$/i, "") || it.nome;
-    const num = (it.nome.match(/\((\d+)\)\s*$/) || ["", ""])[1], suf = num ? ` (${num})` : "";
+    const m = it.nome.match(/^(.*?)\s*-\s*(?:prova objetiva|prova subjetiva|pe[çc]a pr[áa]tica)((?:\s*\([^)]*\))*)\s*$/i);
+    const base = m ? m[1] : it.nome, suf = m && m[2].trim() ? " " + m[2].trim() : "";
     const r = await postLongo({ acao: "separarProva", prova: it.id, tipo: it.tipo, titulo: it.nome, questoes: qs,
-      nomeProva: `${base} - ${PAPEL[it.tipo][0]} (sem respostas)${suf}`, nomeGab: `${base} - ${PAPEL[it.tipo][1]}${suf}` }, 300000);
+      nomeProva: `${base} - ${PAPEL[it.tipo][0]}${suf} (sem respostas)`, nomeGab: `${base} - ${PAPEL[it.tipo][1]}${suf}` }, 300000);
     if (!r.ok) throw new Error(/desconhecida/i.test(r.erro || "") ? "atualize o Apps Script" : r.erro);
     toast(`Pronto: 2 PDFs em ${r.pasta}.`);
   } catch (e) { toast("Não foi possível separar: " + e.message); }
@@ -146,20 +146,22 @@ function baseIdent(x) { const d = x.ident || {}; return [[d.orgao, d.ano].filter
 function ajustarNomes(itens) {
   const prontos = itens.filter(x => x.ident || x.erro);
   const ehGab = x => !x.it.gab && (x.it.soGab || (x.ident && x.ident.papel === "gabarito"));
-  const nome = (x, base, papel, n) => `${base} - ${PAPEL[x.it.tipo][papel]}${n > 1 ? ` (${n})` : ""}`;
+  // prova dividida em partes (ex.: conhecimentos gerais × específicos): a parte vai no nome, igual na prova e no gabarito
+  const parte = x => x.ident && x.ident.parte ? ` (${x.ident.parte})` : "";
+  const nome = (x, base, papel, n, pt) => `${base} - ${PAPEL[x.it.tipo][papel]}${pt}${n > 1 ? ` (${n})` : ""}`;
   const cont = {};
   prontos.filter(x => !ehGab(x)).forEach(x => {
-    const base = baseIdent(x), k = x.it.tipo + "|" + x.it.pastaCargo + "|" + base;
-    x.n = cont[k] = (cont[k] || 0) + 1; x.base = base; x.gabSolto = null;
-    x.nomeProva = nome(x, base, 0, x.n); x.nomeGab = x.it.gab ? nome(x, base, 1, x.n) : "";
+    const base = baseIdent(x), pt = parte(x), k = x.it.tipo + "|" + x.it.pastaCargo + "|" + base + pt;
+    x.n = cont[k] = (cont[k] || 0) + 1; x.base = base; x.pt = pt; x.gabSolto = null;
+    x.nomeProva = nome(x, base, 0, x.n, pt); x.nomeGab = x.it.gab ? nome(x, base, 1, x.n, pt) : "";
   });
   const contG = {};
   prontos.filter(ehGab).forEach(g => {
     const base = baseIdent(g);
-    const par = prontos.find(p => !ehGab(p) && !p.it.gab && !p.gabSolto && p.it.tipo === g.it.tipo && p.it.pastaCargo === g.it.pastaCargo && p.ident && g.ident && p.ident.orgao === g.ident.orgao && p.ident.ano === g.ident.ano);
-    if (par) { par.gabSolto = g; g.parDe = par.base; g.nomeProva = nome(g, par.base, 1, par.n); return; }
-    const k = g.it.tipo + "|" + g.it.pastaCargo + "|" + base; contG[k] = (contG[k] || 0) + 1;
-    g.parDe = ""; g.nomeProva = nome(g, base, 1, contG[k]); g.nomeGab = "";
+    const par = prontos.find(p => !ehGab(p) && !p.it.gab && !p.gabSolto && p.it.tipo === g.it.tipo && p.it.pastaCargo === g.it.pastaCargo && p.ident && g.ident && p.ident.orgao === g.ident.orgao && p.ident.ano === g.ident.ano && (!p.pt || !parte(g) || p.pt === parte(g)));
+    if (par) { par.gabSolto = g; g.parDe = par.base + par.pt; g.nomeProva = nome(g, par.base, 1, par.n, par.pt); return; }
+    const pt = parte(g), k = g.it.tipo + "|" + g.it.pastaCargo + "|" + base + pt; contG[k] = (contG[k] || 0) + 1;
+    g.parDe = ""; g.nomeProva = nome(g, base, 1, contG[k], pt); g.nomeGab = "";
   });
 }
 async function iniciarPadronizacao(area) {
