@@ -475,12 +475,20 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .fase-ok::before{content:"✓ ";font-weight:800}
 .logo-prev{width:36px;height:36px;object-fit:contain;background:#fff;border-radius:6px}
 .logo-det{width:52px;height:52px;object-fit:contain;flex:none;background:#fff;border-radius:8px;padding:2px}
+.marca{display:flex;align-items:flex-start;gap:14px}
+.marca-av{width:64px;height:64px;border-radius:50%;flex:none;box-shadow:0 2px 8px #14213d22}
+.lema{font:700 11px/1 var(--f-body,system-ui);letter-spacing:.32em;text-transform:uppercase;color:#b8901a;margin:8px 0 0}
+.login-boneco{display:block;margin:0 auto 10px;width:210px;max-width:60%;height:auto;border-radius:18px}
+.tela-cartao .lema{text-align:center;margin:10px 0 4px}
+@media (max-width:520px){.marca-av{width:52px;height:52px}}
 </style>
 </head>
 <body>
 <section class="tela" id="telaLogin" hidden>
   <div class="tela-cartao">
+    <img class="login-boneco" src="logo-boneco.jpg" alt="" width="210">
     <h1>Meus <mark>Concursos</mark></h1>
+    <p class="lema">Estude · Pratique · Passe</p>
     <p class="sub">Organize provas, fases, boletos e resultados dos concursos que você vai fazer.</p>
     <div id="gbtn" class="gbtn"></div>
     <p class="note" id="loginStatus">Entre com sua conta Google. No primeiro acesso, enviamos um código ao seu e-mail para confirmar que ele é seu.</p>
@@ -510,9 +518,10 @@ fieldset{border:none;padding:0;margin:0;display:contents}
   <div id="pgEstudo" hidden></div>
   <div id="pgHome">
   <header>
-    <div>
-      <h1>Meus <mark>Concursos</mark></h1>
-      <p class="sub" id="resumo">Carregando seus concursos…</p>
+    <div class="marca">
+      <img class="marca-av" src="logo-avatar.png" alt="" width="64" height="64">
+      <div><h1>Meus <mark>Concursos</mark></h1><p class="lema">Estude · Pratique · Passe</p>
+      <p class="sub" id="resumo">Carregando seus concursos…</p></div>
     </div>
     <div class="topo-acoes"><button id="btnEstudo" type="button">Estudar</button><button class="primary" id="btnNovo" type="button">+ Novo concurso</button></div>
   </header>
@@ -1730,7 +1739,7 @@ iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO = 81;
+const APP_VERSAO = 82;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{
