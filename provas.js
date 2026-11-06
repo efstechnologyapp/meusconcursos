@@ -179,11 +179,19 @@ function ajustarNomes(itens) {
     g.parDe = ""; g.nomeProva = nome(g, base, 1, contG[k], pt); g.nomeGab = "";
   });
 }
-async function iniciarPadronizacao(area) {
+// nome já no padrão "ÓRGÃO/ANO - Banca - prova objetiva (parte) (2)"
+const RE_PADRAO = /^[A-Z0-9]+\/\d{4}( - [^/]+?)? - (prova objetiva|prova subjetiva|pe[çc]a pr[áa]tica|gabarito prova objetiva|padr[ãa]o de resposta (prova subjetiva|pe[çc]a pr[áa]tica))( \([^)]*\))*$/;
+const noPadrao = it => RE_PADRAO.test(it.nome) && (!it.gab || RE_PADRAO.test(String(it.gabNome || "").replace(/\.(pdf|docx?|jpe?g|png)$/i, "")));
+// 1º passo: o usuário escolhe os arquivos (já vêm marcados os que estão fora do padrão)
+function iniciarPadronizacao(area) {
   if (!repo || !repo.itens) return;
-  padr = { area, fase: "identificando", itens: [...repo.itens, ...(repo.soltos || [])].map(it => ({ it })), i: 0 };
+  padr = { area, fase: "escolher", itens: [...repo.itens, ...(repo.soltos || [])].map(it => ({ it, sel: !noPadrao(it), ren: true })), i: 0 };
   desenharEstudo(area);
-  for (const x of padr.itens) {
+}
+async function identificarSelecionados() {
+  const sel = padr.itens.filter(x => x.sel); if (!sel.length) return;
+  padr.fase = "identificando"; padr.i = 0; padr.total = sel.length; desenharEstudo(estudoAba);
+  for (const x of sel) {
     if (!padr) return;
     try {
       const r = await postLongo({ acao: "identificarProva", prova: x.it.id, gab: x.it.gab, tipo: x.it.tipo }, 180000);
@@ -191,25 +199,44 @@ async function iniciarPadronizacao(area) {
       x.ident = r;
     } catch (e) { x.erro = e.message; }
     if (!padr) return;
-    padr.i++; ajustarNomes(padr.itens);
+    padr.i++; ajustarNomes(padr.itens); evitarNomesExistentes();
     if (padr && ["provas", "pecas"].includes(estudoAba)) desenharEstudo(estudoAba);
   }
   if (padr) { padr.fase = "conferir"; desenharEstudo(estudoAba); }
 }
+// um nome novo não pode repetir o de um arquivo que ficou de fora (na mesma pasta): ganha (2), (3)…
+function evitarNomesExistentes() {
+  const usados = {};
+  padr.itens.filter(x => !x.sel).forEach(x => { const k = x.it.tipo + "|" + x.it.pastaCargo; (usados[k] = usados[k] || new Set()).add(x.it.nome); if (x.it.gab) usados[k].add(String(x.it.gabNome).replace(/\.(pdf|docx?|jpe?g|png)$/i, "")); });
+  padr.itens.filter(x => x.sel && x.nomeProva).forEach(x => {
+    const u = usados[x.it.tipo + "|" + x.it.pastaCargo]; if (!u || !u.has(x.nomeProva)) return;
+    const base = x.nomeProva.replace(/ \(\d+\)$/, ""), gbase = (x.nomeGab || "").replace(/ \(\d+\)$/, "");
+    for (let n = 2; n < 20; n++) if (!u.has(`${base} (${n})`)) { x.nomeProva = `${base} (${n})`; if (x.nomeGab) x.nomeGab = `${gbase} (${n})`; break; }
+  });
+}
 function htmlPadronizar() {
-  const p = padr, total = p.itens.length;
+  const p = padr;
   const TIPOS = { objetiva: "Provas objetivas", subjetiva: "Provas subjetivas", peca: "Peças jurídicas" };
-  return `<div class="est-prog"><button type="button" class="mini" id="padrSair">‹ Voltar</button><b>Padronizar nomes dos arquivos</b></div>
-    <p class="note">${p.fase === "identificando" ? `A IA está lendo as provas para identificar órgão, ano e banca: ${p.i} de ${total}… (só na primeira vez; depois fica guardado)` : p.fase === "renomeando" ? "Renomeando no Drive…" : "Confira e corrija os nomes antes de renomear. Formato: ÓRGÃO/ANO - Banca - tipo."}</p>
-    ${p.itens.map((x, k) => `<div class="padr-item"><p class="note">${esc(TIPOS[x.it.tipo])} / ${esc(x.it.pastaCargo || x.it.cargo)}${x.erro ? ` · <span style="color:var(--danger)">não identificado (${esc(x.erro)})</span>` : ""}${x.parDe !== undefined ? ` · <b>a IA viu que é gabarito/espelho</b>${x.parDe ? " de " + esc(x.parDe) : " (prova correspondente não encontrada)"}` : ""}</p>
+  const topo = `<div class="est-prog"><button type="button" class="mini" id="padrSair">‹ Voltar</button><b>Padronizar nomes dos arquivos</b></div>`;
+  const gabNome = x => String(x.it.gabNome || "").replace(/\.(pdf|docx?|jpe?g|png)$/i, "");
+  if (p.fase === "escolher") {
+    const n = p.itens.filter(x => x.sel).length, fora = p.itens.filter(x => !noPadrao(x.it)).length;
+    return topo + `<p class="note">Escolha os arquivos que a IA deve ler e renomear. Já vêm marcados os que estão fora do padrão (${fora}).</p>
+      <div class="actions" style="justify-content:flex-start;margin:0"><button type="button" class="mini" data-padrmarcar="fora">Só os fora do padrão</button><button type="button" class="mini" data-padrmarcar="todos">Marcar todos</button><button type="button" class="mini" data-padrmarcar="nenhum">Desmarcar todos</button></div>
+      ${p.itens.map((x, k) => `<label class="padr-esc${x.sel ? " on" : ""}"><input type="checkbox" data-padrsel="${k}"${x.sel ? " checked" : ""}><span><b>${esc(x.it.nome)}</b>${x.it.gab ? `<br><span class="note">+ ${esc(gabNome(x))}</span>` : ""}${x.it.soGab ? `<br><span class="note">gabarito sem prova correspondente</span>` : ""}<br><span class="note">${esc(TIPOS[x.it.tipo])} / ${esc(x.it.pastaCargo || x.it.cargo)}</span></span>${noPadrao(x.it) ? `<span class="chip">no padrão</span>` : `<span class="chip chip-alerta">fora do padrão</span>`}</label>`).join("")}
+      <div class="actions"><button type="button" id="padrSair">Cancelar</button><button type="button" class="primary" id="padrIdentificar" ${n ? "" : "disabled"}>Ler com a IA (${n} ${n === 1 ? "arquivo" : "arquivos"})</button></div>`;
+  }
+  const sel = p.itens.map((x, k) => [x, k]).filter(([x]) => x.sel), nRen = sel.filter(([x]) => x.ren && x.nomeProva).length;
+  return topo + `<p class="note">${p.fase === "identificando" ? `A IA está lendo as provas para identificar órgão, ano e banca: ${p.i} de ${p.total}… (só na primeira vez; depois fica guardado)` : p.fase === "renomeando" ? "Renomeando no Drive…" : "Confira e corrija os nomes. Desmarque o que não quiser renomear. Formato: ÓRGÃO/ANO - Banca - tipo."}</p>
+    ${sel.map(([x, k]) => `<div class="padr-item">${p.fase === "conferir" && x.nomeProva !== undefined ? `<label class="padr-ren"><input type="checkbox" data-padrren="${k}"${x.ren ? " checked" : ""}> renomear</label>` : ""}<p class="note">${esc(TIPOS[x.it.tipo])} / ${esc(x.it.pastaCargo || x.it.cargo)}${x.erro ? ` · <span style="color:var(--danger)">não identificado (${esc(x.erro)})</span>` : ""}${x.parDe !== undefined ? ` · <b>a IA viu que é gabarito/espelho</b>${x.parDe ? " de " + esc(x.parDe) : " (prova correspondente não encontrada)"}` : ""}</p>
       ${x.nomeProva === undefined ? `<p class="note">${esc(x.it.nome)} · aguardando…</p>` : `
-      <label class="padr-l"><span class="note">${esc(x.it.nome)} →</span><input data-padr="${k}" data-papel="p" value="${esc(x.nomeProva)}"></label>
-      ${x.it.gab ? `<label class="padr-l"><span class="note">${esc(x.it.gabNome.replace(/\.(pdf|docx?|jpe?g|png)$/i, ""))} →</span><input data-padr="${k}" data-papel="g" value="${esc(x.nomeGab)}"></label>` : ""}`}</div>`).join("")}
-    <div class="actions"><button type="button" id="padrSair">Cancelar</button>${p.fase === "renomeando" ? `<span class="note est-gerando">Renomeando no Drive…</span>` : ""}<button type="button" class="primary" id="padrRenomear" ${p.fase !== "conferir" ? "disabled" : ""}>${p.fase === "renomeando" ? "Renomeando…" : "Renomear no Drive"}</button></div>`;
+      <label class="padr-l"><span class="note">${esc(x.it.nome)} →</span><input data-padr="${k}" data-papel="p" value="${esc(x.nomeProva)}"${x.ren ? "" : " disabled"}></label>
+      ${x.it.gab ? `<label class="padr-l"><span class="note">${esc(gabNome(x))} →</span><input data-padr="${k}" data-papel="g" value="${esc(x.nomeGab)}"${x.ren ? "" : " disabled"}></label>` : ""}`}</div>`).join("")}
+    <div class="actions"><button type="button" id="padrSair">Cancelar</button>${p.fase === "renomeando" ? `<span class="note est-gerando">Renomeando no Drive…</span>` : ""}<button type="button" class="primary" id="padrRenomear" ${p.fase !== "conferir" || !nRen ? "disabled" : ""}>${p.fase === "renomeando" ? "Renomeando…" : `Renomear no Drive (${nRen})`}</button></div>`;
 }
 async function renomearPadronizados() {
   const lista = [];
-  padr.itens.forEach(x => { if (x.nomeProva) lista.push({ id: x.it.id, nome: x.nomeProva }); if (x.it.gab && x.nomeGab) lista.push({ id: x.it.gab, nome: x.nomeGab }); });
+  padr.itens.filter(x => x.sel && x.ren).forEach(x => { if (x.nomeProva) lista.push({ id: x.it.id, nome: x.nomeProva }); if (x.it.gab && x.nomeGab) lista.push({ id: x.it.gab, nome: x.nomeGab }); });
   padr.fase = "renomeando"; desenharEstudo(estudoAba);
   try {
     const r = await postLongo({ acao: "renomear", lista }, 300000);
@@ -647,6 +674,8 @@ document.addEventListener("click", async e => {
   if (t.id === "padrIniciar") { iniciarPadronizacao(estudoAba); return; }
   if (t.id === "padrSair") { const a = padr && padr.area; padr = null; desenharEstudo(a || estudoAba); return; }
   if (t.id === "padrRenomear" && padr && padr.fase === "conferir") { renomearPadronizados(); return; }
+  if (t.id === "padrIdentificar" && padr && padr.fase === "escolher") { identificarSelecionados(); return; }
+  if (t.dataset.padrmarcar && padr) { const m = t.dataset.padrmarcar; padr.itens.forEach(x => x.sel = m === "todos" ? true : m === "nenhum" ? false : !noPadrao(x.it)); desenharEstudo(estudoAba); return; }
   if (t.id === "provRecarregar") { repo = null; carregarRepo(true); desenharEstudo(estudoAba); return; }
   if (t.dataset.provimpr) { imprimirObjetiva(t.dataset.provimpr); return; }
   if (t.dataset.impcartao) { abrirCartao(t.dataset.impcartao); return; }
@@ -693,6 +722,8 @@ document.addEventListener("click", async e => {
   }
 });
 document.addEventListener("input", e => {
+  if (e.target.dataset && e.target.dataset.padrsel !== undefined && padr) { padr.itens[+e.target.dataset.padrsel].sel = e.target.checked; const sc = $("estudoConteudo").scrollTop; desenharEstudo(estudoAba); $("estudoConteudo").scrollTop = sc; return; }
+  if (e.target.dataset && e.target.dataset.padrren !== undefined && padr) { padr.itens[+e.target.dataset.padrren].ren = e.target.checked; const sc = $("estudoConteudo").scrollTop; desenharEstudo(estudoAba); $("estudoConteudo").scrollTop = sc; return; }
   if (e.target.dataset && e.target.dataset.padr !== undefined && padr) { const x = padr.itens[+e.target.dataset.padr]; if (e.target.dataset.papel === "p") x.nomeProva = e.target.value; else x.nomeGab = e.target.value; return; }
   if (e.target.id !== "provTexto" || !sim) return;
   gravarProv(rascunhoKey(), e.target.value);
