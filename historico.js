@@ -23,8 +23,11 @@ async function carregarHistorico(forcar) {
     const r = await postScript({ acao: "historico", sessao: usuarioAtual.sessao });
     if (r.ok) {
       hist.lista = r.itens || []; gravarProv("historico", hist.lista);
-      const local = lerProv("impressas", []);
-      if ((r.impressas || []).length || !local.length) gravarProv("impressas", r.impressas || []); else salvarImpressasNuvem();
+      // a lista da nuvem é a que vale (assim, o que foi removido num aparelho some nos outros).
+      // Só na primeira vez, as provas que existiam apenas neste aparelho sobem para a nuvem.
+      const local = lerProv("impressas", []), nuvem = r.impressas || [];
+      if (lerProv("impressasNuvemOk", false)) gravarProv("impressas", nuvem);
+      else { const junta = [...nuvem, ...local.filter(x => !nuvem.some(y => y.chave === x.chave))]; gravarProv("impressas", junta); gravarProv("impressasNuvemOk", true); if (junta.length !== nuvem.length) salvarImpressasNuvem(); }
     }
   } catch (e) { /* sem conexão: fica com a cópia deste aparelho */ }
   hist.carregando = false;
