@@ -502,7 +502,6 @@ async function colarDaAreaDeTransferencia(id) {
     colarLei(id, html);
   } catch (e) { toast("O navegador não deixou ler o que você copiou. Clique no quadro tracejado e aperte Ctrl+V."); }
 }
-document.addEventListener("focusout", e => { if (e.target.id === "leiCola" && leiUi.redesenhar) { const a = leiUi.redesenhar; leiUi.redesenhar = ""; setTimeout(() => desenharEstudo(a), 0); } });
 // colar: a área de transferência traz o HTML da página (com o riscado), que o app limpa
 document.addEventListener("paste", e => {
   const el = e.target.closest && e.target.closest("#leiCola"); if (!el) return;

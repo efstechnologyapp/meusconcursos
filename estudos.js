@@ -288,14 +288,19 @@ function cabecalhoEstudo(aba) {
   return `<div class="dlg-head"><div style="flex:1;min-width:0"><h2>${titulo}</h2><p class="sub">${sub}</p></div><button type="button" class="close" data-close aria-label="Fechar">×</button></div>
     ${area === "info" ? `<div class="est-abas">${[["praticar", "Praticar"], ["simulado", "Gerar simulado"], ["revisar", "Revisar julgados"], ["erros", "Caderno de erros"], ["desempenho", "Meu histórico"], ["config", "Caderno e IA"]].map(([k, n]) => `<button type="button" class="${aba === k ? "on" : ""}" data-estaba="${k}">${n}</button>`).join("")}</div>` : ""}`;
 }
+// Tarefas que terminam por trás (sincronização, IA, leitura de editais) não redesenham a tela enquanto o usuário
+// está com um seletor aberto ou colando um texto: senão o seletor fecha sozinho. O redesenho fica para quando ele sair do campo.
+// (redesenhos pedidos pelo próprio usuário acontecem dentro de um evento, window.event, e seguem normalmente)
+let redesenhoAdiado = null;
+function usuarioNoCampo() { const a = document.activeElement; return !!a && !!a.closest && !!a.closest("#estudoConteudo") && (a.tagName === "SELECT" || a.isContentEditable); }
+document.addEventListener("focusout", e => { if (redesenhoAdiado && e.target.closest && e.target.closest("#estudoConteudo")) { const a = redesenhoAdiado; redesenhoAdiado = null; setTimeout(() => { if (!usuarioNoCampo()) desenharEstudo(a); else redesenhoAdiado = a; }, 0); } });
 function desenharEstudo(aba) {
+  if (!window.event && usuarioNoCampo()) { redesenhoAdiado = aba || estudoAba; return; }
   aba = aba || (julgados.length ? "praticar" : "config");
   // dentro da Lei seca, as telas compartilhadas (sessão de questões, histórico) continuam na área da lei
   if (String(estudoAba).startsWith("lei") && { praticar: "lei-praticar", desempenho: "lei-hist" }[aba]) aba = { praticar: "lei-praticar", desempenho: "lei-hist" }[aba];
   // na aba do simulado, os filtros e o progresso redesenham a própria aba (sem pular para o treino)
   if (aba === "praticar" && estudoAba === "simulado" && !estudo && !(typeof cartao !== "undefined" && cartao) && !(typeof papelInfo !== "undefined" && papelInfo.disc)) aba = "simulado";
-  // enquanto o usuário cola o texto de uma lei, a tela não é redesenhada (senão o quadro de colar é recriado e perde o foco)
-  if (aba.startsWith("lei") && document.activeElement && document.activeElement.id === "leiCola") { leiUi.redesenhar = aba; return; }
   if (aba.startsWith("lei")) { estudoAba = aba; $("estudoConteudo").innerHTML = cabecalhoEstudo(aba) + `<div class="est-corpo">${htmlLei(aba)}</div>`; return; }
   estudoAba = aba;
   let corpo = "";
