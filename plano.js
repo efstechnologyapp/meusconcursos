@@ -153,22 +153,22 @@ function intercalar(listas) {
   return out;
 }
 // horários (em minutos) de um dia
+function minutosDoDia(d) { return periodosHoje(d).reduce((a, [x, y]) => a + (y - x), 0); }
 function horariosDoDia(d) { const s = []; periodosHoje(d).forEach(([a, b]) => { for (let t = a; t + 60 <= b; t += 60) s.push(t); }); return s; }
 function addDias(iso, n) { const d = parseData(iso); d.setDate(d.getDate() + n); return hojeISOde(d); }
 
 // ---------- roteiro ----------
 function gerarRoteiro(al, cont, cobertos, inicio) {
   const ms = cont.materias, prova = al.f.data, vesp = addDias(prova, -1);
-  // horários de estudo de hoje até a antevéspera; na véspera, 1 bloco leve
-  const slots = []; let dias = 0, vSlot = null;
-  const agora = new Date(), minAgora = agora.getHours() * 60 + agora.getMinutes();
+  // minutos de estudo de cada dia (pelos horários do perfil), de hoje até a antevéspera; na véspera, só um bloco leve
+  // (os horários servem só para medir quanto tempo há em cada dia: o estudo começa quando o usuário aperta "Iniciar")
+  const caps = []; let dias = 0, capV = 0;
   for (let d = inicio; d < prova; d = addDias(d, 1)) {
-    // hoje: só os horários que ainda não passaram (com 30 min de tolerância)
-    const hs = horariosDoDia(parseData(d)).filter(h => d !== hojeISO() || h + 30 >= minAgora); if (hs.length) dias++;
-    if (d === vesp) { if (hs.length) vSlot = { d, h: hs[0] }; continue; }
-    hs.forEach(h => slots.push({ d, h }));
+    const min = minutosDoDia(parseData(d)); if (min) dias++;
+    if (d === vesp) { capV = min; continue; }
+    if (min) caps.push({ d, min });
   }
-  const H = slots.length;
+  const M = caps.reduce((a, c) => a + c.min, 0), H = Math.round(M / 60);
   // escolhe o método: o mais completo cuja teoria caiba na fatia de teoria das horas disponíveis
   const totalPend = ms.reduce((a, m, mi) => a + topicosDe(m).filter((x, ti) => !cobertos.has(`${mi}.${ti}`)).length, 0);
   // (do mais completo ao mais enxuto: mais tópicos por bloco antes de deixar tópicos de fora)
@@ -197,14 +197,28 @@ function gerarRoteiro(al, cont, cobertos, inicio) {
     for (let k = 0; k < n; k++) {
       const mi = seq[k % seq.length], m = ms[mi], c = cont2[mi]++, tops = topicosDe(m).map((x, ti) => ({ ...x, ti })).sort((a, b) => b.r - a.r || a.ti - b.ti);
       const ops = m.tipo === "peca" ? (f === 2 ? ["P2"] : ["P3"]) : f === 2 ? { obj: ["Q", "R"], esc: ["D", "R"], misto: ["Q", "D", "R"] }[al.modo] : { obj: ["S", "E"], esc: ["D3", "E"], misto: ["S", "D3", "E"] }[al.modo];
-      out.push({ m: mi, t: tops.length ? [tops[c % tops.length].ti] : [], a: ops[c % ops.length], f });
+      out.push({ m: mi, t: tops.length ? [tops[c % tops.length].ti] : [], a: ops[(c + mi) % ops.length], f });   // (c + mi): atividades se alternam também dentro do dia
     }
     return out;
   };
-  const blocos = [...fase1, ...rodar(nRev, 2), ...rodar(nFinal, 3)].map((b, k) => ({ ...b, d: slots[k].d, h: slots[k].h }));
-  if (vSlot) blocos.push({ m: -1, t: [], a: "L", f: 4, d: vSlot.d, h: vSlot.h });
+  // duração de cada bloco: proporcional ao "peso" da atividade (mais tópicos ou simulado = mais tempo),
+  // escalada para que a soma de todos os blocos dê exatamente o tempo disponível até a prova
+  const lista = [...fase1, ...rodar(nRev, 2), ...rodar(nFinal, 3)];
+  const peso = b => ["S", "D3", "P3"].includes(b.a) ? 1.5 : ["T", "P", "Q"].includes(b.a) ? 1 + .25 * Math.max(0, b.t.length - 1) : 1;
+  const W = lista.reduce((a, b) => a + peso(b), 0) || 1, k = M / W;
+  lista.forEach(b => b.dur = Math.min(180, Math.max(25, Math.round(peso(b) * k / 5) * 5)));
+  // distribui pelos dias: cada bloco vai para o dia em que "cai" o meio dele na linha do tempo (encaixe por minutos acumulados)
+  const soma = lista.reduce((a, b) => a + b.dur, 0) || 1, esc_ = M / soma; let pos = 0, di = 0, acum = caps[0] ? caps[0].min : 0;
+  const blocos = lista.map(b => {
+    const meio = (pos + b.dur / 2) * esc_; pos += b.dur;
+    while (di < caps.length - 1 && meio > acum) { di++; acum += caps[di].min; }
+    return { ...b, d: caps[di] ? caps[di].d : inicio };
+  });
+  // ajuste fino: em cada dia, os blocos esticam/encolhem para somar exatamente o tempo daquele dia
+  caps.forEach(c => { const bs = blocos.filter(b => b.d === c.d), t = bs.reduce((a, b) => a + b.dur, 0); if (t) bs.forEach(b => b.dur = Math.min(180, Math.max(25, Math.round(b.dur * c.min / t / 5) * 5))); });
+  if (capV) blocos.push({ m: -1, t: [], a: "L", f: 4, d: vesp, dur: Math.min(60, capV) });
   const totalTopicos = ms.reduce((a, m) => a + topicosDe(m).length, 0);
-  return { criado: hojeISO(), inicio, prova, metodo: met, rMin: rMinE, porBloco: pbE, horas: H, dias, hDia: dias ? Math.round(H / dias * 10) / 10 : 0,
+  return { criado: hojeISO(), inicio, prova, metodo: met, rMin: rMinE, porBloco: pbE, horas: H, minutos: M, dias, hDia: dias ? Math.round(H / dias * 10) / 10 : 0,
     totalTopicos, jaCobertos: cobertos.size, planejados: incluidos.size, fora, blocos, feitos: [] };
 }
 // sequência de um ciclo de revisão: cada matéria aparece "peso" vezes, espalhadas
@@ -223,7 +237,7 @@ function refazerRoteiro(al, motivo) {
   novo.verif = hojeISO();
   if (antigo && motivo === "atraso") novo.aviso = { dia: hojeISO(), de: antigo.metodo, para: novo.metodo, fora: novo.fora, atrasados: atrasadosDe(antigo).length };
   if (antigo && motivo === "mudou") novo.aviso = { dia: hojeISO(), de: antigo.metodo, para: novo.metodo, fora: novo.fora, mudou: true };
-  novo.horasFeitas = (antigo && antigo.horasFeitas || 0);
+  novo.minFeitos = antigo ? (antigo.minFeitos != null ? antigo.minFeitos : (antigo.horasFeitas || 0) * 60) : 0;
   const p = plano(); p["rot:" + al.chave] = novo;
   Object.keys(p).forEach(k => { if (k.startsWith("dia:") || k.startsWith("pos:")) delete p[k]; });   // restos da versão antiga do plano
   gravarEst("plano", p);
@@ -241,16 +255,18 @@ function conferirRoteiro(al) {
   if (!r) return conteudoPlano(al) ? refazerRoteiro(al, "novo") : null;
   if (r.prova !== al.f.data) return refazerRoteiro(al, "mudou");   // a data da prova mudou
   if (r.verif === hojeISO()) return r;
-  const atr = atrasadosDe(r).length, porDia = Math.max(2, horariosDoDia(hoje()).length);
+  const atr = atrasadosDe(r).reduce((a, b) => a + (b.dur || 60), 0), porDia = Math.max(120, minutosDoDia(hoje()));   // em minutos
   if (atr >= porDia) return refazerRoteiro(al, "atraso");
   r.verif = hojeISO(); if (r.aviso && r.aviso.dia !== hojeISO()) delete r.aviso; gravarPlano("rot:" + al.chave, r);
   return r;
 }
-function marcarBlocoRoteiro(al, i, feito) {
+function marcarBlocoRoteiro(al, i, feito, minutos) {
   const r = roteiroDe(al); if (!r || !r.blocos[i]) return;
   const b = r.blocos[i], cob = new Set(plano()["cob:" + al.chave] || []);
   r.feitos = r.feitos.filter(x => x !== i); if (feito) r.feitos.push(i);
-  r.horasFeitas = Math.max(0, (r.horasFeitas || 0) + (feito ? 1 : -1));
+  if (minutos == null) minutos = b.dur || 60;
+  r.minFeitos = Math.max(0, (r.minFeitos != null ? r.minFeitos : (r.horasFeitas || 0) * 60) + (feito ? minutos : -(r.minReal && r.minReal[i] || minutos)));
+  r.minReal = r.minReal || {}; if (feito) r.minReal[i] = minutos; else delete r.minReal[i];
   if (b.f === 1) b.t.forEach(t => feito ? cob.add(`${b.m}.${t}`) : cob.delete(`${b.m}.${t}`));   // tópico estudado na teoria = coberto
   gravarPlano("rot:" + al.chave, r); gravarPlano("cob:" + al.chave, [...cob]);
 }
@@ -264,7 +280,7 @@ const ATIV = {
 const NOME_FASE = { 1: "Teoria do conteúdo", 2: "Revisão e questões", 3: "Reta final", 4: "Véspera" };
 function blocoParaTela(ms, b, i, r) {
   const m = b.m >= 0 ? ms[b.m] : { nome: "Revisão leve", lei: "" }, tops = b.m >= 0 ? topicosDe(m) : [];
-  return { i, m, ...ATIV[b.a], f: b.f, hora: b.h, d: b.d, feito: r.feitos.includes(i), topicos: b.t.map(t => tops[t] && tops[t].t).filter(Boolean) };
+  return { i, m, ...ATIV[b.a], f: b.f, dur: b.dur || 60, d: b.d, feito: r.feitos.includes(i), real: r.minReal && r.minReal[i], topicos: b.t.map(t => tops[t] && tops[t].t).filter(Boolean) };
 }
 
 // ---------- horários ----------
@@ -295,7 +311,7 @@ function dadosPlano(cid) {
   const cont = conteudoPlano(al); if (!cont || !cont.materias.length) return { al, cont };
   const r = conferirRoteiro(al); if (!r) return { al, cont };
   const ms = cont.materias, hojeD = hojeISO();
-  const blocos = r.blocos.map((b, i) => ({ b, i })).filter(x => x.b.d === hojeD).map(x => blocoParaTela(ms, x.b, x.i, r)).sort((a, b) => a.hora - b.hora);
+  const blocos = r.blocos.map((b, i) => ({ b, i })).filter(x => x.b.d === hojeD).map(x => blocoParaTela(ms, x.b, x.i, r));
   const fase = al.dias <= 0 ? 0 : (blocos[0] || r.blocos.find(b => b.d >= hojeD) || {}).f || 3;
   return { al, cont, ms, r, blocos, fase, atrasados: atrasadosDe(r) };
 }
@@ -321,14 +337,24 @@ function htmlBlocosHoje(D) {
   const prog = lerEst("prog", {}), revisar = (typeof julgados !== "undefined" && Array.isArray(julgados) ? julgados : []).filter(j => prog[j.id] && prog[j.id].prox <= hojeISO()).length;
   const prox = r.blocos.map((b, i) => ({ b, i })).find(x => x.b.d > hojeISO() && !r.feitos.includes(x.i));
   return `${avisoRoteiro(r)}${D.atrasados.length ? `<div class="pl-aviso atraso">⏳ ${D.atrasados.length} bloco(s) de dias anteriores ainda não foram feitos. Se passar de um dia de estudo, o roteiro é refeito sozinho amanhã — ou <button type="button" class="linkbt" data-plrefazer="1">refazer agora</button>.</div>` : ""}
-    ${D.blocos.length ? `<p class="note pl-cont">${feitos} de ${D.blocos.length} bloco(s) de hoje${D.fase === 4 ? " · véspera: estude pouco e descanse" : ""}</p>
-    <ul class="pl-lista">${D.blocos.map(b => `<li class="${b.feito ? "ok" : ""}"><label class="pl-chk"><input type="checkbox" data-plfeito="${b.i}"${b.feito ? " checked" : ""}><span class="pl-hora">${hhmm(b.hora)}</span></label>
-      <div class="pl-txt"><b>${esc(b.m.nome)}</b><span>${esc(b.txt)}${b.topicos.length ? ` — <i>${esc(b.topicos.join(" · "))}</i>` : ""}</span></div>
-      <button type="button" class="mini" data-plabrir="${b.i}">Abrir ›</button></li>`).join("")}
-      ${revisar ? `<li class="pl-extra"><span class="pl-hora">+</span><div class="pl-txt"><b>Revisão espaçada</b><span>${revisar} julgado(s) para revisar hoje (10–15 min)</span></div><button type="button" class="mini" data-plabrir="revisar">Abrir ›</button></li>` : ""}</ul>`
-    : `<p class="note">${horariosDoDia(hoje()).length ? "Os horários de estudo de hoje já passaram — o roteiro começa no próximo horário." : "Hoje não há horário de estudo no seu perfil (ajuste em ☰ › Editar perfil)."} Se quiser estudar agora, adiante um bloco.</p>`}
-    ${prox && feitos === D.blocos.length ? `<div class="actions" style="justify-content:flex-start"><button type="button" class="mini" data-pladiantar="${prox.i}">+ Adiantar o próximo bloco (${esc(blocoParaTela(D.ms, prox.b, prox.i, r).m.nome)})</button></div>` : ""}`;
+    ${D.blocos.length ? `<p class="note pl-cont">Cota de hoje: <b>${durTxt(D.blocos.reduce((a, b) => a + b.dur, 0))}</b> em ${D.blocos.length} bloco(s) · ${feitos} feito(s)${D.fase === 4 ? " · véspera: estude pouco e descanse" : ""}. Cada bloco começa quando você apertar ▶ e termina sozinho.</p>
+    <ul class="pl-lista">${D.blocos.map(b => htmlItemBloco(D.al, b)).join("")}
+      ${revisar ? `<li class="pl-extra"><span class="pl-dur">+</span><div class="pl-txt"><b>Revisão espaçada</b><span>${revisar} julgado(s) para revisar hoje (10–15 min)</span></div><button type="button" class="mini" data-plabrir="revisar">Abrir ›</button></li>` : ""}</ul>`
+    : `<p class="note">Hoje não há tempo de estudo no seu perfil (ajuste em ☰ › Editar perfil). Se quiser estudar mesmo assim, puxe um bloco.</p>`}
+    ${prox && feitos === D.blocos.length ? `<div class="actions" style="justify-content:flex-start"><button type="button" class="mini" data-pladiantar="${prox.i}">+ Estudar mais um bloco (${esc(blocoParaTela(D.ms, prox.b, prox.i, r).m.nome)}, ${durTxt(prox.b.dur || 60)})</button></div>` : ""}`;
 }
+// um item da lista de hoje: ▶ Iniciar, ⏱ rodando ou ✓ feito
+function htmlItemBloco(al, b) {
+  const T = timerAtual(), rodando = T && T.chave === al.chave && T.i === b.i, outro = T && !rodando;
+  const acao = b.feito ? `<span class="pl-feito">✓ ${durTxt(b.real || b.dur)}</span><button type="button" class="linkbt pl-desfaz" data-plfeito="${b.i}" data-valor="0" title="Desmarcar">desfazer</button>`
+    : rodando ? `<span class="pl-rodando" data-tmrest="1">⏱ ${relogio(restanteMs(T))}</span>`
+    : `<button type="button" class="pl-iniciar" data-pliniciar="${b.i}"${outro ? " disabled title=\"Termine o bloco em andamento primeiro\"" : ""}>▶ Iniciar</button>`;
+  return `<li class="${b.feito ? "ok" : ""}${rodando ? " ativo" : ""}"><span class="pl-dur">${durTxt(b.dur)}</span>
+    <div class="pl-txt"><b>${esc(b.m.nome)}</b><span>${esc(b.txt)}${b.topicos.length ? ` — <i>${esc(b.topicos.join(" · "))}</i>` : ""}</span>
+      ${!b.feito && !rodando ? `<button type="button" class="linkbt pl-manual" data-plfeito="${b.i}" data-valor="1">já fiz este bloco</button>` : ""}</div>
+    <div class="pl-acoes">${acao}<button type="button" class="mini" data-plabrir="${b.i}">Abrir ›</button></div></li>`;
+}
+const durTxt = m => m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? String(m % 60).padStart(2, "0") : ""}` : `${m} min`;
 function htmlSemPlano(D) {
   if (!D.al) return `<p class="note">Este concurso não tem prova com data marcada. Cadastre a data para montar o plano.</p>`;
   if (planoUi.lendo[D.al.chave]) return `${cabecalhoPlano(D)}<p class="note">⏳ A IA está lendo o edital e listando todo o conteúdo programático… (até 3 minutos)</p>`;
@@ -363,7 +389,7 @@ function htmlPlanoModal(aba) {
 function htmlRoteiro(D) {
   const r = D.r, M = METODOS[r.metodo], ms = D.ms, cob = cobertosDe(D.al), hojeD = hojeISO();
   // fases: período e horas
-  const fases = [1, 2, 3, 4].map(f => { const bs = r.blocos.filter(b => b.f === f); return bs.length ? { f, ini: bs[0].d, fim: bs[bs.length - 1].d, h: bs.length } : null; }).filter(Boolean);
+  const fases = [1, 2, 3, 4].map(f => { const bs = r.blocos.filter(b => b.f === f); return bs.length ? { f, ini: bs[0].d, fim: bs[bs.length - 1].d, h: Math.round(bs.reduce((a, b) => a + (b.dur || 60), 0) / 60) } : null; }).filter(Boolean);
   const planejado = new Map(); r.blocos.forEach(b => { if (b.f === 1) b.t.forEach(t => { const k = `${b.m}.${t}`; if (!planejado.has(k)) planejado.set(k, b.d); }); });
   const cobertura = Math.round((cob.size + [...planejado.keys()].filter(k => !cob.has(k)).length) / Math.max(1, r.totalTopicos) * 100);
   return `${avisoRoteiro(r)}<div class="pl-metodo"><div><span class="pl-et">Método</span><b>${esc(M.nome)}</b><span>${esc(descMetodo(r))}</span></div>
@@ -371,7 +397,7 @@ function htmlRoteiro(D) {
       <div><span class="pl-et">Cobertura do edital</span><b>${cobertura}% dos tópicos</b><span>${r.totalTopicos} tópicos no edital${cob.size ? ` · ${cob.size} já estudados` : ""}${r.fora ? ` · ${r.fora} de menor incidência fora do roteiro` : ""}</span></div></div>
     <h4 class="pl-h">Linha do tempo até a prova</h4>
     <ol class="pl-tempo">${fases.map(x => `<li class="${x.fim < hojeD ? "ok" : x.ini <= hojeD ? "agora" : ""}"><b>${NOME_FASE[x.f]}</b><span>${dm(x.ini)}${x.fim !== x.ini ? " a " + dm(x.fim) : ""} · ${x.h} h</span></li>`).join("")}<li class="prova"><b>Prova</b><span>${rotuloDiasPlano(D.al.datas)}</span></li></ol>
-    <p class="note">${r.horasFeitas || 0} hora(s) de estudo registradas · ${D.atrasados.length ? `${D.atrasados.length} bloco(s) atrasado(s)` : "em dia"}</p>
+    <p class="note">${durTxt(Math.round(r.minFeitos != null ? r.minFeitos : (r.horasFeitas || 0) * 60))} de estudo registradas no cronômetro · ${D.atrasados.length ? `${D.atrasados.length} bloco(s) atrasado(s)` : "em dia"}</p>
     <h4 class="pl-h">Conteúdo programático</h4>
     <div class="pl-mats">${ms.map((m, mi) => {
       const tops = topicosDe(m), feitos = tops.filter((x, ti) => cob.has(`${mi}.${ti}`)).length;
@@ -423,17 +449,17 @@ function redesenharPlano() {
 document.addEventListener("click", e => {
   const c = e.target.closest("[data-plmontarcid],[data-placessar]");
   if (c) { if (c.dataset.placessar) abrirPlano("plano-hoje", c.dataset.placessar); else { const a = alvoPlano(c.dataset.plmontarcid); if (a) lerConteudoDoEdital(a); } return; }
-  const t = e.target.closest("[data-plfeito],[data-plabrir],[data-plmontar],[data-plaba],[data-pladiantar],[data-plrefazer],[data-pltirar],[data-plincluir]"); if (!t) return;
+  const t = e.target.closest("[data-plfeito],[data-pliniciar],[data-plabrir],[data-plmontar],[data-plaba],[data-pladiantar],[data-plrefazer],[data-pltirar],[data-plincluir]"); if (!t) return;
   const d = t.dataset, al = alvoPlano();
-  if (d.plfeito !== undefined) { if (al) marcarBlocoRoteiro(al, +d.plfeito, t.checked); redesenharPlano(); return; }
+  if (d.plfeito !== undefined) { if (al) marcarBlocoRoteiro(al, +d.plfeito, d.valor === "1"); redesenharPlano(); return; }
+  if (d.pliniciar !== undefined && al) { iniciarTimer(al, +d.pliniciar); return; }
   if (d.plabrir !== undefined) { abrirBlocoPlano(d.plabrir); return; }
   if (d.plaba) { abrirPlano(d.plaba); return; }
   if (d.plmontar && al) { lerConteudoDoEdital(al); return; }
   if (d.plrefazer && al) { refazerRoteiro(al, "mudou"); toast("Roteiro refeito a partir de hoje."); redesenharPlano(); return; }
   if (d.pladiantar !== undefined && al) {   // traz o próximo bloco para hoje
     const r = roteiroDe(al), b = r && r.blocos[+d.pladiantar]; if (!b) return;
-    const hj = r.blocos.filter(x => x.d === hojeISO()).map(x => x.h);
-    b.d = hojeISO(); b.h = hj.length ? Math.max(...hj) + 60 : 8 * 60; gravarPlano("rot:" + al.chave, r); redesenharPlano(); return;
+    b.d = hojeISO(); gravarPlano("rot:" + al.chave, r); redesenharPlano(); return;
   }
   if ((d.pltirar !== undefined || d.plincluir) && al) {
     const c = conteudoPlano(al) || { quando: hojeISO(), materias: [] };
@@ -450,3 +476,78 @@ document.addEventListener("change", e => {
   const al = alvoPlano(), c = al && conteudoPlano(al); if (!c) return;
   c.materias[+s.dataset.plpeso].peso = +s.value; gravarPlano("cont:" + al.chave, c); refazerRoteiro(al, "mudou"); redesenharPlano();
 });
+
+// ---------- cronômetro do bloco ----------
+// Um estudo por vez (em qualquer concurso). Guarda o início na nuvem: o mesmo cronômetro aparece no PC e no celular.
+// A conta é feita pela hora de término, então o tempo fica certo mesmo com a tela bloqueada; o alerta toca com o app aberto.
+const timerAtual = () => plano().timer || null;
+function decorridoMs(T) { return Date.now() - T.ini - (T.pausado || 0) - (T.pausadoEm ? Date.now() - T.pausadoEm : 0); }
+const restanteMs = T => Math.max(0, T.dur * 60000 - decorridoMs(T));
+const relogio = ms => { const s = Math.ceil(ms / 1000), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), ss = s % 60; return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(ss).padStart(2, "0"); };
+let somCtx = null;
+function iniciarTimer(al, i) {
+  if (timerAtual()) { toast("Termine (ou cancele) o bloco em andamento primeiro."); return; }
+  const r = roteiroDe(al), b = r && r.blocos[i]; if (!b) return;
+  try { somCtx = somCtx || new (window.AudioContext || window.webkitAudioContext)(); somCtx.resume(); } catch (e) {}   // libera o som do alerta
+  try { if (window.Notification && Notification.permission === "default") Notification.requestPermission(); } catch (e) {}
+  const m = b.m >= 0 ? conteudoPlano(al).materias[b.m].nome : "Revisão leve";
+  gravarPlano("timer", { chave: al.chave, cid: al.x.id, i, ini: Date.now(), dur: b.dur || 60, pausado: 0, pausadoEm: null, nome: m, ativ: ATIV[b.a].txt });
+  redesenharPlano(); desenharBarraTimer();
+}
+function pausarTimer() {
+  const T = timerAtual(); if (!T) return;
+  if (T.pausadoEm) { T.pausado = (T.pausado || 0) + Date.now() - T.pausadoEm; T.pausadoEm = null; } else T.pausadoEm = Date.now();
+  gravarPlano("timer", T); desenharBarraTimer();
+}
+function encerrarTimer(concluir, sozinho) {
+  const T = timerAtual(); if (!T) return;
+  const min = Math.max(1, Math.round(Math.min(decorridoMs(T), T.dur * 60000) / 60000));
+  gravarPlano("timer", undefined);
+  const al = alvoPlano(T.cid);
+  if (concluir && al && al.chave === T.chave) marcarBlocoRoteiro(al, T.i, true, min);
+  else if (!concluir && al && al.chave === T.chave) { const r = roteiroDe(al); if (r) { r.minFeitos = (r.minFeitos || 0) + min; gravarPlano("rot:" + al.chave, r); } }   // o tempo estudado conta, o bloco volta para a fila
+  if (sozinho) alertarFim(T); else toast(concluir ? `Bloco concluído: ${durTxt(min)} de ${T.nome}.` : "Bloco cancelado: ele volta para a fila.");
+  desenharBarraTimer(); redesenharPlano();
+}
+function alertarFim(T) {
+  toast(`⏰ Tempo! Bloco de ${T.nome} concluído. Quando quiser, inicie o próximo.`);
+  try { navigator.vibrate && navigator.vibrate([300, 150, 300, 150, 500]); } catch (e) {}
+  try {   // três bipes curtos
+    const c = somCtx || new (window.AudioContext || window.webkitAudioContext)();
+    [0, .35, .7].forEach(t => { const o = c.createOscillator(), g = c.createGain(); o.frequency.value = 880; o.connect(g); g.connect(c.destination); g.gain.setValueAtTime(.25, c.currentTime + t); g.gain.exponentialRampToValueAtTime(.001, c.currentTime + t + .3); o.start(c.currentTime + t); o.stop(c.currentTime + t + .32); });
+  } catch (e) {}
+  try { if (window.Notification && Notification.permission === "granted") new Notification("Meus Concursos — bloco concluído", { body: `${T.nome}: ${T.ativ}. Inicie o próximo quando quiser.`, icon: "icon-192.png" }); } catch (e) {}
+}
+// barra fixa embaixo da tela enquanto um bloco está rodando (fica por cima das janelas abertas)
+function desenharBarraTimer() {
+  let el = document.getElementById("barraTimer"); const T = timerAtual();
+  if (!T) { if (el) el.remove(); return; }
+  if (!el) { el = document.createElement("div"); el.id = "barraTimer"; el.className = "tm-barra"; document.body.appendChild(el); }
+  const pct = Math.min(100, decorridoMs(T) / (T.dur * 600));
+  el.innerHTML = `<div class="tm-prog" style="width:${pct}%"></div><div class="tm-info"><b>${esc(T.nome)}</b><span>${esc(T.ativ)}</span></div>
+    <span class="tm-relogio${T.pausadoEm ? " pausado" : ""}">${T.pausadoEm ? "⏸ " : ""}${relogio(restanteMs(T))}</span>
+    <div class="tm-bts"><button type="button" data-tm="pausa">${T.pausadoEm ? "▶ Retomar" : "⏸ Pausar"}</button><button type="button" data-tm="concluir">✓ Concluir</button><button type="button" data-tm="cancelar">✕</button></div>`;
+  mostrarBarraPorCima(el);
+}
+// com uma janela aberta, o resto da tela fica "travado": a barra passa para dentro da janela de cima, para continuar clicável
+function mostrarBarraPorCima(el) {
+  const abertos = [...document.querySelectorAll("dialog[open]")], alvo = abertos.length ? abertos[abertos.length - 1] : document.body;
+  if (el.parentNode !== alvo) alvo.appendChild(el);
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-tm]"); if (!b) return;
+  if (b.dataset.tm === "pausa") pausarTimer();
+  else if (b.dataset.tm === "concluir") encerrarTimer(true, false);
+  else if (confirm("Cancelar este bloco? O tempo já estudado fica registrado e o bloco volta para a fila.")) encerrarTimer(false, false);
+});
+// a cada segundo: atualiza o relógio e encerra sozinho quando o tempo acaba
+setInterval(() => {
+  const T = timerAtual(), el = document.getElementById("barraTimer");
+  if (!T) { if (el) desenharBarraTimer(); return; }
+  if (!T.pausadoEm && restanteMs(T) <= 0) { encerrarTimer(true, true); return; }
+  if (!el) { desenharBarraTimer(); return; }
+  const rel = el.querySelector(".tm-relogio"); if (rel) rel.textContent = (T.pausadoEm ? "⏸ " : "") + relogio(restanteMs(T));
+  const pr = el.querySelector(".tm-prog"); if (pr) pr.style.width = Math.min(100, decorridoMs(T) / (T.dur * 600)) + "%";
+  document.querySelectorAll("[data-tmrest]").forEach(x => x.textContent = "⏱ " + relogio(restanteMs(T)));
+  mostrarBarraPorCima(el);
+}, 1000);

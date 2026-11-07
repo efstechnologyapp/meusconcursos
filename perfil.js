@@ -57,7 +57,7 @@ function desenharPerfil(r, aviso) {
       <button type="button" class="pf-voltar" data-pfvoltar="1">‹ Voltar</button>
       <section class="pf-secao" id="pfHorarios">
         <h3>Editar perfil · horários de estudo</h3>
-        <p class="pf-ajuda">O plano de estudos usa estes horários: cada hora livre vira um bloco do ciclo.</p>
+        <p class="pf-ajuda">O plano de estudos usa estes horários para saber quanto tempo você tem em cada dia. O estudo começa quando você aperta ▶ Iniciar no plano.</p>
         ${htmlGrupoHoras("util", "Dias úteis", "segunda a sexta", r.util)}
         ${htmlGrupoHoras("fds", "Sábado e domingo", "", r.fds)}
         <label class="pf-switch"><input type="checkbox" id="pfFerias"${r.ferias ? " checked" : ""}><span class="pf-trilho"></span><span><b>Férias ou período com mais tempo</b><small>Nesses dias valem os horários abaixo</small></span></label>

@@ -796,4 +796,21 @@ function instrucoesDeIdentificacao(plano) {
   return partes.join("\n\n");
 }
 
-if (typeof module !== "undefined") module.exports = { textoDoPdf, lerListaDoCandidato, acharCandidato, previsoesDasFases, blocosDaTabela, duracoesDasFases, composicaoDasFases, instrucoesDeIdentificacao, notasDasFases, regraPortoes, interpretarEdital, datasNoTrecho, MODELOS, detectarTipo, datasDasFases };
+// Material de consulta: separa as frases do edital que tratam de consulta a material/legislação durante as provas
+// (a IA depois lê só essas frases e diz, fase por fase, o que é permitido e o que é vedado — ver consulta.js)
+function frasesDeConsulta(plano) {
+  const texto = String(plano || "").replace(/-\s(?=[a-zà-ú])/g, "").replace(/\s+/g, " ");
+  const frases = texto.split(/(?<=[.;])\s+(?=\d{1,2}(?:\.\d{1,2})+\.?\s|[A-ZÀ-Ú(])/)
+    .map(f => limpar(f.replace(/^(?:[A-ZÀ-Ú–\- ,]{6,}\s+)?\d{1,2}(?:\.\d{1,2})+\.?\s+/, "").replace(/https?:\/\/\S+/g, "").replace(/\s+\d+(?:\.\d+)*\.?$/, "")));
+  const vistas = new Set(), out = [];
+  for (const f of frases) {
+    if (f.length < 40 || f.length > 900) continue;
+    if (!/consult|manusear/i.test(f) || !/(legisla|c[oó]digo|material|livro|doutrin|apontament|anota[cç]|impress|texto legal|lei seca|vade|s[uú]mula|jurisprud|manual|dicion|coment)/i.test(f)) continue;
+    if (/quadro a seguir|n[uú]mero de quest[oõ]es|jurisprud[eê]ncia contenciosa|referenciais normativos|resultado|gabarito|site|endere[cç]o eletr|consulta (?:p[uú]blica|individual)/i.test(f)) continue;
+    const k = f.slice(0, 80); if (vistas.has(k)) continue; vistas.add(k); out.push(f);
+    if (out.length >= 14) break;
+  }
+  return out;
+}
+
+if (typeof module !== "undefined") module.exports = { frasesDeConsulta, textoDoPdf, lerListaDoCandidato, acharCandidato, previsoesDasFases, blocosDaTabela, duracoesDasFases, composicaoDasFases, instrucoesDeIdentificacao, notasDasFases, regraPortoes, interpretarEdital, datasNoTrecho, MODELOS, detectarTipo, datasDasFases };

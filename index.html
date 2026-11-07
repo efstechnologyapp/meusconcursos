@@ -576,6 +576,25 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .pl-tops li{font-size:13px}.pl-tops li small{color:var(--muted);margin-left:6px;font-size:11px}
 .pl-tops li.ok span{text-decoration:line-through;opacity:.6}.pl-tops li.fora span{color:var(--muted)}.pl-tops li.fora small{color:#c0392b}
 @media (max-width:620px){.pl-metodo{grid-template-columns:1fr}}
+.pl-dur{flex:none;min-width:46px;font:700 12px/1 system-ui;color:#9a7a12;background:#fff6d6;border-radius:8px;padding:6px 4px;text-align:center}
+.pl-acoes{display:flex;align-items:center;gap:8px;flex:none}
+.pl-iniciar{border:0;background:#14213d;color:#ffd23f;font-weight:700;font-size:13px;border-radius:999px;padding:7px 14px;cursor:pointer;white-space:nowrap}
+.pl-iniciar:disabled{opacity:.35;cursor:not-allowed}
+.pl-feito{color:#2e7d4f;font-weight:700;font-size:13px;white-space:nowrap}.pl-desfaz{font-size:11px;color:var(--muted)}
+.pl-manual{font-size:11px;color:var(--muted);align-self:flex-start;margin-top:2px}
+.pl-rodando{font:700 14px var(--f-mono,monospace);color:#14213d;background:#ffd23f;border-radius:999px;padding:6px 12px;white-space:nowrap}
+.pl-lista li.ativo{border-color:#d4af37;box-shadow:inset 0 0 0 1px #d4af37;background:#fffaf0}
+.tm-barra{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);top:auto;right:auto;margin:0;width:min(640px,calc(100vw - 24px));display:flex;align-items:center;gap:12px;padding:12px 14px;border:0;border-radius:16px;background:#14213d;color:#fff;box-shadow:0 12px 40px rgba(10,16,32,.35);overflow:hidden;z-index:9999;inset:auto auto 16px 50%}
+.tm-prog{position:absolute;left:0;top:0;height:3px;background:#ffd23f;transition:width 1s linear}
+.tm-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.tm-info b{font-size:14px}.tm-info span{font-size:12px;color:#c9d2e6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tm-relogio{font:700 22px var(--f-mono,monospace);color:#ffd23f;white-space:nowrap}.tm-relogio.pausado{color:#c9d2e6}
+.tm-bts{display:flex;gap:6px}.tm-bts button{border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;border-radius:999px;padding:6px 10px;font-size:12px;cursor:pointer;white-space:nowrap}
+.tm-bts button:hover{background:rgba(255,255,255,.18)}
+@media (max-width:560px){.tm-barra{flex-wrap:wrap;gap:8px}.tm-info{flex-basis:calc(100% - 110px)}.tm-bts{width:100%;justify-content:flex-end}.pl-lista li{flex-wrap:wrap}.pl-acoes{width:100%;justify-content:flex-end}}
+.mt-linha{margin:0 0 10px;line-height:1.7}
+.mt{background:linear-gradient(transparent 8%,#fff27a 8%,#ffe94d 88%,transparent 88%);color:#1d2433;padding:1px 3px;border-radius:2px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.lei-conc{margin:10px 0 0;padding-top:8px;border-top:1px dashed var(--line);font-size:11.5px;color:var(--muted)}
+.lei-conc span{color:var(--ink);font-weight:600}
 </style>
 </head>
 <body>
@@ -747,6 +766,7 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 <script src="papel-info.js"></script>
 <script src="lei-seca.js"></script>
 <script src="plano.js"></script>
+<script src="consulta.js"></script>
 <script src="perfil.js"></script>
 <script src="pagina-estudo.js"></script>
 <script>
@@ -1015,7 +1035,7 @@ function abrirVer(id){
     ${x.edital_arquivo?`<div class="block"><h4>Edital juntado</h4><div class="anexo"><a id="verLnkEdital" target="_blank" rel="noopener">${esc(x.edital_arquivo.nome)}</a></div></div>`:""}
     ${(x.complementares||[]).length?`<div class="block"><h4>Editais complementares</h4><ul class="comp-lista">${x.complementares.map(c=>`<li><div class="anexo"><a data-comp="${esc(c.uid)}" target="_blank" rel="noopener">${esc(c.nome)}</a><span class="note">juntado em ${esc(fmtCurta(c.juntado))}</span></div>${c.alteracoes&&c.alteracoes.length?`<p class="note pre">${esc(c.alteracoes.join("\n"))}</p>`:`<p class="note">Sem alterações nas fases.</p>`}</li>`).join("")}</ul></div>`:""}
     ${x.cidade?`<div class="block"><h4>Cidade das provas</h4><p class="pre">${esc(x.cidade)}</p></div>`:""}
-    ${x.instrucoes?`<div class="block"><h4>Instruções gerais</h4><p class="pre legenda">${esc(x.instrucoes).replace(/^([A-ZÀ-Ú ]{4,}:)/gm,"<b>$1</b>")}</p></div>`:""}
+    ${(()=>{ const mc=typeof htmlConsultaProva==="function"&&andamento(x).ativo?htmlConsultaProva(x):""; return x.instrucoes||mc?`<div class="block"><h4>Instruções gerais</h4>${mc}${x.instrucoes?`<p class="pre legenda">${esc(x.instrucoes).replace(/^([A-ZÀ-Ú ]{4,}:)/gm,"<b>$1</b>")}</p>`:""}</div>`:""; })()}
     ${fasesHTML?`<div class="block"><h4>Fases</h4><ol class="timeline">${fasesHTML}</ol></div>`:""}
     ${!(x.fases||[]).length?`<div class="block"><div class="tl-head"><h4>Viagem</h4>${htmlBotoesViagem(x,"geral")}</div>${htmlResumoViagem(x,"geral")}</div>`:""}
     ${x.obs?`<div class="block"><h4>Observações</h4><p class="pre">${esc(x.obs)}</p></div>`:""}
@@ -1533,6 +1553,8 @@ async function consertarCadastros(){
     }
   }
   if(mudou){ salvar(); render(); }
+  // material de consulta das provas (IA lê só os trechos do edital sobre consulta), uma vez por concurso em andamento
+  if(typeof lerConsultaDoEdital==="function") for(const x of itens) if(x.edital_arquivo && andamento(x).ativo && !(x.consulta&&x.consulta.v===1)) await lerConsultaDoEdital(x);
 }
 function carregarGIS(){
   if(window.google&&google.accounts&&google.accounts.id) return Promise.resolve();
@@ -1839,7 +1861,7 @@ iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO = 99;
+const APP_VERSAO = 103;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{

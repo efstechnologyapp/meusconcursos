@@ -90,7 +90,12 @@ async function guardarLei(meta, html, info) {
   const brutos = artigosDoHtml(html);
   if (brutos.ementa) { const em = lerEst("leiEmenta", {}); em[meta.id] = { txt: brutos.ementa, fonte: "lei" }; gravarEst("leiEmenta", em); }
   const artigos = comIds(meta.id, brutos);
-  if (artigos.length < 3) throw new Error("não encontrei artigos nesse texto");
+  if (artigos.length < 3) {
+    // a página tem artigos, mas todos riscados: a lei inteira foi revogada (não sobra texto vigente)
+    const riscados = (() => { try { const d = new DOMParser().parseFromString(String(html || ""), "text/html"); return [...d.querySelectorAll("strike,s,del,[style*=line-through]")].filter(e => /\bArt\.?\s*\d/i.test(e.textContent)).length; } catch (e) { return 0; } })();
+    if (riscados >= 3) throw new Error(`esta lei foi revogada por inteiro: todo o texto está riscado no Planalto (${riscados} artigos riscados) e não sobra nada vigente. Pode remover da lista`);
+    throw new Error("não encontrei artigos nesse texto");
+  }
   const reg = { meta, artigos, quando: info.quando || new Date().toISOString(), fonte: info.fonte || "" };
   await arq("gravar", "lei:" + meta.id, reg).catch(() => {});
   leis[meta.id] = reg;
@@ -126,7 +131,7 @@ async function colarLei(id, html) {
     const reg = await guardarLei(meta, html, { fonte: "colado" });
     leiUi.colar = null; leiUi.msg[id] = `${reg.artigos.length} artigos (texto colado)`;
     toast(`${meta.sigla}: ${reg.artigos.length} artigos prontos.`);
-  } catch (e) { leiUi.msg[id] = "Não reconheci a lei no texto colado: " + e.message + ". Copie a página inteira (Ctrl+A, Ctrl+C)."; }
+  } catch (e) { leiUi.msg[id] = /revogada por inteiro/.test(e.message) ? "⚠️ Esta lei foi " + e.message.replace(/^esta lei foi /, "") + "." : "Não reconheci a lei no texto colado: " + e.message + ". Copie a página inteira (Ctrl+A, Ctrl+C)."; }
   desenharEstudo(estudoAba);
 }
 
@@ -186,14 +191,14 @@ const leisProntas = () => leiCatalogo().filter(l => leis[l.id]);
 function htmlMinhasLeis() {
   const idx = lerEst("leisBaixadas", {});
   if (!leiUi.editaisLidos) { leiUi.editaisLidos = true; setTimeout(async () => { await sincronizarLeis(); await procurarLeisNosEditais(); buscarEmentasIA(); }, 0); }   // inclui na lista as leis citadas nos editais
-  const fm = lerEst("leiMat", ""), cat = leiCatalogo();
+  const fm = lerEst("leiMat", ""), cat = leiCatalogo(), cobradas = leisPorConcurso();
   let h = `<div class="est-chips lei-mats"><button type="button" class="chip-sel${!fm ? " on" : ""}" data-leimat="">Todas</button>${MATERIAS_LEI.filter(m => m !== "Outras" || materiasUsadas(cat).includes(m)).map(m => `<button type="button" class="chip-sel${fm === m ? " on" : ""}" data-leimat="${esc(m)}">${esc(m)} <span class="ct">${cat.filter(l => materiaDe(l) === m).length}</span></button>`).join("")}</div>
     <p class="note">Baixe as leis que você vai estudar. O app pega o texto vigente no site do Planalto, tira o que está revogado (riscado no site) e separa os artigos. Fica guardado neste aparelho e na nuvem do app.</p>`;
   h += cat.filter(l => !fm || materiaDe(l) === fm).map(l => {
     const b = idx[l.id], ok = !!leis[l.id] || !!b, d = b && new Date(b.quando);
     return `<div class="lei-item"><div class="lei-tit"><span><b>${esc(l.nome)}</b>${ementaDe(l) ? `<span class="lei-ementa"> — ${esc(ementaDe(l))}</span>` : ""}</span><span class="note"><select class="lei-matsel" data-leimatsel="${l.id}" title="Mudar a matéria desta lei">${MATERIAS_LEI.map(m => `<option${m === materiaDe(l) ? " selected" : ""}>${esc(m)}</option>`).join("")}</select> ${ok ? `✓ ${b ? b.n : leis[l.id].artigos.length} artigos · ${b && b.fonte === "colado" ? "texto colado" : "do Planalto"}${d && !isNaN(d) ? " em " + d.toLocaleDateString("pt-BR") : ""}` : "ainda não baixada"}${leiUi.msg[l.id] ? ` · <span class="lei-msg">${esc(leiUi.msg[l.id])}</span>` : ""}</span></div>
       <div class="prov-acoes">${leiUi.baixando[l.id] ? `<span class="note est-gerando">Baixando do Planalto…</span>` : `${ok ? `<button type="button" class="primary" data-leiler="${l.id}">Ler</button><button type="button" data-leibaixar="${l.id}" data-forcar="1">Atualizar</button>` : `<button type="button" class="primary" data-leibaixar="${l.id}">Baixar do Planalto</button>`}<button type="button" data-leicolar="${l.id}">Colar o texto</button>${l.extra ? `<button type="button" class="link-x" data-leiremover="${l.id}">remover</button>` : ""}`}</div>
-      ${leiUi.colar === l.id ? htmlColarLei(l) : ""}</div>`;
+      ${leiUi.colar === l.id ? htmlColarLei(l) : ""}${htmlConcursosDaLei(cobradas[l.id])}</div>`;
   }).join("");
   if (fm && !cat.some(l => materiaDe(l) === fm)) h += `<p class="note" style="text-align:center;padding:16px 0">Nenhuma lei em ${esc(fm)} ainda. Para trazer uma lei para cá, escolha esta matéria na listinha do cartão da lei, ou adicione uma lei nova abaixo.</p>`;
   h += `<details class="est-det"><summary>+ Adicionar outra lei</summary><div class="env-grid"><label class="env-l2">Nome<input id="leiNovaNome" placeholder="ex.: Lei de Lavagem de Dinheiro (Lei 9.613/1998)"></label><label>Sigla curta<input id="leiNovaSigla" placeholder="ex.: Lavagem"></label><label>Matéria<select id="leiNovaMat">${MATERIAS_LEI.map(m => `<option>${esc(m)}</option>`).join("")}</select></label><label>Link no planalto.gov.br<input id="leiNovaUrl" placeholder="https://www.planalto.gov.br/ccivil_03/leis/l9613.htm"></label></div><div class="actions" style="justify-content:flex-start"><button type="button" class="primary" id="leiNovaAdd">Adicionar</button></div></details>`;
@@ -393,6 +398,17 @@ function metaDaChave(k, a) {
   return { id: "e-" + k.replace(/:/g, "-"), sigla: conhecida ? conhecida[0] : `${tipo === "Lei" ? "Lei" : tipo === "Lei Complementar" ? "LC" : tipo === "Decreto-Lei" ? "DL" : "Dec."} ${num}/${ano}`,
     nome: conhecida ? (/\d\/\d{4}/.test(conhecida[1]) ? conhecida[1] : `${conhecida[1]} (${tipo} ${num}/${ano})`) : `${tipo} nº ${num}/${ano}`, materia: mat, url: urls[0], alts: urls.slice(1), extra: true, doEdital: true };
 }
+// em quais concursos em andamento cada lei é cobrada (pelo que foi lido nos editais): { idDaLei: [{ nome, n }] }
+function leisPorConcurso() {
+  const cache = lerEst("leisEditais", {}), mapa = {};
+  for (const x of (typeof itens !== "undefined" ? itens : [])) {
+    const c = cache[x.id]; if (!c || !c.achadas || !andamento(x).ativo) continue;
+    const nome = x.sigla || (typeof siglaDoOrgao === "function" && String(x.nome || "").length > 22 ? siglaDoOrgao(x.nome) : x.nome);
+    Object.values(c.achadas).forEach(a => { const m = metaDaChave(a.k, a); if (!m) return; const l = mapa[m.id] = mapa[m.id] || []; const j = l.find(z => z.nome === nome); if (j) j.n += a.n; else l.push({ nome, n: a.n }); });
+  }
+  return mapa;
+}
+const htmlConcursosDaLei = l => l && l.length ? `<p class="lei-conc">Cobrada em: ${l.map(z => `<span title="citada ${z.n} vez(es) no edital">${esc(z.nome)}</span>`).join(" · ")}</p>` : "";
 async function procurarLeisNosEditais() {
   if (leiUi.procurando) return;
   const conc = itens.filter(x => x.edital_arquivo && andamento(x).ativo);
