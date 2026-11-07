@@ -301,6 +301,7 @@ function desenharEstudo(aba) {
   if (String(estudoAba).startsWith("lei") && { praticar: "lei-praticar", desempenho: "lei-hist" }[aba]) aba = { praticar: "lei-praticar", desempenho: "lei-hist" }[aba];
   // na aba do simulado, os filtros e o progresso redesenham a própria aba (sem pular para o treino)
   if (aba === "praticar" && estudoAba === "simulado" && !estudo && !(typeof cartao !== "undefined" && cartao) && !(typeof papelInfo !== "undefined" && papelInfo.disc)) aba = "simulado";
+  if (aba.startsWith("plano")) { estudoAba = aba; $("estudoConteudo").innerHTML = htmlPlanoModal(aba); return; }
   if (aba.startsWith("lei")) { estudoAba = aba; $("estudoConteudo").innerHTML = cabecalhoEstudo(aba) + `<div class="est-corpo">${htmlLei(aba)}</div>`; return; }
   estudoAba = aba;
   let corpo = "";

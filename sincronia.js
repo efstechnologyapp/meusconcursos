@@ -4,7 +4,7 @@
 // essas mudanças sobre a versão da nuvem e devolve a versão completa, que passa a valer aqui.
 // Assim uma mudança feita no PC não é desfeita por um celular com dados antigos.
 
-const SYNC_MAPAS = ["leiMatUser", "leiEmenta", "leiMarc", "prog", "prov-resultados"];   // objetos { id: valor }
+const SYNC_MAPAS = ["leiMatUser", "leiEmenta", "leiMarc", "prog", "prov-resultados", "plano"];   // objetos { id: valor }
 const SYNC_LISTAS = { leisExtras: l => l.id, leisRemovidas: id => id };                 // listas (cada item vira um id)
 const SYNC_TODAS = [...SYNC_MAPAS, ...Object.keys(SYNC_LISTAS), "hist"];
 let sincro = { rodando: false, deNovo: false, ultima: 0, versao: null };

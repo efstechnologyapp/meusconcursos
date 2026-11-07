@@ -481,6 +481,25 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .login-boneco{display:block;margin:0 auto 10px;width:210px;max-width:60%;height:auto;border-radius:18px}
 .tela-cartao .lema{text-align:center;margin:10px 0 4px}
 @media (max-width:520px){.marca-av{width:52px;height:52px}}
+.pe-plano{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;margin:6px 0 16px;box-shadow:0 1px 2px rgba(20,33,61,.04)}
+.pl-topo{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}.pl-topo h3{margin:0}
+.pl-alvo{display:flex;align-items:center;gap:12px;margin:12px 0 6px}.pl-alvo>div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.pl-dias{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;width:64px;height:64px;border-radius:14px;background:#14213d;color:#fff;font-size:11px;line-height:1.1}
+.pl-dias b{font-size:24px;color:#ffd23f}
+.pl-lista{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.pl-lista li{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--line);border-radius:12px;background:var(--bg,#f6f7fa)}
+.pl-lista li.ok{opacity:.55}.pl-lista li.ok .pl-txt b{text-decoration:line-through}
+.pl-chk{display:flex;align-items:center;gap:6px;flex:none;cursor:pointer}.pl-chk input{width:20px;height:20px}
+.pl-hora{font:600 12px/1 var(--f-body,system-ui);color:var(--muted,#5b6475);min-width:34px}
+.pl-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.pl-txt span{font-size:13px;color:var(--muted,#5b6475)}
+.pl-extra{border-style:dashed!important}
+.pl-cont{margin:4px 0 0}.pl-msg{font-size:18px;margin:14px 0}
+.pl-ciclo{display:flex;flex-wrap:wrap;gap:6px;padding:0;margin:10px 0;list-style:none;counter-reset:c}
+.pl-ciclo li{counter-increment:c;font-size:12px;padding:4px 9px;border-radius:999px;border:1px solid var(--line);background:var(--surface)}
+.pl-ciclo li::before{content:counter(c) ". ";color:var(--muted,#5b6475)}.pl-ciclo li.ok{opacity:.45}.pl-ciclo li.agora{background:#ffd23f;border-color:#e0b400;font-weight:700}
+.pl-h{margin:18px 0 6px}.pl-mats{display:flex;flex-direction:column;gap:6px}
+.pl-mat{border:1px solid var(--line);border-radius:12px;padding:9px 12px}.pl-mat>div{display:flex;flex-direction:column}.pl-mat details{margin-top:4px;font-size:13px}
+.pl-edit{display:flex;align-items:center;gap:10px}.pl-edit b{flex:1}.pl-edit select{width:auto}
 </style>
 </head>
 <body>
@@ -651,6 +670,7 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 <script src="sincronia.js"></script>
 <script src="papel-info.js"></script>
 <script src="lei-seca.js"></script>
+<script src="plano.js"></script>
 <script src="pagina-estudo.js"></script>
 <script>
 const CHAVE="meus-concursos-dados";
@@ -1740,7 +1760,7 @@ iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO = 90;
+const APP_VERSAO = 91;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{
