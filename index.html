@@ -464,7 +464,7 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .usuario{display:flex;align-items:center;gap:8px;justify-content:flex-end;font-size:13px;color:var(--muted)}
 .usuario img{width:26px;height:26px;border-radius:50%}
 .usuario button{font-size:12px;padding:5px 10px}
-.sinc{margin-right:auto;border:none;background:transparent;padding:2px 0;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;text-align:left}
+.sinc{margin-right:0;margin-left:auto;border:none;background:transparent;padding:2px 0;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;text-align:left}
 .sinc::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none}
 .sinc[data-estado="rodando"]::before,.sinc[data-estado="pendente"]::before{background:var(--accent)}
 .sinc[data-estado="offline"]::before,.sinc[data-estado="erro"]::before{background:var(--danger)}
@@ -500,6 +500,53 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .pl-h{margin:18px 0 6px}.pl-mats{display:flex;flex-direction:column;gap:6px}
 .pl-mat{border:1px solid var(--line);border-radius:12px;padding:9px 12px}.pl-mat>div{display:flex;flex-direction:column}.pl-mat details{margin-top:4px;font-size:13px}
 .pl-edit{display:flex;align-items:center;gap:10px}.pl-edit b{flex:1}.pl-edit select{width:auto}
+.pl-horas{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:6px}.pl-horas>div{display:flex;flex-direction:column;gap:2px}
+.btn-menu{display:inline-flex;align-items:center;gap:8px;margin-right:12px;padding:4px 5px 4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.btn-menu:hover{border-color:#d4af37}.btn-menu img{width:30px;height:30px;border-radius:50%;border:2px solid #d4af37}.btn-menu img[hidden]{display:none}
+#btnSair[hidden]{display:none!important}
+/* barra lateral (no estilo do Custódia Digital) */
+.pf-painel{position:fixed;inset:0 auto 0 0;margin:0;height:100%;max-height:100%;width:min(300px,88vw);max-width:100vw;padding:0;border:0;border-radius:0;background:#fff;color:#14213d;box-shadow:12px 0 40px rgba(10,16,32,.25);display:none;flex-direction:column;overflow:hidden;animation:pfEntra .22s cubic-bezier(.2,.8,.2,1)}
+.pf-painel.largo{width:min(390px,96vw)}.pf-painel[open]{display:flex}.pf-painel.saindo{animation:pfSai .18s ease-in forwards}
+.pf-painel::backdrop{background:rgba(12,18,34,.45)}
+@keyframes pfEntra{from{transform:translateX(-100%)}to{transform:none}}@keyframes pfSai{to{transform:translateX(-100%)}}
+.pf-fechar{position:absolute;top:14px;right:14px;border:0;background:none;color:#5b6782;font-size:28px;line-height:1;width:34px;height:34px;cursor:pointer;z-index:1}
+.pf-cab{display:flex;flex-direction:column;align-items:center;text-align:center;padding:42px 20px 6px;gap:3px}
+.pf-foto{width:104px;height:104px;border-radius:50%;object-fit:cover;padding:3px;border:2px dashed #14213d;margin-bottom:10px;flex:none}
+.pf-inicial{display:flex;align-items:center;justify-content:center;background:#fbf9ed;color:#14213d;font:700 40px Georgia,serif}
+.pf-nome{font:700 18px/1.25 Georgia,"Times New Roman",serif;text-transform:uppercase;letter-spacing:.01em;color:#14213d}
+.pf-email{font-size:12px;font-weight:600;color:#2c4a8a;word-break:break-all}
+.pf-onde{font-size:11.5px;color:#6b7590}
+.pf-cab.pequeno{flex-direction:row;text-align:left;padding:16px 56px 4px 18px;gap:12px;align-items:center}
+.pf-cab.pequeno .pf-foto{width:46px;height:46px;margin:0;padding:2px}.pf-cab.pequeno .pf-nome{font-size:13px}.pf-cab.pequeno .pf-email,.pf-cab.pequeno .pf-onde{display:none}
+.pf-div{border:0;border-top:1px solid #dde2ec;margin:12px 20px 14px}
+.pf-corpo{flex:1;overflow-y:auto;overflow-x:hidden;padding:0 20px 16px;display:flex;flex-direction:column;gap:10px}
+.pf-bt{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:1px solid #d5dbe6;background:#fff;color:#14213d;border-radius:10px;padding:11px 14px;font-size:14px;cursor:pointer;transition:background .12s,border-color .12s}
+.pf-bt:hover{background:#f5f7fb;border-color:#b9c3d6}.pf-bt.on{border-color:#14213d;box-shadow:inset 3px 0 0 #d4af37;font-weight:600}
+.pf-ic{width:20px;text-align:center;flex:none}
+.pf-caixa{display:flex;gap:10px;align-items:flex-start;border:1px solid #d5dbe6;background:#f5f7fb;border-radius:10px;padding:12px 14px;font-size:12px;color:#5b6782}
+.pf-caixa b{display:block;color:#14213d;font-size:13px;margin-bottom:2px}.pf-ponto{width:10px;height:10px;border-radius:50%;background:#2e9d5b;margin-top:4px;flex:none}
+.pf-bt-sair{color:#c0392b;border-color:#f0c4be}.pf-bt-sair:hover{background:#fdf1ef;border-color:#e39b91}
+.pf-versao{text-align:center;font-size:11px;color:#6b7590;margin:8px 0 0}.pf-versao i{color:#9a7a12}
+.pf-voltar{border:0;background:none;color:#5b6782;font-size:13px;padding:0;align-self:flex-start;cursor:pointer}
+.pf-secao h3{margin:0 0 4px;font-size:15px}.pf-ajuda{margin:0 0 12px;font-size:12px;color:#5b6782}
+.pf-grupo{border:1px solid #dde2ec;border-radius:12px;padding:10px;margin-bottom:10px;background:#f5f7fb}
+.pf-grupo-topo{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:8px;font-size:13px}.pf-grupo-topo span{font-size:11px;color:#5b6782;margin-left:4px}
+.pf-total{font:700 11px system-ui;color:#9a7a12!important;background:#fff6d6;padding:3px 8px;border-radius:999px;white-space:nowrap}
+.pf-linha{display:flex;align-items:center;gap:6px;margin-bottom:6px}.pf-linha span{font-size:11px;color:#5b6782}
+.pf-linha input{flex:1;min-width:0;padding:6px;font-size:13px}.pf-linha.ruim input{border-color:#c0392b;background:#fdecea}
+.pf-tirar{border:0;background:none;color:#5b6782;font-size:18px;width:24px;cursor:pointer;flex:none}
+.pf-mais{border:1px dashed #c5cdda;background:none;color:#14213d;width:100%;border-radius:10px;padding:6px;font-size:12px;cursor:pointer}
+.pf-vazio{font-size:12px;color:#5b6782;margin:0 0 6px}
+.pf-switch{position:relative;display:flex!important;flex-direction:row!important;align-items:center;gap:10px;margin:12px 0 10px;cursor:pointer;text-align:left}
+.pf-switch input{position:absolute;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none}
+.pf-trilho{width:40px;height:22px;border-radius:999px;background:#dde2ec;position:relative;flex:none;transition:background .15s}
+.pf-trilho::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px #0003;transition:transform .15s}
+.pf-switch input:checked+.pf-trilho{background:#14213d}.pf-switch input:checked+.pf-trilho::after{transform:translateX(18px);background:#ffd23f}
+.pf-switch span:last-child{display:flex;flex-direction:column;align-items:flex-start;font-size:13px;color:#14213d}.pf-switch small{color:#5b6782;font-size:11px}
+.pf-ferias{border-left:3px solid #d4af37;padding-left:10px}
+.pf-datas{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}.pf-datas label{font-size:11px;color:#5b6782;display:flex;flex-direction:column;gap:3px}.pf-datas input{padding:6px;font-size:12px;width:100%;min-width:0;box-sizing:border-box}
+.pf-rodape{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:12px 20px;border-top:1px solid #dde2ec}
+.pf-aviso{flex:1;font-size:12px;color:#c0392b}
 </style>
 </head>
 <body>
@@ -530,9 +577,9 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 
 <div class="wrap" id="app" hidden>
   <div class="usuario" id="usuario" hidden>
+    <button type="button" class="btn-menu" id="btnPerfil" title="Menu" aria-label="Abrir o menu"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><img id="usuFoto" alt="" referrerpolicy="no-referrer"><span id="usuEmail" hidden></span></button>
     <button type="button" class="sinc" id="sincStatus" title="Sincronizar agora"></button>
-    <img id="usuFoto" alt="" referrerpolicy="no-referrer"><span id="usuEmail"></span>
-    <button type="button" id="btnSair">Sair</button>
+    <button type="button" id="btnSair" hidden>Sair</button>
   </div>
   <div id="pgEstudo" hidden></div>
   <div id="pgHome">
@@ -671,6 +718,7 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 <script src="papel-info.js"></script>
 <script src="lei-seca.js"></script>
 <script src="plano.js"></script>
+<script src="perfil.js"></script>
 <script src="pagina-estudo.js"></script>
 <script>
 const CHAVE="meus-concursos-dados";
@@ -1760,7 +1808,7 @@ iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO = 92;
+const APP_VERSAO = 97;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{

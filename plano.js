@@ -140,8 +140,16 @@ function bloco(idx, ms, seq, etapa, modo) {
 // ---------- horários ----------
 function periodosHoje(data) {
   const p = perfilPlano(), d = data || hoje(), fds = d.getDay() === 0 || d.getDay() === 6;
-  const ferias = p.ferias.ate && hojeISOde(d) <= p.ferias.ate;
+  const iso = hojeISOde(d), ferias = p.ferias.ate && iso <= p.ferias.ate && (!p.ferias.de || iso >= p.ferias.de);
   const txt = ferias ? (fds ? p.ferias.fds : p.ferias.util) : (fds ? p.fds : p.util);
+  return periodosDeTexto(txt);
+}
+// "3 h nos dias úteis · 2 h no fim de semana · férias até 31/01: 8 h"
+function resumoHorarios() {
+  const p = perfilPlano(), h = t => periodosDeTexto(t).reduce((a, [x, y]) => a + Math.floor((y - x) / 60), 0), br = s => s ? s.split("-").reverse().join("/") : "";
+  return `${h(p.util)} h nos dias úteis · ${h(p.fds)} h no fim de semana${p.ferias.ate ? ` · férias${p.ferias.de ? " de " + br(p.ferias.de) : ""} até ${br(p.ferias.ate)}: ${h(p.ferias.util)} h nos dias úteis` : ""}`;
+}
+function periodosDeTexto(txt) {
   return String(txt || "").split(/[,;]/).map(s => s.trim().match(/^(\d{1,2})(?::(\d\d))?\s*(?:-|–|a|às|ate|até)\s*(\d{1,2})(?::(\d\d))?$/i)).filter(Boolean)
     .map(m => [(+m[1]) * 60 + (+m[2] || 0), (+m[3]) * 60 + (+m[4] || 0)]).filter(([a, b]) => b > a);
 }
@@ -196,7 +204,7 @@ function cabecalhoPlano(D) {
 }
 function htmlBlocosHoje(D) {
   if (D.etapa === "prova") return `<p class="pl-msg">Hoje é dia de prova. Boa prova! 🍀</p>`;
-  if (!D.blocos.length) return `<p class="note">Hoje não há horário de estudo no seu perfil. Ajuste em <b>Ajustes</b> se quiser estudar.</p>`;
+  if (!D.blocos.length) return `<p class="note">Hoje não há horário de estudo no seu perfil. Ajuste os horários em ☰ (no alto) › Editar perfil.</p>`;
   const prog = lerEst("prog", {}), revisar = (typeof julgados !== "undefined" && Array.isArray(julgados) ? julgados : []).filter(j => prog[j.id] && prog[j.id].prox <= hojeISO()).length;
   const feitos = D.blocos.filter(b => b.feito).length;
   return `<p class="note pl-cont">${feitos} de ${D.blocos.length} bloco(s) de hoje${D.etapa === "vespera" ? " · véspera: estude pouco e descanse" : ""}</p>
@@ -245,12 +253,7 @@ function htmlCiclo(D) {
 }
 function htmlAjustesPlano(D) {
   const p = perfilPlano(), ms = D.cont ? D.cont.materias : [];
-  return `<h4 class="pl-h">Seus horários de estudo</h4>
-    <p class="note">Escreva os períodos assim: <b>08:00-13:00, 16:00-19:00</b>. Cada hora vira um bloco do ciclo.</p>
-    <div class="sim-grid"><label>Dias úteis<input id="plUtil" value="${esc(p.util)}"></label><label>Sábado e domingo<input id="plFds" value="${esc(p.fds)}"></label></div>
-    <h4 class="pl-h">Férias (mais horas)</h4>
-    <div class="sim-grid"><label>Até o dia<input type="date" id="plFeriasAte" value="${esc(p.ferias.ate)}"></label><label>Dias úteis nas férias<input id="plFeriasUtil" value="${esc(p.ferias.util)}"></label><label>Fim de semana nas férias<input id="plFeriasFds" value="${esc(p.ferias.fds)}"></label></div>
-    <div class="actions" style="justify-content:flex-start"><button type="button" class="primary" data-plperfil="1">Salvar horários</button></div>
+  return `<div class="pl-horas"><div><b>Seus horários de estudo</b><span class="note">${resumoHorarios()}</span></div><button type="button" class="mini" data-abrirperfil="horarios">Editar no meu perfil</button></div>
     ${D.al ? `<h4 class="pl-h">Matérias de ${esc(D.al.titulo)}</h4>
     ${ms.length ? `<p class="note">O peso (1 a 5) é quantas horas a matéria ganha em cada volta do ciclo.</p>
       <div class="pl-mats">${ms.map((m, i) => `<div class="pl-mat pl-edit"><b>${esc(m.nome)}</b><select data-plpeso="${i}">${[1, 2, 3, 4, 5].map(n => `<option${n === m.peso ? " selected" : ""}>${n}</option>`).join("")}</select><button type="button" class="mini" data-pltirar="${i}" title="Tirar do ciclo">×</button></div>`).join("")}</div>` : `<p class="note">Ainda sem matérias.</p>`}
@@ -285,19 +288,13 @@ function redesenharPlano() {
 }
 
 document.addEventListener("click", e => {
-  const t = e.target.closest("[data-plfeito],[data-plabrir],[data-plmontar],[data-plaba],[data-plmais],[data-plperfil],[data-pltirar],[data-plincluir]"); if (!t) return;
+  const t = e.target.closest("[data-plfeito],[data-plabrir],[data-plmontar],[data-plaba],[data-plmais],[data-pltirar],[data-plincluir]"); if (!t) return;
   const d = t.dataset, al = alvoPlano();
   if (d.plfeito !== undefined) { if (al) marcarBloco(al.chave, +d.plfeito, t.checked); redesenharPlano(); return; }
   if (d.plabrir !== undefined) { abrirBlocoPlano(d.plabrir); return; }
   if (d.plaba) { abrirPlano(d.plaba); return; }
   if (d.plmontar && al) { lerConteudoDoEdital(al); return; }
   if (d.plmais && al) { const k = "dia:" + hojeISO(), p = plano(), dia = p[k]; if (dia) { const pos = posicaoPlano(al.chave); let i = Math.max(pos.cursor, ...dia.lista) + 1; while (pos.feitos.includes(i)) i++; dia.lista.push(i); gravarEst("plano", p); } redesenharPlano(); return; }
-  if (d.plperfil) {
-    const v = id => ($(id) || {}).value || "";
-    gravarPlano("perfil", { util: v("plUtil"), fds: v("plFds"), ferias: { ate: v("plFeriasAte"), util: v("plFeriasUtil"), fds: v("plFeriasFds") } });
-    // o dia de hoje é refeito com os novos horários
-    gravarPlano("dia:" + hojeISO(), undefined); toast("Horários salvos."); redesenharPlano(); return;
-  }
   if ((d.pltirar !== undefined || d.plincluir) && al) {
     const c = conteudoPlano(al) || { quando: hojeISO(), materias: [] };
     if (d.pltirar !== undefined) c.materias.splice(+d.pltirar, 1);
