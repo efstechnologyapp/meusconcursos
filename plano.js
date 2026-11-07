@@ -21,11 +21,19 @@ function alvoPlano() {
     if (!melhor || f.data < melhor.f.data) melhor = { x, i: a.prox.i, f, dias };
   }
   if (!melhor) return null;
-  const { x, i, f } = melhor, datas = datasDaEtapa(x, i);
-  const et = etapaDaFase(f), fases = (x.fases || []).filter((z, k) => k === i || (et && etapaDaFase(z) === et && datas.includes(z.data)));
+  const { x, i, f } = melhor, etapaDatas = datasDaEtapa(x, i), d0 = parseData(f.data);
+  // entram no plano todas as provas ainda por fazer que caem na mesma janela: a mesma etapa (ex.: TJMG 16, 17 e 18/01)
+  // ou outra etapa aplicada no mesmo dia ou até 3 dias depois (ex.: PC-BA, objetiva e discursiva no mesmo dia)
+  const et = etapaDaFase(f), fases = (x.fases || []).filter((z, k) => k === i || (z.data && z.situacao === "Aguardando" &&
+    ((et && etapaDaFase(z) === et && etapaDatas.includes(z.data)) || (parseData(z.data) - d0) / 864e5 >= 0 && (parseData(z.data) - d0) / 864e5 <= 3)));
+  const datas = [...new Set(fases.map(z => z.data))].sort();
+  const etapas = [...new Set(fases.map(etapaDaFase).filter(Boolean))];
+  const escrita = fases.some(z => temEscritaPlano(z)), objetiva = fases.some(z => temObjetivaPlano(z));
+  const rotulo = etapas.length > 1 ? etapas.map(e => e + "ª").join(" e ") + " etapas" : fases.length > 1 && et ? et + "ª etapa" : f.nome || "Prova";
   return { ...melhor, chave: `${x.id}:${f.uid}`, datas, fases, nome: x.nome, cargo: x.cargo || "",
-    escrita: fases.some(z => temEscritaPlano(z)), titulo: `${siglaOuNome(x)} · ${fases.length > 1 && et ? et + "ª etapa" : f.nome || "Prova"}` };
+    escrita, modo: escrita && objetiva ? "misto" : escrita ? "esc" : "obj", titulo: `${siglaOuNome(x)} · ${rotulo}` };
 }
+function temObjetivaPlano(f) { return (f.objetivas && ((f.objetivas.blocos || []).length || +f.objetivas.total)) || /objetiv/i.test(f.nome || "") || /objetiv/i.test(f.formato || ""); }
 function temEscritaPlano(f) { return (f.escritas && f.escritas.length) || /discurs|senten|escrit|pe[cç]a|prátic|pratic/i.test(f.nome || "") || /escrit|discurs/i.test(f.formato || ""); }
 function siglaOuNome(x) { return x.sigla || (String(x.nome || "").length > 28 ? siglaDoOrgao(x.nome) : x.nome); }
 function descricaoFases(al) {
@@ -42,14 +50,18 @@ async function lerConteudoDoEdital(al) {
   if (planoUi.lendo) return;
   planoUi.lendo = al.chave; planoUi.erro = ""; redesenharPlano();
   try {
-    let texto = "";
+    let texto = "", pdfParte = null;
     if (al.x.edital_arquivo) {
       const blob = await arq("ler", `${al.x.id}:edital`).catch(() => null) || await baixarDaNuvem(`${al.x.id}:edital`).catch(() => null);
       if (blob) {
-        const t = await textoDoPdf(blob, 400), u = semAcentoEst(t);
-        let ini = u.search(/conteudo programatico|programa das (disciplinas|materias)|conteudos programaticos/);
-        if (ini < 0) ini = Math.max(0, t.length - 120000);
-        texto = t.slice(ini, ini + 120000);
+        // a IA lê o PDF inteiro (sem o limite de tamanho do texto); só se o arquivo for grande demais vai o texto extraído
+        if (blob.size < 10e6) pdfParte = { inline_data: { mime_type: "application/pdf", data: await blobBase64(blob) } };
+        else {
+          const t = (await textoDoPdf(blob, 400)).replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n"), u = semAcentoEst(t);
+          let ini = u.search(/conteudo programatico|programa das (disciplinas|materias)|conteudos programaticos/);
+          if (ini < 0) ini = Math.max(0, t.length - 50000);
+          texto = t.slice(ini, ini + 50000);   // o servidor aceita até 60 mil caracteres por pedido
+        }
       }
     }
     const r = await gemini(`Você monta planos de estudo para concursos jurídicos.
@@ -57,9 +69,9 @@ Concurso: ${al.nome}${al.cargo ? " — cargo: " + al.cargo : ""}.
 Etapa que o candidato vai fazer agora (a próxima prova):
 ${descricaoFases(al)}
 
-${texto ? "CONTEÚDO PROGRAMÁTICO DO EDITAL (trecho):\n" + texto : "(o edital não está disponível: use o que se sabe do formato da prova e do cargo)"}
+${pdfParte ? "O EDITAL ESTÁ NO PDF ANEXO: use o conteúdo programático dele." : texto ? "O trecho do conteúdo programático do edital vem no fim deste pedido." : "(o edital não está disponível: use o que se sabe do formato da prova e do cargo)"}
 
-Liste as matérias cobradas NESTA etapa. Se o edital separar o conteúdo por etapa/prova, use só o desta etapa.
+Liste as matérias cobradas nas provas acima (todas elas: se houver prova objetiva e discursiva no mesmo dia, junte as matérias das duas; uma matéria que aparece nas duas entra uma vez só, com peso maior).
 Se a etapa tiver sentenças ou peças práticas, inclua também uma matéria do tipo "peca" para cada tipo exigido (ex.: "Sentença cível", "Sentença criminal").
 Para cada matéria:
 - nome: curto (ex.: "Direito Penal", "Direito Processual Civil")
@@ -67,14 +79,21 @@ Para cada matéria:
 - tipo: "teoria" ou "peca"
 - lei: a categoria de lei seca que mais combina, uma destas: ${MATERIAS_LEI.join(", ")} (ou "" se nenhuma)
 - topicos: até 12 tópicos principais, curtos (até 8 palavras), na ordem do edital
-Responda só com JSON: {"materias":[{"nome":"","peso":3,"tipo":"teoria","lei":"","topicos":[""]}]}`, { ms: 180000 });
-    const ms = ((r && r.materias) || []).filter(m => m && m.nome).map(m => ({ nome: String(m.nome).trim(), peso: Math.min(5, Math.max(1, Math.round(+m.peso || 3))), tipo: m.tipo === "peca" ? "peca" : "teoria",
+Responda só com JSON: {"materias":[{"nome":"","peso":3,"tipo":"teoria","lei":"","topicos":[""]}]}${texto && !pdfParte ? "\n\nCONTEÚDO PROGRAMÁTICO DO EDITAL (trecho):\n" + texto : ""}`, { ms: 180000, ...(pdfParte ? { partes: [pdfParte] } : {}) });
+    const ms = listaDeMaterias(r).map(m => ({ ...m, nome: m.nome || m.name || m.materia || m.disciplina })).filter(m => m.nome).map(m => ({ nome: String(m.nome).trim(), peso: Math.min(5, Math.max(1, Math.round(+m.peso || 3))), tipo: m.tipo === "peca" ? "peca" : "teoria",
       lei: MATERIAS_LEI.includes(m.lei) ? m.lei : "", topicos: (m.topicos || []).map(String).filter(Boolean).slice(0, 12) }));
-    if (!ms.length) throw new Error("a IA não encontrou as matérias");
-    gravarPlano("cont:" + al.chave, { quando: hojeISO(), materias: ms, doEdital: !!texto });
+    if (!ms.length) { console.warn("resposta da IA", r); throw new Error("a IA respondeu sem a lista de matérias" + (texto || pdfParte ? "" : " (não consegui ler o texto do edital)")); }
+    gravarPlano("cont:" + al.chave, { quando: hojeISO(), materias: ms, doEdital: !!(texto || pdfParte) });
   } catch (e) { planoUi.erro = "Não consegui montar as matérias: " + (e.message || e) + ". Tente de novo ou inclua as matérias à mão em Ajustes."; }
   planoUi.lendo = ""; redesenharPlano();
 }
+// a IA às vezes devolve a lista solta ou com outro nome de campo: acha a primeira lista de objetos com nome
+function listaDeMaterias(r) {
+  if (Array.isArray(r)) return r.length && typeof r[0] === "object" && !Array.isArray(r[0]) && !("nome" in r[0] || "name" in r[0] || "materia" in r[0] || "disciplina" in r[0]) ? r.flatMap(listaDeMaterias) : r.filter(x => x && typeof x === "object");
+  if (r && typeof r === "object") { if (Array.isArray(r.materias)) return r.materias; for (const v of Object.values(r)) { const l = listaDeMaterias(v); if (l.length) return l; } }
+  return [];
+}
+function blobBase64(blob) { return new Promise((ok, falha) => { const f = new FileReader(); f.onload = () => ok(String(f.result).split(",")[1]); f.onerror = falha; f.readAsDataURL(blob); }); }
 const conteudoPlano = al => al && plano()["cont:" + al.chave];
 
 // ---------- ciclo ----------
@@ -98,20 +117,22 @@ function etapaPlano(al, cont) {
 }
 const NOME_ETAPA = { base: "Base (teoria + lei seca)", revisao: "Revisão e prática", final: "Reta final", vespera: "Véspera", prova: "Dia da prova" };
 // o que fazer em cada bloco: depende da etapa, do tipo da prova (escrita ou objetiva) e do tipo da matéria
-function atividadeBloco(m, n, etapa, escrita) {
-  if (m.tipo === "peca") return etapa === "final" ? { txt: "Sentença completa no tempo de prova", area: "pecas" }
-    : n % 2 ? { txt: "Treinar estrutura e fundamentação da sentença", area: "pecas" } : { txt: "Redigir 1 sentença e corrigir pelo espelho", area: "pecas" };
+function atividadeBloco(m, n, etapa, modo) {
+  if (m.tipo === "peca") return etapa === "final" ? { txt: "Peça/sentença completa no tempo de prova", area: "pecas" }
+    : n % 2 ? { txt: "Treinar estrutura e fundamentação da peça", area: "pecas" } : { txt: "Redigir 1 peça/sentença e corrigir pelo espelho", area: "pecas" };
+  const obj = { txt: "Questões objetivas", area: "info" }, disc = { txt: "Questão discursiva (informativos)", area: "info" };
+  const pratica = modo === "misto" ? [obj, disc] : modo === "esc" ? [disc] : [obj];
   const op = {
-    base: [{ txt: "Teoria + lei seca", area: "lei" }, escrita ? { txt: "Questão discursiva (informativos)", area: "info" } : { txt: "Questões objetivas", area: "info" }],
-    revisao: [escrita ? { txt: "Questões discursivas", area: "info" } : { txt: "Questões objetivas", area: "info" }, { txt: "Revisão: lei seca e julgados", area: "lei" }],
-    final: [escrita ? { txt: "Discursiva cronometrada", area: "provas" } : { txt: "Simulado da banca", area: "provas" }, { txt: "Revisão dos erros e artigos difíceis", area: "lei" }]
+    base: modo === "misto" ? [{ txt: "Teoria + lei seca", area: "lei" }, obj, { txt: "Teoria + lei seca", area: "lei" }, disc] : [{ txt: "Teoria + lei seca", area: "lei" }, pratica[0]],
+    revisao: [...pratica, { txt: "Revisão: lei seca e julgados", area: "lei" }],
+    final: [...(modo === "obj" ? [{ txt: "Simulado da banca", area: "provas" }] : modo === "esc" ? [{ txt: "Discursiva cronometrada", area: "provas" }] : [{ txt: "Simulado da banca", area: "provas" }, { txt: "Discursiva cronometrada", area: "provas" }]), { txt: "Revisão dos erros e artigos difíceis", area: "lei" }]
   }[etapa] || [{ txt: "Revisão leve", area: "lei" }];
   return op[n % op.length];
 }
-function bloco(idx, ms, seq, etapa, escrita) {
+function bloco(idx, ms, seq, etapa, modo) {
   const L = seq.length, i = seq[idx % L], m = ms[i];
   const n = Math.floor(idx / L) * m.peso + seq.slice(0, idx % L).filter(x => x === i).length;   // quantas vezes a matéria já apareceu
-  const at = atividadeBloco(m, n, etapa, escrita);
+  const at = atividadeBloco(m, n, etapa, modo);
   const topico = m.topicos && m.topicos.length ? m.topicos[(etapa === "base" ? Math.floor(n / 2) : n) % m.topicos.length] : "";
   return { idx, m, ...at, topico };
 }
@@ -160,7 +181,7 @@ function dadosPlano() {
   const ms = cont.materias, seq = sequenciaCiclo(ms), etapa = etapaPlano(al, cont), pos = posicaoPlano(al.chave);
   const horas = horariosHoje(), n = etapa === "prova" ? 0 : etapa === "vespera" ? Math.min(1, horas.length) : horas.length;
   const dia = diaDeHoje(al, n);
-  const blocos = dia.lista.map((i, k) => ({ ...bloco(i, ms, seq, etapa === "vespera" ? "final" : etapa, al.escrita), hora: horas[k], feito: blocoFeito(pos, i) }));
+  const blocos = dia.lista.map((i, k) => ({ ...bloco(i, ms, seq, etapa === "vespera" ? "final" : etapa, al.modo), hora: horas[k], feito: blocoFeito(pos, i) }));
   if (etapa === "vespera") blocos.forEach(b => { b.txt = "Revisão leve (só o que já marcou como difícil)"; b.area = "lei"; });
   return { al, cont, ms, seq, etapa, pos, dia, blocos };
 }
@@ -176,7 +197,7 @@ function cabecalhoPlano(D) {
 function htmlBlocosHoje(D) {
   if (D.etapa === "prova") return `<p class="pl-msg">Hoje é dia de prova. Boa prova! 🍀</p>`;
   if (!D.blocos.length) return `<p class="note">Hoje não há horário de estudo no seu perfil. Ajuste em <b>Ajustes</b> se quiser estudar.</p>`;
-  const prog = lerEst("prog", {}), revisar = (typeof julgados !== "undefined" ? julgados : []).filter(j => prog[j.id] && prog[j.id].prox <= hojeISO()).length;
+  const prog = lerEst("prog", {}), revisar = (typeof julgados !== "undefined" && Array.isArray(julgados) ? julgados : []).filter(j => prog[j.id] && prog[j.id].prox <= hojeISO()).length;
   const feitos = D.blocos.filter(b => b.feito).length;
   return `<p class="note pl-cont">${feitos} de ${D.blocos.length} bloco(s) de hoje${D.etapa === "vespera" ? " · véspera: estude pouco e descanse" : ""}</p>
     <ul class="pl-lista">${D.blocos.map(b => `<li class="${b.feito ? "ok" : ""}"><label class="pl-chk"><input type="checkbox" data-plfeito="${b.idx}"${b.feito ? " checked" : ""}><span class="pl-hora">${b.hora != null ? hhmm(b.hora) : ""}</span></label>
@@ -256,9 +277,11 @@ function abrirPlano(aba) {
   const d = $("dlgEstudo"); if (!d.open) d.showModal(); $("estudoConteudo").scrollTop = 0;
 }
 function redesenharPlano() {
-  const d = $("dlgEstudo");
-  if (d && d.open && String(estudoAba).startsWith("plano")) desenharEstudo(estudoAba);
-  if (typeof renderEstudoPagina === "function") renderEstudoPagina();
+  try {
+    const d = $("dlgEstudo");
+    if (d && d.open && String(estudoAba).startsWith("plano")) desenharEstudo(estudoAba);
+    if (typeof renderEstudoPagina === "function") renderEstudoPagina();
+  } catch (e) { console.warn("plano: redesenho", e); }
 }
 
 document.addEventListener("click", e => {
