@@ -90,7 +90,7 @@ function salvarPerfil() {
   if (r.ferias && r.de && r.de > r.ate) { desenharPerfil(r, "A data de início das férias está depois da data final."); return; }
   const antigo = perfilPlano();
   gravarPlano("perfil", { util: txt(r.util), fds: txt(r.fds), ferias: { de: r.ferias ? r.de : "", ate: r.ferias ? r.ate : "", util: r.futil ? txt(r.futil) : antigo.ferias.util, fds: r.ffds ? txt(r.ffds) : antigo.ferias.fds } });
-  gravarPlano("dia:" + hojeISO(), undefined);   // o dia de hoje é refeito com os novos horários
+  if (typeof apagarDiaDeHoje === "function") apagarDiaDeHoje();   // o dia de hoje é refeito com os novos horários
   if (typeof redesenharPlano === "function") redesenharPlano();
   toast("Horários salvos."); pfVista = "menu"; desenharPerfil(rascunhoDoPerfil());
 }
@@ -112,7 +112,12 @@ document.addEventListener("click", e => {
     fecharPerfil();
     if (k.pfnav === "home") { const d = $("dlgEstudo"); if (d && d.open) d.close(); if (location.hash) location.hash = ""; }
     else if (k.pfnav === "estudo") { if (location.hash !== "#estudar") location.hash = "#estudar"; }
-    else setTimeout(() => { if (location.hash !== "#estudar") location.hash = "#estudar"; abrirPlano("plano-hoje"); }, 200);
+    else setTimeout(() => {
+      // abre o plano do concurso com a prova mais próxima que já tem plano montado
+      const comPlano = itens.filter(x => { const al = alvoPlano(x.id); return al && conteudoPlano(al); }).sort((a, b) => alvoPlano(a.id).f.data.localeCompare(alvoPlano(b.id).f.data));
+      if (comPlano.length) abrirPlano("plano-hoje", comPlano[0].id);
+      else { if (location.hash) location.hash = ""; toast("Monte o plano no botão abaixo do card do concurso."); }
+    }, 200);
     return;
   }
   if (k.pfsalvar) { salvarPerfil(); return; }

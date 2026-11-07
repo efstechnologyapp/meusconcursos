@@ -52,7 +52,6 @@ function renderEstudoPagina() {
       stats: nPecas == null ? "Abrindo a pasta no Drive…" : `${nPecas} peça(s)${nPecas ? ` · ${respondidas(["peca"])} respondida(s)` : ""}`, pend: pend("pecas") }
   ];
   const html = `<header class="pe-topo"><div><button type="button" class="mini" id="peVoltar">‹ Meus concursos</button><h1 style="margin-top:10px">Estudar</h1><p class="sub">Escolha como quer estudar hoje.</p></div></header>
-    ${typeof htmlCartaoPlano === "function" ? htmlCartaoPlano() : ""}
     <div class="pe-cards">${cartoes.map(c => `<button type="button" class="pe-card" data-pearea="${c.area}">${c.pend ? `<span class="badge-pend" title="prova impressa aguardando correção">${c.pend}</span>` : ""}
       <span class="pe-ic" aria-hidden="true">${ICONES_ESTUDO[c.area]}</span><h3>${c.titulo}</h3><p>${c.texto}</p>
       ${c.pend ? `<p class="pe-pend">${c.pend} prova(s) impressa(s) aguardando correção</p>` : ""}<p class="pe-stats">${esc(c.stats)}</p></button>`).join("")}</div>

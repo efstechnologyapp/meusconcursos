@@ -9,12 +9,15 @@ const PERFIL_PADRAO = { util: "16:00-19:00", fds: "08:00-10:00", ferias: { ate: 
 const plano = () => lerEst("plano", {}) || {};
 function gravarPlano(k, v) { const p = plano(); if (v === undefined) delete p[k]; else p[k] = v; gravarEst("plano", p); }
 const perfilPlano = () => { const p = plano().perfil || {}; return { ...PERFIL_PADRAO, ...p, ferias: { ...PERFIL_PADRAO.ferias, ...(p.ferias || {}) } }; };
-let planoUi = { lendo: "", erro: "" };
+let planoUi = { lendo: {}, erro: {}, cid: "" };   // cid: concurso cujo plano está aberto
 
 // ---------- prova-alvo: sempre a mais próxima ----------
-function alvoPlano() {
+// prova-alvo de um concurso (a próxima prova dele) ou, sem concurso indicado, a mais próxima de todas
+function alvoPlano(cid) {
+  cid = cid === undefined ? planoUi.cid : cid;
   let melhor = null;
   for (const x of (typeof itens !== "undefined" ? itens : [])) {
+    if (cid && x.id !== cid) continue;
     const a = andamento(x); if (!a.ativo || !a.prox) continue;
     const f = a.prox.f, dias = diasAte(f.data);
     if (dias == null || dias < 0) continue;
@@ -47,8 +50,8 @@ function descricaoFases(al) {
 
 // ---------- matérias da etapa (IA lê o edital) ----------
 async function lerConteudoDoEdital(al) {
-  if (planoUi.lendo) return;
-  planoUi.lendo = al.chave; planoUi.erro = ""; redesenharPlano();
+  if (planoUi.lendo[al.chave]) return;
+  planoUi.lendo[al.chave] = true; delete planoUi.erro[al.chave]; redesenharPlano();
   try {
     let texto = "", pdfParte = null;
     if (al.x.edital_arquivo) {
@@ -84,8 +87,9 @@ Responda só com JSON: {"materias":[{"nome":"","peso":3,"tipo":"teoria","lei":""
       lei: MATERIAS_LEI.includes(m.lei) ? m.lei : "", topicos: (m.topicos || []).map(String).filter(Boolean).slice(0, 12) }));
     if (!ms.length) { console.warn("resposta da IA", r); throw new Error("a IA respondeu sem a lista de matérias" + (texto || pdfParte ? "" : " (não consegui ler o texto do edital)")); }
     gravarPlano("cont:" + al.chave, { quando: hojeISO(), materias: ms, doEdital: !!(texto || pdfParte) });
-  } catch (e) { planoUi.erro = "Não consegui montar as matérias: " + (e.message || e) + ". Tente de novo ou inclua as matérias à mão em Ajustes."; }
-  planoUi.lendo = ""; redesenharPlano();
+    if (typeof toast === "function") toast(`Plano de estudos de ${al.titulo} pronto.`);
+  } catch (e) { planoUi.erro[al.chave] = "Não consegui montar as matérias: " + (e.message || e) + "."; if (typeof toast === "function") toast("Não consegui montar o plano. Tente de novo."); }
+  delete planoUi.lendo[al.chave]; redesenharPlano();
 }
 // a IA às vezes devolve a lista solta ou com outro nome de campo: acha a primeira lista de objetos com nome
 function listaDeMaterias(r) {
@@ -153,6 +157,8 @@ function periodosDeTexto(txt) {
   return String(txt || "").split(/[,;]/).map(s => s.trim().match(/^(\d{1,2})(?::(\d\d))?\s*(?:-|–|a|às|ate|até)\s*(\d{1,2})(?::(\d\d))?$/i)).filter(Boolean)
     .map(m => [(+m[1]) * 60 + (+m[2] || 0), (+m[3]) * 60 + (+m[4] || 0)]).filter(([a, b]) => b > a);
 }
+// refaz os blocos de hoje (de todos os planos) — depois de mudar horários ou matérias
+function apagarDiaDeHoje() { const p = plano(), k = "dia:" + hojeISO(); Object.keys(p).forEach(c => { if (c === k || c.startsWith(k + ":")) delete p[c]; }); gravarEst("plano", p); }
 const hojeISOde = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const hhmm = m => `${Math.floor(m / 60)}h${m % 60 ? String(m % 60).padStart(2, "0") : ""}`;
 function horariosHoje() { const s = []; periodosHoje().forEach(([a, b]) => { for (let t = a; t + 60 <= b; t += 60) s.push(t); }); return s; }
@@ -161,14 +167,14 @@ function horariosHoje() { const s = []; periodosHoje().forEach(([a, b]) => { for
 function posicaoPlano(chave) { return { cursor: 0, feitos: [], ...(plano()["pos:" + chave] || {}) }; }
 const blocoFeito = (pos, i) => i < pos.cursor || pos.feitos.includes(i);
 function diaDeHoje(al, n) {
-  const k = "dia:" + hojeISO(), d = plano()[k];
+  const k = "dia:" + hojeISO() + ":" + al.chave, d = plano()[k];
   if (d && d.alvo === al.chave) return d;
   const pos = posicaoPlano(al.chave), lista = [];
   for (let i = pos.cursor; lista.length < n && i < pos.cursor + 500; i++) if (!pos.feitos.includes(i)) lista.push(i);
   const novo = { alvo: al.chave, lista };
   // limpa dias com mais de 3 semanas
   const p = plano(), lim = hojeISOde(new Date(Date.now() - 21 * 864e5));
-  Object.keys(p).forEach(c => { if (c.startsWith("dia:") && c.slice(4) < lim) delete p[c]; });
+  Object.keys(p).forEach(c => { if (c.startsWith("dia:") && c.slice(4, 14) < lim) delete p[c]; });
   p[k] = novo; gravarEst("plano", p);
   return novo;
 }
@@ -183,8 +189,8 @@ function marcarBloco(chave, idx, feito) {
 }
 
 // ---------- telas ----------
-function dadosPlano() {
-  const al = alvoPlano(); if (!al) return { al };
+function dadosPlano(cid) {
+  const al = alvoPlano(cid); if (!al) return { al };
   const cont = conteudoPlano(al); if (!cont || !cont.materias.length) return { al, cont };
   const ms = cont.materias, seq = sequenciaCiclo(ms), etapa = etapaPlano(al, cont), pos = posicaoPlano(al.chave);
   const horas = horariosHoje(), n = etapa === "prova" ? 0 : etapa === "vespera" ? Math.min(1, horas.length) : horas.length;
@@ -200,7 +206,7 @@ function rotuloDiasPlano(ds) {
 }
 function cabecalhoPlano(D) {
   const al = D.al, d = al.dias;
-  return `<div class="pl-alvo"><span class="pl-dias"><b>${d}</b> ${d === 1 ? "dia" : "dias"}</span><div><b>${esc(al.titulo)}</b><span class="note">${rotuloDiasPlano(al.datas)} · foco sempre na prova mais próxima${D.etapa ? ` · etapa: <b>${NOME_ETAPA[D.etapa]}</b>` : ""}</span></div></div>`;
+  return `<div class="pl-alvo"><span class="pl-dias"><b>${d}</b> ${d === 1 ? "dia" : "dias"}</span><div><b>${esc(al.titulo)}</b><span class="note">${rotuloDiasPlano(al.datas)} · ${D.al.x.cargo ? esc(D.al.x.cargo) : "próxima prova deste concurso"}${D.etapa ? ` · etapa: <b>${NOME_ETAPA[D.etapa]}</b>` : ""}</span></div></div>`;
 }
 function htmlBlocosHoje(D) {
   if (D.etapa === "prova") return `<p class="pl-msg">Hoje é dia de prova. Boa prova! 🍀</p>`;
@@ -216,10 +222,23 @@ function htmlBlocosHoje(D) {
 }
 function htmlSemPlano(D) {
   if (!D.al) return `<p class="note">Nenhuma prova com data marcada nos concursos em andamento. Quando você cadastrar a data, o plano é montado para a prova mais próxima.</p>`;
-  if (planoUi.lendo === D.al.chave) return `${cabecalhoPlano(D)}<p class="note">⏳ A IA está lendo o edital e separando as matérias desta etapa… (até 2 minutos)</p>`;
-  return `${cabecalhoPlano(D)}${planoUi.erro ? `<p class="lei-msg">${esc(planoUi.erro)}</p>` : ""}
+  if (planoUi.lendo[D.al.chave]) return `${cabecalhoPlano(D)}<p class="note">⏳ A IA está lendo o edital e separando as matérias desta etapa… (até 2 minutos)</p>`;
+  return `${cabecalhoPlano(D)}${planoUi.erro[D.al.chave] ? `<p class="lei-msg">${esc(planoUi.erro[D.al.chave])}</p>` : ""}
     <p class="note">Para montar o ciclo, a IA lê o conteúdo programático do ${D.al.x.edital_arquivo ? "edital anexado a este concurso" : "cargo (este concurso não tem edital anexado)"} e separa as matérias desta etapa com o peso de cada uma. Depois você pode ajustar.</p>
     <div class="actions" style="justify-content:flex-start"><button type="button" class="primary" data-plmontar="1">Montar meu plano</button></div>`;
+}
+// botão embaixo do card de cada concurso em andamento: "Montar" → (montando…) → "Acessar plano de estudos"
+function botaoPlanoHTML(x) {
+  const al = alvoPlano(x.id); if (!al) return "";
+  if (planoUi.lendo[al.chave]) return `<div class="pl-cardbt"><button type="button" class="pl-bt montando" disabled><span class="pl-gira"></span>Montando o plano de estudos…</button><span class="note">a IA está lendo o edital (até 2 min)</span></div>`;
+  const cont = conteudoPlano(al);
+  if (cont && cont.materias && cont.materias.length) {
+    let info = "";
+    try { const D = dadosPlano(x.id); if (D.blocos) { const f = D.blocos.filter(b => b.feito).length; info = D.blocos.length ? `hoje: ${f} de ${D.blocos.length} bloco(s)` : "hoje sem blocos"; } } catch (e) {}
+    return `<div class="pl-cardbt"><button type="button" class="pl-bt pronto" data-placessar="${esc(x.id)}">🗓️ Acessar plano de estudos</button>${info ? `<span class="note">${info}</span>` : ""}</div>`;
+  }
+  const erro = planoUi.erro[al.chave];
+  return `<div class="pl-cardbt"><button type="button" class="pl-bt" data-plmontarcid="${esc(x.id)}">✨ ${erro ? "Tentar montar de novo" : "Montar plano de estudos"}</button>${erro ? `<span class="note pl-erro">${esc(erro)}</span>` : ""}</div>`;
 }
 // cartão no topo da página Estudar
 function htmlCartaoPlano() {
@@ -236,7 +255,7 @@ function htmlPlanoModal(aba) {
   else if (!D.blocos) corpo = htmlSemPlano(D);
   else if (aba === "plano-ciclo") corpo = cabecalhoPlano(D) + htmlCiclo(D);
   else corpo = cabecalhoPlano(D) + htmlBlocosHoje(D);
-  return `<div class="dlg-head"><div style="flex:1;min-width:0"><h2>Plano de estudos</h2><p class="sub">Ciclo de matérias para a prova mais próxima · ajusta sozinho quando você pula um dia</p></div><button type="button" class="close" data-close aria-label="Fechar">×</button></div>${abas}<div class="est-corpo">${corpo}</div>`;
+  return `<div class="dlg-head"><div style="flex:1;min-width:0"><h2>Plano de estudos${D.al ? " · " + esc(siglaOuNome(D.al.x)) : ""}</h2><p class="sub">Ciclo de matérias até a prova · ajusta sozinho quando você pula um dia</p></div><button type="button" class="close" data-close aria-label="Fechar">×</button></div>${abas}<div class="est-corpo">${corpo}</div>`;
 }
 function htmlCiclo(D) {
   const L = D.seq.length, feitosPorMat = D.ms.map(() => 0);
@@ -244,7 +263,7 @@ function htmlCiclo(D) {
   const total = feitosPorMat.reduce((a, b) => a + b, 0), volta = Math.floor(D.pos.cursor / L) + 1, noCiclo = D.pos.cursor % L;
   // horas da semana (últimos 7 dias)
   const p = plano(); let sem = 0, semPlan = 0;
-  for (let k = 0; k < 7; k++) { const d = p["dia:" + hojeISOde(new Date(Date.now() - k * 864e5))]; if (d && d.alvo === D.al.chave) { semPlan += d.lista.length; sem += d.lista.filter(i => blocoFeito(D.pos, i)).length; } }
+  for (let k = 0; k < 7; k++) { const d = p["dia:" + hojeISOde(new Date(Date.now() - k * 864e5)) + ":" + D.al.chave]; if (d && d.alvo === D.al.chave) { semPlan += d.lista.length; sem += d.lista.filter(i => blocoFeito(D.pos, i)).length; } }
   return `<p class="note">Volta ${volta} do ciclo · bloco ${noCiclo + 1} de ${L} · ${total} hora(s) de estudo registradas neste plano · últimos 7 dias: ${sem} de ${semPlan} bloco(s)</p>
     <ol class="pl-ciclo">${D.seq.map((mi, k) => `<li class="${k < noCiclo ? "ok" : k === noCiclo ? "agora" : ""}">${esc(D.ms[mi].nome)}</li>`).join("")}</ol>
     <h4 class="pl-h">Matérias desta etapa</h4>
@@ -275,7 +294,8 @@ function abrirBlocoPlano(idx) {
   }
   abrirAreaEstudo(b.area);
 }
-function abrirPlano(aba) {
+function abrirPlano(aba, cid) {
+  if (cid !== undefined) planoUi.cid = cid;
   estudoAba = ""; desenharEstudo(aba || "plano-hoje");
   const d = $("dlgEstudo"); if (!d.open) d.showModal(); $("estudoConteudo").scrollTop = 0;
 }
@@ -284,26 +304,29 @@ function redesenharPlano() {
     const d = $("dlgEstudo");
     if (d && d.open && String(estudoAba).startsWith("plano")) desenharEstudo(estudoAba);
     if (typeof renderEstudoPagina === "function") renderEstudoPagina();
+    if (typeof render === "function" && $("proximos")) render();   // botões dos cards dos concursos
   } catch (e) { console.warn("plano: redesenho", e); }
 }
 
 document.addEventListener("click", e => {
+  const c = e.target.closest("[data-plmontarcid],[data-placessar]");
+  if (c) { if (c.dataset.placessar) abrirPlano("plano-hoje", c.dataset.placessar); else { const a = alvoPlano(c.dataset.plmontarcid); if (a) lerConteudoDoEdital(a); } return; }
   const t = e.target.closest("[data-plfeito],[data-plabrir],[data-plmontar],[data-plaba],[data-plmais],[data-pltirar],[data-plincluir]"); if (!t) return;
   const d = t.dataset, al = alvoPlano();
   if (d.plfeito !== undefined) { if (al) marcarBloco(al.chave, +d.plfeito, t.checked); redesenharPlano(); return; }
   if (d.plabrir !== undefined) { abrirBlocoPlano(d.plabrir); return; }
   if (d.plaba) { abrirPlano(d.plaba); return; }
   if (d.plmontar && al) { lerConteudoDoEdital(al); return; }
-  if (d.plmais && al) { const k = "dia:" + hojeISO(), p = plano(), dia = p[k]; if (dia) { const pos = posicaoPlano(al.chave); let i = Math.max(pos.cursor, ...dia.lista) + 1; while (pos.feitos.includes(i)) i++; dia.lista.push(i); gravarEst("plano", p); } redesenharPlano(); return; }
+  if (d.plmais && al) { const k = "dia:" + hojeISO() + ":" + al.chave, p = plano(), dia = p[k]; if (dia) { const pos = posicaoPlano(al.chave); let i = Math.max(pos.cursor, ...dia.lista) + 1; while (pos.feitos.includes(i)) i++; dia.lista.push(i); gravarEst("plano", p); } redesenharPlano(); return; }
   if ((d.pltirar !== undefined || d.plincluir) && al) {
     const c = conteudoPlano(al) || { quando: hojeISO(), materias: [] };
     if (d.pltirar !== undefined) c.materias.splice(+d.pltirar, 1);
     else { const nome = ($("plNovaMat") || {}).value.trim(); if (!nome) { toast("Escreva o nome da matéria."); return; } c.materias.push({ nome, peso: 3, tipo: $("plNovaTipo").value, lei: MATERIAS_LEI.find(m => semAcentoEst(nome).includes(semAcentoEst(m))) || "", topicos: [] }); }
-    gravarPlano("cont:" + al.chave, c); gravarPlano("dia:" + hojeISO(), undefined); redesenharPlano(); return;
+    gravarPlano("cont:" + al.chave, c); apagarDiaDeHoje(); redesenharPlano(); return;
   }
 });
 document.addEventListener("change", e => {
   const s = e.target.closest("[data-plpeso]"); if (!s) return;
   const al = alvoPlano(), c = al && conteudoPlano(al); if (!c) return;
-  c.materias[+s.dataset.plpeso].peso = +s.value; gravarPlano("cont:" + al.chave, c); gravarPlano("dia:" + hojeISO(), undefined); redesenharPlano();
+  c.materias[+s.dataset.plpeso].peso = +s.value; gravarPlano("cont:" + al.chave, c); apagarDiaDeHoje(); redesenharPlano();
 });

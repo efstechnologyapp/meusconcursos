@@ -81,6 +81,7 @@ function redesenharAposSync() {
   const d = $("dlgEstudo");
   if (d && d.open && typeof estudoAba === "string" && estudoAba && !(typeof estudo !== "undefined" && estudo)) desenharEstudo(estudoAba);
   if (typeof renderEstudoPagina === "function") renderEstudoPagina();
+  if (typeof render === "function" && $("proximos")) render();   // botões do plano nos cards
 }
 // mudanças daqui sobem em poucos segundos; mudanças de outros aparelhos chegam a cada minuto e sempre que o app volta para a tela
 setInterval(() => {
