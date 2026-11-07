@@ -193,7 +193,7 @@ function iaLigada() { return !!(usuarioAtual && usuarioAtual.sessao) && !iaIndis
 async function gemini(prompt, opc) {
   // limite de espera: sem resposta em 90 s, o app segue com a questão simples; opc.partes = imagens/PDF anexos
   const o = opc || {};
-  const r = await Promise.race([postScript({ acao: "gemini", sessao: usuarioAtual.sessao, prompt, ...(o.partes ? { partes: o.partes } : {}) }),
+  const r = await Promise.race([postScript({ acao: "gemini", sessao: usuarioAtual.sessao, prompt, ...(o.partes ? { partes: o.partes } : {}), ...(o.temperatura != null ? { temperatura: o.temperatura } : {}) }),
     new Promise((_, falha) => setTimeout(() => falha(new Error("a IA demorou demais para responder")), o.ms || 90000))]);
   if (!r.ok) {
     if (r.semChave || /desconhecida/i.test(r.erro || "")) iaIndisponivel = r.semChave ? r.erro : "O Apps Script ainda não tem a IA: atualize o script (veja CONFIGURAR-LOGIN.md).";

@@ -557,6 +557,25 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .pl-gira{width:14px;height:14px;border-radius:50%;border:2px solid #b9c3d6;border-top-color:#14213d;animation:plGira .8s linear infinite}
 @keyframes plGira{to{transform:rotate(360deg)}}
 .pl-cardbt .note{font-size:12px}.pl-erro{color:#c0392b}
+.pl-met{font-size:12px;color:#9a7a12;margin-top:2px}.pl-met b{color:var(--ink)}
+.pl-aviso{border:1px solid #e9d38a;background:#fff8e1;color:#5c4a0c;border-radius:12px;padding:10px 12px;font-size:13px;margin:10px 0}
+.pl-aviso.atraso{border-color:#f0c4be;background:#fdf1ef;color:#7a2a20}
+.linkbt{border:0;background:none;padding:0;color:inherit;text-decoration:underline;font:inherit;cursor:pointer}
+.pl-metodo{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0}
+.pl-metodo>div{border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:3px;background:var(--surface)}
+.pl-metodo b{font-size:15px}.pl-metodo span:not(.pl-et){font-size:12px;color:var(--muted)}
+.pl-et{font:700 10px system-ui;letter-spacing:.12em;text-transform:uppercase;color:#9a7a12}
+.pl-tempo{list-style:none;padding:0;margin:8px 0;display:flex;gap:6px;flex-wrap:wrap}
+.pl-tempo li{flex:1 1 120px;border:1px solid var(--line);border-radius:12px;padding:9px 11px;display:flex;flex-direction:column;gap:2px;position:relative;background:var(--surface)}
+.pl-tempo li b{font-size:13px}.pl-tempo li span{font-size:12px;color:var(--muted)}
+.pl-tempo li.ok{opacity:.5}.pl-tempo li.agora{border-color:#d4af37;box-shadow:inset 0 0 0 1px #d4af37;background:#fffaf0}
+.pl-tempo li.prova{background:#14213d;border-color:#14213d}.pl-tempo li.prova b{color:#ffd23f}.pl-tempo li.prova span{color:#c9d2e6}
+.pl-mat-topo{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.pl-barra{height:6px;border-radius:999px;background:var(--line);overflow:hidden;margin:6px 0 2px}.pl-barra span{display:block;height:100%;background:linear-gradient(90deg,#14213d,#d4af37)}
+.pl-tops{margin:6px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:3px}
+.pl-tops li{font-size:13px}.pl-tops li small{color:var(--muted);margin-left:6px;font-size:11px}
+.pl-tops li.ok span{text-decoration:line-through;opacity:.6}.pl-tops li.fora span{color:var(--muted)}.pl-tops li.fora small{color:#c0392b}
+@media (max-width:620px){.pl-metodo{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -1820,7 +1839,7 @@ iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO = 98;
+const APP_VERSAO = 99;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{
