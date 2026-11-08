@@ -500,7 +500,7 @@ function htmlPecas() {
   h += htmlEnvio("peca");
   if (repo.erro) return h + `<p class="note">${esc(repo.erro)}</p>`;
   h += lista.length ? lista.map(i => `<div class="prov-item"><div class="prov-tit"><b>${esc(i.nome)}</b><span class="note">${esc(i.pastaCargo || i.cargo)}${i.gab ? " · espelho: " + esc(i.gabNome) : " · sem espelho separado"}${seloRespondida(i)}</span></div>
-      <div class="prov-acoes"><button type="button" class="primary" data-provsim="${esc(i.id)}">Fazer esta peça</button><button type="button" data-pecanova="${esc(i.id)}">Caso novo no estilo desta peça</button>${botaoSeparar(i)}${modeloDaPeca(i) ? `<button type="button" data-modabrir="${esc(i.id)}">${modAberto === i.id ? "Fechar resposta-modelo" : "📘 Resposta-modelo e dicas"}</button>` : ""}</div>${htmlQualPeca(i)}${modAberto === i.id && modeloDaPeca(i) ? htmlModelo(modeloDaPeca(i)) : ""}</div>`).join("")
+      <div class="prov-acoes"><button type="button" class="primary" data-provsim="${esc(i.id)}">Fazer esta peça</button>${modeloDaPeca(i) ? `<button type="button" data-modabrir="${esc(i.id)}">${modAberto === i.id ? "Fechar resposta-modelo" : "📘 Resposta-modelo e dicas"}</button>` : ""}<button type="button" data-pecanova="${esc(i.id)}">Caso novo no estilo desta peça</button>${botaoSeparar(i)}</div>${htmlQualPeca(i)}${modAberto === i.id && modeloDaPeca(i) ? htmlModelo(modeloDaPeca(i)) : ""}</div>`).join("")
     : `<p class="note">Nenhuma peça${f.cargo ? " de " + esc(f.cargo) : ""} na pasta. Coloque os PDFs em <b>Provas Jurídicas / Peças jurídicas / ${esc(f.cargo || "cargo")}</b>.</p>`;
   h += `<p class="note"><button type="button" class="link-x" id="provRecarregar" style="color:var(--brand)">Atualizar lista</button> · <button type="button" class="link-x" id="padrIniciar" style="color:var(--brand)">Padronizar nomes dos arquivos</button></p>`;
   return h;
@@ -509,8 +509,8 @@ function htmlPecas() {
 let modAberto = "";
 function htmlListaModelos(f, pecas) {
   const ms = PECAS_MODELO.filter(m => !f.cargo || cargoPadrao(f.cargo) === m.cargo);
-  if (!ms.length) return `<p class="note">Ainda não há respostas-modelo${f.cargo ? " de " + esc(f.cargo) : ""}. Por enquanto existem para as peças de Delegado de Polícia.</p>`;
-  return `<p class="note">Uma resposta-modelo comentada para cada peça já aplicada: o caso resumido, qual é a peça cabível e por quê, a peça completa, o checklist com cada quesito da banca e uma dica final. Para treinar antes de olhar, use "Fazer esta peça" em Praticar peças.</p>` +
+  if (!ms.length) return `<p class="note">Ainda não há respostas-modelo${f.cargo ? " de " + esc(f.cargo) : ""}. Por enquanto existem para Delegado de Polícia e Juiz de Direito.</p>`;
+  return `<p class="note">Uma resposta-modelo comentada para cada peça ou sentença já aplicada: o caso resumido, a peça cabível ou o resultado, o texto completo, o checklist com cada item do espelho e uma dica final. Para treinar antes de olhar, use "Fazer esta peça" em Praticar peças.</p>` +
     ms.map(m => { const it = pecas.find(i => modeloDaPeca(i) === m); return `<div class="prov-item"><div class="prov-tit"><b>${esc(m.titulo)}</b><span class="note">${esc(m.cargo)}${it ? "" : " · a prova não está na sua pasta"}</span></div>
       <div class="prov-acoes"><button type="button"${modAberto === m.id ? "" : ' class="primary"'} data-modabrir="${esc(m.id)}">${modAberto === m.id ? "Fechar" : "📘 Ver resposta-modelo"}</button>${it ? `<button type="button" data-provsim="${esc(it.id)}">Fazer esta peça</button>` : ""}</div>
       ${modAberto === m.id ? htmlModelo(m) : ""}</div>`; }).join("");
@@ -808,7 +808,7 @@ document.addEventListener("click", async e => {
   if (t.dataset.copiaresq) { const s = pecaEstr[t.dataset.copiaresq]; try { await navigator.clipboard.writeText(s.estrutura.esqueleto); toast("Esqueleto copiado."); } catch (err) {} return; }
   if (t.dataset.provsep) { separarProvaGabarito(t.dataset.provsep); return; }
   if (t.dataset.modabrir) { modAberto = modAberto === t.dataset.modabrir ? "" : t.dataset.modabrir; desenharEstudo("pecas"); return; }
-  if (t.dataset.modcopiar) { const m = PECAS_MODELO.find(x => x.id === t.dataset.modcopiar); try { await navigator.clipboard.writeText(textoPecaModelo(m)); toast("Peça copiada."); } catch (err) { toast("Não foi possível copiar."); } return; }
+  if (t.dataset.modcopiar) { const m = PECAS_MODELO.find(x => x.id === t.dataset.modcopiar); try { await navigator.clipboard.writeText(textoPecaModelo(m)); toast("Texto copiado."); } catch (err) { toast("Não foi possível copiar."); } return; }
   if (t.id === "envEnviar") { enviarParaDrive(); return; }
   if (t.id === "padrIniciar") { iniciarPadronizacao(estudoAba); return; }
   if (t.id === "padrSair") { const a = padr && padr.area; padr = null; desenharEstudo(a || estudoAba); return; }

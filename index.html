@@ -332,7 +332,7 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .mod-box{display:flex;flex-direction:column;gap:10px;border-top:1px dashed var(--line);padding-top:10px;font-size:14px;line-height:1.5}
 .mod-box p,.mod-box ol,.mod-box ul{margin:6px 0}.mod-box ol,.mod-box ul{padding-left:22px}
 .mod-h{margin:10px 0 4px;font-size:15px}
-.mod-peca p{text-align:justify}
+.mod-peca p{text-align:justify;margin:0 0 10px}.mod-box details>p,.mod-box details>ol,.mod-box details>ul{margin:0 0 10px}
 .mod-tab{overflow-x:auto}.mod-tab table{border-collapse:collapse;width:100%;font-size:13px}
 .mod-tab th,.mod-tab td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
 .mod-tab th{background:var(--soft,rgba(0,0,0,.04))}
@@ -1915,7 +1915,7 @@ iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO = 127;
+const APP_VERSAO = 128;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{
