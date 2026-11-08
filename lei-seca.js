@@ -26,7 +26,7 @@ let leiMatUser = null;   // matéria escolhida pelo usuário (sobrepõe a do cat
 const materiaDe = l => (leiMatUser = leiMatUser || lerEst("leiMatUser", {}))[l.id] || l.materia || "Outras";
 // do que trata a lei: a ementa oficial (tirada do texto baixado) ou, antes de baixar, um resumo pela IA
 const ementaDe = l => (lerEst("leiEmenta", {})[l.id] || {}).txt || "";
-const RE_EMENTA = /^(Disp[õo]e|Institui|Estabelece|Regulamenta|Regula|Define|Altera|Cria|Aprova|Trata|Organiza|Torna|Codifica|Consolida|Introduz|Acrescenta|Modifica)\b/i;
+const RE_EMENTA = /^(Disp[õo]e|Institui|Estabelece|Regulamenta|Regula|Define|Altera|Cria|Aprova|Trata|Organiza|Torna|Codifica|Consolida|Introduz|Acrescenta|Modifica|Promulga|Ratifica|Declara|Concede|Autoriza)\b/i;
 async function buscarEmentasIA() {
   if (leiUi.ementaPedida || typeof iaLigada !== "function" || !iaLigada()) return;
   const em = lerEst("leiEmenta", {}), faltam = leiCatalogo().filter(l => !em[l.id]);
@@ -50,7 +50,7 @@ const marcasLei = () => lerEst("leiMarc", {});   // artigoId -> { rev: data, dif
 const RE_NOTA = /\s*\((?:\s*(?:Reda[çc][ãa]o dada|Inclu[íi]d[oa]|Acrescid[oa]|Acrescentad[oa]|Revogad[oa]|Vide|Vig[êe]ncia|Renumerad[oa]|Regulamento|Regulamenta[çc][ãa]o|Produ[çc][ãa]o de efeito|Alterad[oa]|Suprimid[oa]|Express[ãa]o|Promulga[çc][ãa]o|Retificad[oa]|Mantid[oa]|Restabelecid[oa]|Convers[ãa]o|Em vigor|Declara[çc][ãa]o|Execu[çc][ãa]o suspensa|Revoga[çc][ãa]o)[^()]*(?:\([^()]*\)[^()]*)*)\)/gi;
 // "Art. 1º" das leis e "Artigo 1" / "Artigo I" das convenções/tratados anexos a decretos (ex.: Convenção de Viena, Decreto 7.030/2009)
 const ORDINAIS = { "único": 1, "unico": 1, primeiro: 1, segundo: 2, terceiro: 3, quarto: 4, quinto: 5, sexto: 6, "sétimo": 7, setimo: 7, oitavo: 8, nono: 9, "décimo": 10, decimo: 10 };
-const RE_ART = /^(Artigo|ARTIGO|Art\.?)\s*(\d+(?:\.\d+)*|[IVXLC]+(?![A-Za-zÀ-ú])|(?:[ÚUú]nico|[Uu]nico|[Pp]rimeiro|[Ss]egundo|[Tt]erceiro|[Qq]uarto|[Qq]uinto|[Ss]exto|[Ss][ée]timo|[Oo]itavo|[Nn]ono|[Dd][ée]cimo)(?![A-Za-zÀ-ú]))\s*(?:º|°|o\b|ª)?(?:\s*[-–]\s*([A-Z]{1,2}))?\s*[.\-–]?/;
+const RE_ART = /^(Artigo|ARTIGO|Art\s?\.?)\s*(\d+(?:\.\d+)*|[IVXLC]+(?![A-Za-zÀ-ú])|(?:[ÚUú]nico|[Uu]nico|[Pp]rimeiro|[Ss]egundo|[Tt]erceiro|[Qq]uarto|[Qq]uinto|[Ss]exto|[Ss][ée]timo|[Oo]itavo|[Nn]ono|[Dd][ée]cimo)(?![A-Za-zÀ-ú]))\s*(?:º|°|o\b|ª)?(?:\s*[-–]\s*([A-Z]{1,2}))?\s*[.\-–]?/;
 const RE_TIT = /^(PARTE|LIVRO|T[ÍI]TULO|CAP[ÍI]TULO|SE[ÇC][ÃA]O|Se[çc][ãa]o|SUBSE[ÇC][ÃA]O|Subse[çc][ãa]o|DISPOSI[ÇC][ÕO]ES|ATO DAS DISPOSI)\b/;
 function textoLimpo(t) { return String(t || "").replace(/ /g, " ").replace(/[ \t]+/g, " ").replace(/\s*\n\s*/g, "\n").trim(); }
 function artigosDoHtml(html) {
@@ -66,7 +66,7 @@ function artigosDoHtml(html) {
   for (const l of linhas) {
     if (/^(Bras[íi]lia,|Este texto n[ãa]o substitui|Rio de Janeiro,\s*\d)/i.test(l) && comecou) { atual = null; espera = "fim"; continue; }
     // decreto que promulga tratado: depois da assinatura vem o texto anexo (convenção, acordo…), que também tem artigos
-    if (espera === "fim" && /^(ANEXO|CONVEN[ÇC][ÃA]O|TRATADO|PROTOCOLO|ACORDO|ESTATUTO|PACTO|CARTA)\b/.test(l) && l === l.toUpperCase()) { espera = "nome"; cap = [l]; atual = null; continue; }
+    if (espera === "fim" && /^(ANEXO|CONVEN[ÇC][ÃA]O|TRATADO|PROTOCOLO|ACORDO|ESTATUTO|PACTO|CARTA)\b/i.test(l) && l.length < 220 && l.slice(0, 8) === l.slice(0, 8).toUpperCase()) { espera = "nome"; cap = [l]; atual = null; continue; }
     if (espera === "fim") continue;
     if (!comecou && !ementa && RE_EMENTA.test(l) && l.length < 600) ementa = l.replace(/\.$/, "");
     const m = l.match(RE_ART);
@@ -98,9 +98,13 @@ async function guardarLei(meta, html, info) {
   const artigos = comIds(meta.id, brutos);
   if (artigos.length < 3) {
     // a página tem artigos, mas todos riscados: a lei inteira foi revogada (não sobra texto vigente)
-    const riscados = (() => { try { const d = new DOMParser().parseFromString(String(html || ""), "text/html"); return [...d.querySelectorAll("strike,s,del,[style*=line-through]")].filter(e => /\b(Artigo|Art\.?)\s*\d/i.test(e.textContent)).length; } catch (e) { return 0; } })();
+    // conta os artigos dentro do texto riscado (o Planalto às vezes risca a lei inteira com um único <strike> em volta de tudo)
+    const sel = "strike,s,del,[style*=line-through]";
+    const riscados = (() => { try { const d = new DOMParser().parseFromString(String(html || ""), "text/html"); return [...d.querySelectorAll(sel)].filter(e => !e.parentElement || !e.parentElement.closest(sel)).reduce((n, e) => n + (e.textContent.match(/(?:Artigo|ARTIGO|Art\.)\s*(?:\d+|[IVXLC]+(?![a-zà-ú]))/g) || []).length, 0); } catch (e) { return 0; } })();
     if (riscados >= 3) throw new Error(`esta lei foi revogada por inteiro: todo o texto está riscado no Planalto (${riscados} artigos riscados) e não sobra nada vigente. Pode remover da lista`);
-    throw new Error("não encontrei artigos nesse texto");
+    // mostra o começo do que chegou, para o usuário ver se copiou a página certa
+    const ini = (() => { try { const d = new DOMParser().parseFromString(String(html || ""), "text/html"); d.querySelectorAll("script,style,head").forEach(e => e.remove()); const bl = [...d.querySelectorAll("p,div,td,li,h1,h2,h3,h4,br")].filter(e => !e.querySelector("p,div,td,li")).map(e => textoLimpo(e.textContent)).filter(l => l.length > 3); return (bl.length ? bl : textoLimpo(d.body ? d.body.textContent : "").split("\n")).slice(0, 4).join(" / ").slice(0, 220); } catch (e) { return ""; } })();
+    throw new Error("não encontrei artigos nesse texto" + (ini ? ` (o texto colado começa assim: “${ini}”)` : ""));
   }
   const reg = { meta, artigos, quando: info.quando || new Date().toISOString(), fonte: info.fonte || "" };
   await arq("gravar", "lei:" + meta.id, reg).catch(() => {});
