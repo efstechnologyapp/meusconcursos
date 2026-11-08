@@ -49,6 +49,7 @@ function desenharPerfil(r, aviso) {
       <button type="button" class="pf-bt${est ? "" : " on"}" data-pfnav="home"><span class="pf-ic">🗂️</span>Meus concursos</button>
       <button type="button" class="pf-bt${est ? " on" : ""}" data-pfnav="estudo"><span class="pf-ic">📚</span>Estudar</button>
       <button type="button" class="pf-bt" data-pfnav="plano"><span class="pf-ic">🗓️</span>Plano de estudos</button>
+      <button type="button" class="pf-bt" data-pfgemini="1"><span class="pf-ic">🤖</span>Minha chave do Gemini<span class="pf-gem-st">${pfGem.carregou ? (pfGem.tem ? "✓ cadastrada" : pfGem.dono ? "chave do app" : "⚠️ falta cadastrar") : ""}</span></button>
       <button type="button" class="pf-bt" data-pfconfig="1"><span class="pf-ic">⚙️</span>Backup e Google Agenda</button>
       <div class="pf-caixa"><span class="pf-ponto"></span><div><b>Horários de estudo</b><span>${esc(typeof resumoHorarios === "function" ? resumoHorarios() : "")}</span></div></div>
       <button type="button" class="pf-bt pf-bt-sair" data-pfsair="1"><span class="pf-ic">↩</span>Sair</button>
@@ -72,15 +73,41 @@ function desenharPerfil(r, aviso) {
   const config = `<div class="pf-corpo">
       <button type="button" class="pf-voltar" data-pfvoltar="1">‹ Voltar</button>
       <section class="pf-secao"><h3>Backup e Google Agenda</h3><div id="pfConfigSlot"></div></section></div>`;
+  const gem = `<div class="pf-corpo">
+      <button type="button" class="pf-voltar" data-pfvoltar="1">‹ Voltar</button>
+      <section class="pf-secao"><h3>Minha chave do Gemini (IA)</h3>
+        <p class="pf-ajuda">A IA do app (questões, correções, plano de estudos) usa a <b>sua</b> conta gratuita do Gemini, do Google. Assim cada pessoa tem a sua própria cota e ninguém gasta a do outro.</p>
+        ${!pfGem.carregou ? `<p class="pf-ajuda">Conferindo…</p>` : pfGem.tem ? `<p class="pf-gem-ok">✓ Chave cadastrada: <b>${esc(pfGem.mascara)}</b>. Vale em todos os seus aparelhos.</p>`
+          : pfGem.dono ? `<p class="pf-gem-ok">✓ Você usa a chave do app (dono). Se quiser, pode cadastrar outra abaixo.</p>` : `<p class="pf-gem-falta">⚠️ Você ainda não cadastrou a sua chave: sem ela, a IA não funciona para você.</p>`}
+        <ol class="pf-passos"><li>Abra o <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> e entre com a sua conta Google.</li>
+          <li>Toque em <b>Create API key</b> (Criar chave de API). Se pedir, aceite os termos e escolha/crie um projeto.</li>
+          <li>Copie a chave (começa com <b>AIza…</b>) e cole abaixo. É grátis e não precisa de cartão.</li></ol>
+        <label class="pf-gem-campo">Chave<input id="pfGemChave" type="password" autocomplete="off" placeholder="AIza…" spellcheck="false"></label>
+        ${pfGem.msg ? `<p class="${pfGem.erro ? "pf-gem-falta" : "pf-gem-ok"}" role="status">${esc(pfGem.msg)}</p>` : ""}
+        <div class="pf-gem-bts"><button type="button" class="primary" data-pfgemsalvar="1"${pfGem.salvando ? " disabled" : ""}>${pfGem.salvando ? "Testando a chave…" : "Testar e salvar"}</button>
+          ${pfGem.tem ? `<button type="button" data-pfgemapagar="1">Apagar minha chave</button>` : ""}</div>
+        <p class="pf-ajuda">A chave fica guardada no servidor do app, ligada ao seu e-mail, e nunca aparece de novo inteira. No plano gratuito, o Google pode usar o conteúdo enviado à IA para melhorar os produtos dele.</p>
+      </section></div>`;
   $("perfilPainel").classList.toggle("largo", pfVista === "editar");
   guardarAjustesApp();   // a edição dos horários precisa de mais espaço
   const painel = $("perfilPainel"), aviso_ = $("toast") && painel.contains($("toast")) ? $("toast") : null;
-  painel.innerHTML = topo + (pfVista === "menu" ? menu : pfVista === "config" ? config : editar);
+  painel.innerHTML = topo + (pfVista === "menu" ? menu : pfVista === "config" ? config : pfVista === "gemini" ? gem : editar);
   if (pfVista === "config") { const a = $("ajustesApp"); if (a) { $("pfConfigSlot").appendChild(a); a.hidden = false; } }
   if (aviso_) painel.appendChild(aviso_);   // o aviso (toast) que estava aqui dentro não pode sumir junto
 }
 // barra lateral: "menu" (perfil, navegação e sair) ou "editar" (horários de estudo)
 let pfVista = "menu";
+// estado da chave do Gemini do usuário (vem do servidor; a chave em si nunca volta inteira)
+let pfGem = { carregou: false, tem: false, dono: false, mascara: "", msg: "", erro: false, salvando: false };
+async function carregarChaveGemini(op, chave) {
+  try {
+    const r = await postScript({ acao: "geminiChave", sessao: usuarioAtual.sessao, op: op || "estado", ...(chave ? { chave } : {}) });
+    if (!r.ok) { pfGem.msg = /desconhecida/i.test(r.erro || "") ? "O Apps Script ainda não tem esta função: atualize o script." : r.erro; pfGem.erro = true; return false; }
+    Object.assign(pfGem, { carregou: true, tem: !!r.tem, dono: !!r.dono, mascara: r.mascara || "" });
+    if (typeof iaIndisponivel !== "undefined" && (r.tem || r.dono)) iaIndisponivel = "";   // a IA volta a funcionar sem recarregar o app
+    return true;
+  } catch (e) { pfGem.msg = "Sem conexão com o servidor."; pfGem.erro = true; return false; }
+}
 function abrirPerfil(vista) {
   pfVista = vista || "menu";
   let d = $("perfilPainel");
@@ -111,6 +138,7 @@ function marcarRuins() {
 document.addEventListener("click", e => {
   if (e.target.closest("#btnPerfil")) { abrirPerfil("menu"); return; }
   if (e.target.closest("[data-abrirperfil]")) { abrirPerfil("editar"); return; }
+  if (e.target.closest("[data-abrirgemini]")) { abrirPerfil("gemini"); carregarChaveGemini().then(() => { if (pfVista === "gemini") desenharPerfil(rascunhoDoPerfil()); }); return; }
   const d = $("perfilPainel"); if (!d || !d.open) return;
   if (e.target === d) { fecharPerfil(); return; }   // clique no fundo escurecido
   const t = e.target.closest("button"); if (!t || !d.contains(t)) return;
@@ -118,6 +146,14 @@ document.addEventListener("click", e => {
   if (k.pffechar) { fecharPerfil(); return; }
   if (k.pfeditar) { pfVista = "editar"; desenharPerfil(rascunhoDoPerfil()); return; }
   if (k.pfconfig) { pfVista = "config"; desenharPerfil(rascunhoDoPerfil()); return; }
+  if (k.pfgemini) { pfVista = "gemini"; pfGem.msg = ""; desenharPerfil(rascunhoDoPerfil()); carregarChaveGemini().then(() => { if (pfVista === "gemini") desenharPerfil(rascunhoDoPerfil()); }); return; }
+  if (k.pfgemsalvar) {
+    const c = (($("pfGemChave") || {}).value || "").trim(); if (!c) { pfGem.msg = "Cole a chave no campo antes de salvar."; pfGem.erro = true; desenharPerfil(rascunhoDoPerfil()); return; }
+    pfGem.salvando = true; pfGem.msg = ""; desenharPerfil(rascunhoDoPerfil());
+    carregarChaveGemini("salvar", c).then(ok => { pfGem.salvando = false; if (ok) { pfGem.msg = "Chave testada e salva. A IA já está funcionando para você."; pfGem.erro = false; toast("Chave do Gemini salva."); } if (pfVista === "gemini") desenharPerfil(rascunhoDoPerfil()); });
+    return;
+  }
+  if (k.pfgemapagar) { carregarChaveGemini("apagar").then(ok => { if (ok) { pfGem.msg = "Chave apagada."; pfGem.erro = false; } if (pfVista === "gemini") desenharPerfil(rascunhoDoPerfil()); }); return; }
   if (k.pfvoltar) { pfVista = "menu"; desenharPerfil(rascunhoDoPerfil()); return; }
   if (k.pfnav) {
     fecharPerfil();
@@ -166,3 +202,14 @@ function mostrarLocalData() { const el = document.querySelector("#perfilPainel .
 const iniciarLocal = () => { mostrarLocalData(); descobrirLocal(); };
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", iniciarLocal); else iniciarLocal();   // depois do script principal (que define $)
 setInterval(mostrarLocalData, 60000);   // a data vira sozinha à meia-noite
+
+// logo depois de entrar: confere se o usuário já tem chave do Gemini (para o aviso na tela inicial e o status no menu)
+setInterval(() => {
+  if (pfGem.pedido || typeof usuarioAtual === "undefined" || !usuarioAtual || !usuarioAtual.sessao) return;
+  pfGem.pedido = true; carregarChaveGemini().then(ok => { if (!ok) pfGem.pedido = false; else if (typeof render === "function") render(); });
+}, 3000);
+// aviso na tela inicial para quem ainda não cadastrou a chave
+function htmlAvisoGemini() {
+  if (!pfGem.carregou || pfGem.tem || pfGem.dono) return "";
+  return `<div class="hj-faixa"><span class="hj-ic">🤖</span><div class="hj-txt"><b>Cadastre a sua chave do Gemini para usar a IA</b><span>É grátis e leva 2 minutos: questões, correções e plano de estudos usam a sua própria cota.</span></div><button type="button" class="primary" data-abrirgemini="1">Cadastrar</button></div>`;
+}

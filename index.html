@@ -609,6 +609,7 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .ag-hr{width:46px;flex:none;display:flex;flex-direction:column;font-size:13px}.ag-hr span{color:var(--muted);font-size:12px}.ag-barra{width:4px;border-radius:3px;flex:none}.ag-tx{flex:1;min-width:0}
 .ag-l1{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.ag-l1 b{font-size:14.5px}.ag-tag{font-size:11px;border:1px solid;border-radius:999px;padding:1px 8px;font-weight:600;background:transparent!important}.ag-feito{font-size:12px;color:#2e7d4f;font-weight:600}.ag-pausa{display:block;font-size:12px;color:#8a6d1d;margin-top:2px}.ag-sub{display:block;font-size:13px;color:var(--muted);margin-top:2px}
 .t-t{background:#14213d;color:#14213d;border-color:#14213d55}.t-r{background:#2e7d4f;color:#2e7d4f;border-color:#2e7d4f55}.t-peca{background:#b5462b;color:#b5462b;border-color:#b5462b55}.t-rs{background:#8a6d1d;color:#8a6d1d;border-color:#8a6d1d55}
+.pf-gem-st{margin-left:auto;font-size:12px;color:var(--muted)}.pf-gem-ok{background:#f1faf4;border:1px solid #9fd3b0;border-radius:10px;padding:8px 10px;font-size:14px}.pf-gem-falta{background:#fff4f2;border:1px solid #f0b4a8;border-radius:10px;padding:8px 10px;font-size:14px}.pf-passos{padding-left:20px;font-size:14px;line-height:1.5}.pf-gem-campo{display:flex;flex-direction:column;gap:4px;font-size:13px;margin:8px 0}.pf-gem-bts{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
 .pl-ajmsg{margin:10px 0 0;padding:10px 12px;border-radius:10px;background:#f1faf4;border:1px solid #9fd3b0;font-size:14px;display:flex;gap:8px;align-items:center}.pl-ajmsg.erro{background:#fff4f2;border-color:#f0b4a8}.pl-ajmsg.lendo{background:#fffaf0;border-color:#d4af37}
 .pl-semedital{color:#8a5a00;flex-basis:100%}
 /* botões de ícone das fases com o nome embaixo */
@@ -1011,7 +1012,7 @@ function render(){
     `<div class="empty">Nenhum concurso em andamento.<br>Clique em <b>+ Novo concurso</b> para cadastrar o primeiro.</div>`;
   $("passados").innerHTML = fim.map(cardHTML).join("");
   $("lblProx").hidden=false; $("lblPass").hidden=!fim.length;
-  if($("faixaHoje")) $("faixaHoje").innerHTML = typeof htmlFaixaHoje==="function" ? htmlFaixaHoje() : "";
+  if($("faixaHoje")) $("faixaHoje").innerHTML = (typeof htmlAvisoGemini==="function" ? htmlAvisoGemini() : "") + (typeof htmlFaixaHoje==="function" ? htmlFaixaHoje() : "");
   // aviso de boleto: na véspera e no dia do vencimento (a notificação no celular vem do Google Agenda)
   const avisos=ativos.filter(x=>x.status===STATUS[1]&&x.boleto_venc&&[0,1].includes(diasAte(x.boleto_venc)));
   $("alertas").innerHTML=avisos.map(x=>{ const d=diasAte(x.boleto_venc); return `<div class="alerta-boleto${d===0?" hoje":""}" role="alert"><span class="ab-ic" aria-hidden="true">!</span><span>O boleto de <b>${esc(x.nome)}</b> vence <b>${d===0?"hoje":"amanhã"}</b> (${fmtCurta(x.boleto_venc)}).${x.boleto_valor?" Valor: "+esc(x.boleto_valor)+".":""}</span><button type="button" class="mini" data-verboleto="${esc(x.id)}">Ver boleto</button></div>`; }).join("");
@@ -1905,7 +1906,7 @@ iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO = 125;
+const APP_VERSAO = 126;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{
