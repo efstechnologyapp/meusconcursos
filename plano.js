@@ -638,7 +638,7 @@ document.addEventListener("click", e => {
     if (k.platalho === "leierros") { abrirAreaEstudo("lei"); setTimeout(() => desenharEstudo("lei-praticar"), 0); return; }
     return;
   }
-  const t = e.target.closest("[data-plfeito],[data-pliniciar],[data-plabrir],[data-plmontar],[data-plaba],[data-pladiantar],[data-plrefazer],[data-pltirar],[data-plincluir]"); if (!t) return;
+  const t = e.target.closest("[data-plfeito],[data-pliniciar],[data-plabrir],[data-plmontar],[data-plaba],[data-pladiantar],[data-plrefazer],[data-pltirar],[data-plincluir],[data-plpuxar]"); if (!t) return;
   const d = t.dataset, al = alvoPlano();
   if (d.plfeito !== undefined) { if (al) marcarBlocoRoteiro(al, +d.plfeito, d.valor === "1"); redesenharPlano(); return; }
   if (d.pliniciar !== undefined && al) { iniciarTimer(al, +d.pliniciar); return; }
