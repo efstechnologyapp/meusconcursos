@@ -170,7 +170,10 @@ async function atualizarDoDrive(forcar) {
       const n = await guardarCaderno(r.texto, { fonte: "drive", nome: r.nome, modificado: r.modificado });
       if (!n && st()) { st().textContent = "O caderno do Drive foi lido, mas não encontrei julgados nele."; return; }
     }
-    if (estudoAba === "config" || !estudo) desenharEstudo(estudoAba === "config" ? "config" : undefined);
+    // redesenha só se o usuário estiver nos Informativos (antes, ao terminar de conferir o caderno, a tela pulava para os Informativos
+    // mesmo com Provas anteriores ou outra área aberta)
+    const abaInfo = ["praticar", "config", "revisar", "erros", "desempenho", "simulado"].includes(estudoAba);
+    if (($("dlgEstudo") || {}).open && abaInfo && (estudoAba === "config" || !estudo)) desenharEstudo(estudoAba);
   } catch (e) { if (st()) st().textContent = "Sem conexão com o servidor para buscar o caderno do Drive."; }
 }
 async function juntarCaderno(f) {

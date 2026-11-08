@@ -58,10 +58,12 @@ function renderEstudoPagina() {
     <p class="note" style="text-align:center;margin-top:18px">As questões e correções são feitas pela IA Gemini. Seu histórico fica salvo na sua conta e aparece em qualquer aparelho.</p>`;
   if (html !== ultimoHtmlEstudo || !$("pgEstudo").innerHTML) { $("pgEstudo").innerHTML = html; ultimoHtmlEstudo = html; }   // só redesenha se mudou
 }
+let aberturasArea = 0;
 function abrirAreaEstudo(area) {
   estudoAba = "";   // sai da área anterior (a Lei seca mantém as telas compartilhadas dentro dela)
   const aba = area === "info" ? "praticar" : area === "lei" ? (Object.keys(lerEst("leisBaixadas", {})).length ? "lei-ler" : "lei-leis") : area;
-  carregarJulgados().then(() => { desenharEstudo(aba); if (!cadernoDriveChecado) atualizarDoDrive(); });
+  const vez = ++aberturasArea;   // só a última área aberta é redesenhada quando os dados chegam
+  carregarJulgados().then(() => { if (vez === aberturasArea && ($("dlgEstudo") || {}).open) desenharEstudo(estudoAba || aba); if (!cadernoDriveChecado) atualizarDoDrive(); });
   desenharEstudo(aba);
   const d = $("dlgEstudo"); if (!d.open) d.showModal();
   $("estudoConteudo").scrollTop = 0;
