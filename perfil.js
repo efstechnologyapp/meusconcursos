@@ -51,6 +51,7 @@ function desenharPerfil(r, aviso) {
       <button type="button" class="pf-bt" data-pfnav="plano"><span class="pf-ic">🗓️</span>Plano de estudos</button>
       <button type="button" class="pf-bt" data-pfgemini="1"><span class="pf-ic">🤖</span>Minha chave do Gemini<span class="pf-gem-st">${pfGem.carregou ? (pfGem.tem ? "✓ cadastrada" : pfGem.dono ? "chave do app" : "⚠️ falta cadastrar") : ""}</span></button>
       <button type="button" class="pf-bt" data-pfconfig="1"><span class="pf-ic">⚙️</span>Backup e Google Agenda</button>
+      ${pfGem.dono ? `<button type="button" class="pf-bt" data-pfacesso="1"><span class="pf-ic">🛡️</span>Gestão de acesso<span class="pf-gem-st">${pfAc.carregou && pfAc.pend ? `⏳ ${pfAc.pend} pedido${pfAc.pend > 1 ? "s" : ""}` : "só o administrador"}</span></button>` : ""}
       <div class="pf-caixa"><span class="pf-ponto"></span><div><b>Horários de estudo</b><span>${esc(typeof resumoHorarios === "function" ? resumoHorarios() : "")}</span></div></div>
       <button type="button" class="pf-bt pf-bt-sair" data-pfsair="1"><span class="pf-ic">↩</span>Sair</button>
       <p class="pf-versao">versão ${esc(versao)} — Meus Concursos<br><i>Estude · Pratique · Passe</i></p>
@@ -91,12 +92,46 @@ function desenharPerfil(r, aviso) {
   $("perfilPainel").classList.toggle("largo", pfVista === "editar");
   guardarAjustesApp();   // a edição dos horários precisa de mais espaço
   const painel = $("perfilPainel"), aviso_ = $("toast") && painel.contains($("toast")) ? $("toast") : null;
-  painel.innerHTML = topo + (pfVista === "menu" ? menu : pfVista === "config" ? config : pfVista === "gemini" ? gem : editar);
+  painel.innerHTML = topo + (pfVista === "menu" ? menu : pfVista === "config" ? config : pfVista === "gemini" ? gem : pfVista === "acesso" ? htmlAcesso() : editar);
   if (pfVista === "config") { const a = $("ajustesApp"); if (a) { $("pfConfigSlot").appendChild(a); a.hidden = false; } }
   if (aviso_) painel.appendChild(aviso_);   // o aviso (toast) que estava aqui dentro não pode sumir junto
 }
 // barra lateral: "menu" (perfil, navegação e sair) ou "editar" (horários de estudo)
 let pfVista = "menu";
+// ---------- Gestão de acesso (só o administrador: e-mails da propriedade DONOS do Apps Script) ----------
+let pfAc = { carregou: false, lista: [], pend: 0, msg: "", erro: false, ocupado: false };
+async function carregarAcesso(op, alvo, st) {
+  try {
+    pfAc.ocupado = true;
+    const r = await postScript({ acao: "acesso", sessao: usuarioAtual.sessao, op: op || "listar", ...(alvo ? { alvo } : {}), ...(st ? { st } : {}) });
+    if (!r.ok) { pfAc.msg = /desconhecida/i.test(r.erro || "") ? "O Apps Script ainda não tem esta função: atualize o script." : r.erro; pfAc.erro = true; return false; }
+    Object.assign(pfAc, { carregou: true, lista: r.lista || [], pend: (r.lista || []).filter(x => x.st === "pend").length, erro: false });
+    return true;
+  } catch (e) { pfAc.msg = "Sem conexão com o servidor."; pfAc.erro = true; return false; }
+  finally { pfAc.ocupado = false; }
+}
+function htmlAcesso() {
+  const data = d => { try { return d ? new Date(d).toLocaleDateString("pt-BR") : ""; } catch (e) { return ""; } };
+  const linha = (x, bts) => `<div class="ac-lin"><div class="ac-quem"><b>${esc(x.nome || x.email)}</b>${x.nome ? `<small>${esc(x.email)}</small>` : ""}<small>${x.st === "pend" ? "pediu em " + data(x.pedido) : (x.st === "ok" ? "autorizado" : "bloqueado") + (x.decidido ? " em " + data(x.decidido) : "") + (x.obs ? " · " + esc(x.obs) : "")}</small></div>${bts}</div>`;
+  const bt = (x, st, txt, cls) => `<button type="button"${cls ? ` class="${cls}"` : ""} data-pfacdef="${esc(x.email)}" data-st="${st}"${pfAc.ocupado ? " disabled" : ""}>${txt}</button>`;
+  const grupo = st => pfAc.lista.filter(x => x.st === st);
+  const pend = grupo("pend"), ok = grupo("ok"), bloq = grupo("bloq");
+  return `<div class="pf-corpo">
+      <button type="button" class="pf-voltar" data-pfvoltar="1">‹ Voltar</button>
+      <section class="pf-secao"><h3>🛡️ Gestão de acesso</h3>
+        <p class="pf-ajuda">Só entra no app quem você autorizar. Quem tenta entrar sem autorização vira um pedido aqui, e você recebe um e-mail avisando. Ao autorizar, a pessoa também é avisada por e-mail. Ao bloquear, ela é desconectada de todos os aparelhos.</p>
+        ${pfAc.msg ? `<p class="${pfAc.erro ? "pf-gem-falta" : "pf-gem-ok"}" role="status">${esc(pfAc.msg)}</p>` : ""}
+        ${!pfAc.carregou ? `<p class="pf-ajuda">Carregando…</p>` : `
+        <h4 class="ac-sec">⏳ Pedidos aguardando (${pend.length})</h4>
+        ${pend.length ? pend.map(x => linha(x, bt(x, "ok", "Autorizar", "primary") + bt(x, "remover", "Recusar"))).join("") : `<p class="pf-ajuda">Nenhum pedido no momento.</p>`}
+        <h4 class="ac-sec">✅ Autorizados (${ok.length})</h4>
+        ${ok.length ? ok.map(x => linha(x, bt(x, "bloq", "Bloquear"))).join("") : `<p class="pf-ajuda">Ninguém além de você, por enquanto.</p>`}
+        ${bloq.length ? `<h4 class="ac-sec">⛔ Bloqueados (${bloq.length})</h4>${bloq.map(x => linha(x, bt(x, "ok", "Desbloquear") + bt(x, "remover", "Excluir"))).join("")}` : ""}
+        <h4 class="ac-sec">➕ Autorizar antes de a pessoa entrar</h4>
+        <div class="ac-novo"><input id="pfAcNovo" type="email" placeholder="e-mail da conta Google" autocomplete="off"><button type="button" class="primary" data-pfacadd="1"${pfAc.ocupado ? " disabled" : ""}>Autorizar</button></div>
+        <p class="pf-ajuda">Você (administrador) sempre tem acesso. Para incluir outro administrador, acrescente o e-mail dele na propriedade DONOS do Apps Script.</p>`}
+      </section></div>`;
+}
 // estado da chave do Gemini do usuário (vem do servidor; a chave em si nunca volta inteira)
 let pfGem = { carregou: false, tem: false, dono: false, mascara: "", msg: "", erro: false, salvando: false };
 async function carregarChaveGemini(op, chave) {
@@ -138,6 +173,7 @@ function marcarRuins() {
 document.addEventListener("click", e => {
   if (e.target.closest("#btnPerfil")) { abrirPerfil("menu"); return; }
   if (e.target.closest("[data-abrirperfil]")) { abrirPerfil("editar"); return; }
+  if (e.target.closest("[data-abriracesso]")) { abrirPerfil("acesso"); carregarAcesso().then(() => { if (pfVista === "acesso") desenharPerfil(rascunhoDoPerfil()); }); return; }
   if (e.target.closest("[data-abrirgemini]")) { abrirPerfil("gemini"); carregarChaveGemini().then(() => { if (pfVista === "gemini") desenharPerfil(rascunhoDoPerfil()); }); return; }
   const d = $("perfilPainel"); if (!d || !d.open) return;
   if (e.target === d) { fecharPerfil(); return; }   // clique no fundo escurecido
@@ -154,6 +190,14 @@ document.addEventListener("click", e => {
     return;
   }
   if (k.pfgemapagar) { carregarChaveGemini("apagar").then(ok => { if (ok) { pfGem.msg = "Chave apagada."; pfGem.erro = false; } if (pfVista === "gemini") desenharPerfil(rascunhoDoPerfil()); }); return; }
+  if (k.pfacesso) { pfVista = "acesso"; pfAc.msg = ""; desenharPerfil(rascunhoDoPerfil()); carregarAcesso().then(() => { if (pfVista === "acesso") desenharPerfil(rascunhoDoPerfil()); }); return; }
+  if (k.pfacdef || k.pfacadd) {
+    const alvo = k.pfacadd ? (($("pfAcNovo") || {}).value || "").trim() : k.pfacdef, st = k.pfacadd ? "" : k.st;
+    if (!alvo) { pfAc.msg = "Digite o e-mail da pessoa."; pfAc.erro = true; desenharPerfil(rascunhoDoPerfil()); return; }
+    pfAc.msg = ""; const pr = carregarAcesso(k.pfacadd ? "adicionar" : "definir", alvo, st); desenharPerfil(rascunhoDoPerfil());
+    pr.then(ok => { if (ok) { pfAc.msg = (k.pfacadd || st === "ok" ? "Acesso autorizado para " : st === "bloq" ? "Acesso bloqueado para " : "Removido: ") + alvo + "."; toast(pfAc.msg); } if (pfVista === "acesso") desenharPerfil(rascunhoDoPerfil()); });
+    return;
+  }
   if (k.pfvoltar) { pfVista = "menu"; desenharPerfil(rascunhoDoPerfil()); return; }
   if (k.pfnav) {
     fecharPerfil();
@@ -206,8 +250,16 @@ setInterval(mostrarLocalData, 60000);   // a data vira sozinha à meia-noite
 // logo depois de entrar: confere se o usuário já tem chave do Gemini (para o aviso na tela inicial e o status no menu)
 setInterval(() => {
   if (pfGem.pedido || typeof usuarioAtual === "undefined" || !usuarioAtual || !usuarioAtual.sessao) return;
-  pfGem.pedido = true; carregarChaveGemini().then(ok => { if (!ok) pfGem.pedido = false; else if (typeof render === "function") render(); });
+  pfGem.pedido = true; carregarChaveGemini().then(async ok => {
+    if (!ok) { pfGem.pedido = false; return; }
+    if (pfGem.dono) await carregarAcesso();   // o administrador vê na tela inicial se há pedidos de acesso
+    if (typeof render === "function") render();
+  });
 }, 3000);
+function htmlAvisoAcesso() {
+  if (!pfGem.dono || !pfAc.pend) return "";
+  return `<div class="hj-faixa"><span class="hj-ic">🛡️</span><div class="hj-txt"><b>${pfAc.pend} pedido${pfAc.pend > 1 ? "s" : ""} de acesso aguardando</b><span>Só entra no app quem você autorizar.</span></div><button type="button" class="primary" data-abriracesso="1">Ver pedidos</button></div>`;
+}
 // aviso na tela inicial para quem ainda não cadastrou a chave
 function htmlAvisoGemini() {
   if (!pfGem.carregou || pfGem.tem || pfGem.dono) return "";

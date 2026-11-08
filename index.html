@@ -332,6 +332,12 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .mod-box{display:flex;flex-direction:column;gap:10px;border-top:1px dashed var(--line);padding-top:10px;font-size:14px;line-height:1.5}
 .mod-box p,.mod-box ol,.mod-box ul{margin:6px 0}.mod-box ol,.mod-box ul{padding-left:22px}
 .mod-h{margin:10px 0 4px;font-size:15px}
+#formCodigo.aguardando #codigo{opacity:.45}
+.ac-sec{margin:14px 0 6px;font-size:14px}
+.ac-lin{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:6px 0}
+.ac-lin .ac-quem{flex:1 1 180px;min-width:0;overflow-wrap:anywhere}.ac-lin small{display:block;color:var(--muted,#667)}
+.ac-lin button{padding:6px 10px;font-size:13px}
+.ac-novo{display:flex;gap:8px;margin:8px 0}.ac-novo input{flex:1;min-width:0}
 .mod-peca p{text-align:justify;margin:0 0 10px}.mod-box details>p,.mod-box details>ol,.mod-box details>ul{margin:0 0 10px}
 .mod-tab{overflow-x:auto}.mod-tab table{border-collapse:collapse;width:100%;font-size:13px}
 .mod-tab th,.mod-tab td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
@@ -653,8 +659,8 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 
 <section class="tela" id="telaCodigo" hidden>
   <form class="tela-cartao" id="formCodigo">
-    <h2>Confirme seu e-mail</h2>
-    <p class="sub">Enviamos um código de 6 dígitos para <b id="codEmail"></b>. Digite-o abaixo para liberar o acesso.</p>
+    <h2 id="codTitulo">Confirme seu e-mail</h2>
+    <p class="sub"><span id="codTexto">Enviamos um código de 6 dígitos para</span> <b id="codEmail"></b><span id="codTexto2">. Digite-o abaixo para liberar o acesso.</span></p>
     <input id="codigo" class="codigo" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" aria-label="Código de 6 dígitos">
     <button class="primary" type="submit" id="btnConfirmar">Confirmar e entrar</button>
     <p class="note" id="codStatus">Confira também a caixa de spam.</p>
@@ -1021,7 +1027,7 @@ function render(){
     `<div class="empty">Nenhum concurso em andamento.<br>Clique em <b>+ Novo concurso</b> para cadastrar o primeiro.</div>`;
   $("passados").innerHTML = fim.map(cardHTML).join("");
   $("lblProx").hidden=false; $("lblPass").hidden=!fim.length;
-  if($("faixaHoje")) $("faixaHoje").innerHTML = (typeof htmlAvisoGemini==="function" ? htmlAvisoGemini() : "") + (typeof htmlFaixaHoje==="function" ? htmlFaixaHoje() : "");
+  if($("faixaHoje")) $("faixaHoje").innerHTML = (typeof htmlAvisoAcesso==="function" ? htmlAvisoAcesso() : "") + (typeof htmlAvisoGemini==="function" ? htmlAvisoGemini() : "") + (typeof htmlFaixaHoje==="function" ? htmlFaixaHoje() : "");
   // aviso de boleto: na véspera e no dia do vencimento (a notificação no celular vem do Google Agenda)
   const avisos=ativos.filter(x=>x.status===STATUS[1]&&x.boleto_venc&&[0,1].includes(diasAte(x.boleto_venc)));
   $("alertas").innerHTML=avisos.map(x=>{ const d=diasAte(x.boleto_venc); return `<div class="alerta-boleto${d===0?" hoje":""}" role="alert"><span class="ab-ic" aria-hidden="true">!</span><span>O boleto de <b>${esc(x.nome)}</b> vence <b>${d===0?"hoje":"amanhã"}</b> (${fmtCurta(x.boleto_venc)}).${x.boleto_valor?" Valor: "+esc(x.boleto_valor)+".":""}</span><button type="button" class="mini" data-verboleto="${esc(x.id)}">Ver boleto</button></div>`; }).join("");
@@ -1648,8 +1654,14 @@ async function enviarCodigo(){
   const st=$("codStatus"); st.textContent="Enviando o código para o seu e-mail…";
   try{
     const r=await chamarScript({ acao:"enviar", email:perfil.email, token:tokenGoogle });
-    st.textContent = r.ok ? `Código enviado. Ele vale por ${r.validadeMin||10} minutos; confira também a caixa de spam.` : (r.erro||"Não foi possível enviar o código.");
-    if(r.ok){ esperaReenvio=Date.now()+60000; atualizarReenvio(); }
+    const espera=!!(r.pendente||r.bloqueado);
+    $("formCodigo").classList.toggle("aguardando", espera); $("codigo").disabled=espera; $("btnConfirmar").disabled=espera;
+    $("codTitulo").textContent = r.bloqueado ? "Acesso bloqueado" : espera ? "Aguardando autorização" : "Confirme seu e-mail";
+    $("codTexto").textContent = espera ? "Este app só pode ser usado com autorização do administrador. Conta:" : "Enviamos um código de 6 dígitos para";
+    $("codTexto2").textContent = espera ? "." : ". Digite-o abaixo para liberar o acesso.";
+    st.textContent = r.ok ? `Código enviado. Ele vale por ${r.validadeMin||10} minutos; confira também a caixa de spam.` : (r.pendente?"⏳ ":r.bloqueado?"⛔ ":"")+(r.erro||"Não foi possível enviar o código.");
+    if(r.ok){ esperaReenvio=Date.now()+60000; atualizarReenvio(); $("codigo").focus(); }
+    else if(r.pendente){ esperaReenvio=0; $("btnReenviar").disabled=false; $("btnReenviar").textContent="Verificar de novo"; }
   }catch(e){ st.textContent="Não foi possível falar com o servidor de confirmação. Verifique a internet e tente reenviar."; }
 }
 function atualizarReenvio(){
@@ -1714,10 +1726,10 @@ function mesclarDados(a,b){
   for(const x of b.itens||[]){ const at=porId[x.id]; if(!at||String(x.atualizado||"")>String(at.atualizado||"")) porId[x.id]=x; }
   return { itens:Object.values(porId).filter(x=>!(exc[x.id]&&exc[x.id]>=String(x.atualizado||""))), excluidos:exc };
 }
-function sessaoExpirada(){
+function sessaoExpirada(msg){
   const a=lerJSON(CHAVE_APARELHO,{}); if(usuarioAtual) delete a[usuarioAtual.email]; gravarJSON(CHAVE_APARELHO,a);
   try{ localStorage.removeItem(CHAVE_SESSAO); }catch(e){}
-  pararSincronizacao(); toast("Sua sessão expirou. Entre de novo para continuar sincronizando.");
+  pararSincronizacao(); toast(msg||"Sua sessão expirou. Entre de novo para continuar sincronizando.");
   $("usuario").hidden=true; usuarioAtual=null; iniciarLogin();
 }
 async function sincronizar(){
@@ -1727,7 +1739,7 @@ async function sincronizar(){
   const versaoEnviada=sinc.versaoLocal;
   try{
     const r=await postScript({ acao:"sincronizar", sessao:usuarioAtual.sessao, itens, excluidos });
-    if(!r.ok){ if(r.sessaoInvalida){ sinc.rodando=false; sessaoExpirada(); return; } mostrarSinc("erro", r.erro); return; }
+    if(!r.ok){ if(r.sessaoInvalida){ sinc.rodando=false; sessaoExpirada(r.acessoNegado?r.erro:""); return; } mostrarSinc("erro", r.erro); return; }
     let resultado={ itens:r.itens, excluidos:r.excluidos };
     const mudouDurante = sinc.versaoLocal!==versaoEnviada;
     if(mudouDurante) resultado=mesclarDados(resultado,{ itens, excluidos });   // não perde o que foi salvo enquanto sincronizava
@@ -1748,7 +1760,7 @@ async function verificarNovidades(){
   try{
     const r=await postScript({ acao:"versao", sessao:usuarioAtual.sessao });
     if(r.ok && String(r.rev)!==String(sinc.rev)) sincronizar();
-    else if(!r.ok && r.sessaoInvalida) sessaoExpirada();
+    else if(!r.ok && r.sessaoInvalida) sessaoExpirada(r.acessoNegado?r.erro:"");
     else if(r.ok) mostrarSinc("ok");
   }catch(e){ mostrarSinc("offline"); }
 }
@@ -1915,7 +1927,7 @@ iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO = 128;
+const APP_VERSAO = 129;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{
