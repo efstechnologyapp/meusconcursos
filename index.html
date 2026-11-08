@@ -324,6 +324,7 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .padr-l input{font-size:14px}
 .prov-item{border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
 .prov-tit{display:flex;flex-direction:column;gap:2px}
+.prov-nav{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 12px}.prov-nq{min-width:34px;height:34px;padding:0 8px;border-radius:999px;border:1px solid var(--line);background:var(--surface);font-weight:600}.prov-nq.on{background:var(--brand);color:#fff;border-color:var(--brand)}.prov-nq.feita:not(.on){background:#e8f5ec;border-color:#9fd3b0}
 .prov-disc{font-size:13px;color:var(--ink);line-height:1.4}.prov-disc b{color:var(--brand)}.prov-disc.lendo{color:var(--muted);font-style:italic}
 .prov-acoes{display:flex;gap:8px;flex-wrap:wrap}
 .pec-estr{display:flex;flex-direction:column;gap:10px}
@@ -1887,7 +1888,7 @@ iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO = 108;
+const APP_VERSAO = 109;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{

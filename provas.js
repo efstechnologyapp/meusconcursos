@@ -364,7 +364,9 @@ function htmlSimulado() {
   if (s.carregando) return topo + `<p class="note est-gerando">${esc(s.carregando)}<br>A primeira leitura de cada prova pela IA pode levar até 1 ou 2 minutos; depois fica guardada.</p>`;
   if (s.i >= nTotal) return topo + htmlFimSimulado();
   const q = questaoAtual();
-  const cab = `<div class="est-prog">Questão ${s.i + 1} de ${nTotal}${q && q.disciplina ? `<span class="chip">${esc(q.disciplina)}</span>` : ""}${!s.novas && q && q.numero ? `<span class="chip">nº ${q.numero} na prova</span>` : ""}</div>`;
+  // prova subjetiva: dá para ir e voltar entre as questões (o rascunho de cada uma fica guardado)
+  const nav = s.it.tipo === "subjetiva" && nTotal > 1 ? `<div class="prov-nav"><button type="button" class="mini" data-provir="${s.i - 1}"${s.i ? "" : " disabled"}>‹ Anterior</button>${Array.from({ length: nTotal }, (_, k) => `<button type="button" class="prov-nq${k === s.i ? " on" : ""}${s.resp && s.resp[k] && !s.resp[k].corrigindo ? " feita" : ""}" data-provir="${k}" title="Questão ${k + 1}">${k + 1}</button>`).join("")}<button type="button" class="mini" data-provir="${s.i + 1}">${s.i + 1 < nTotal ? "Próxima ›" : "Ver resultado ›"}</button></div>` : "";
+  const cab = `<div class="est-prog">Questão ${s.i + 1} de ${nTotal}${q && q.disciplina ? `<span class="chip">${esc(q.disciplina)}</span>` : ""}${!s.novas && q && q.numero ? `<span class="chip">nº ${q.numero} na prova</span>` : ""}</div>${nav}`;
   if (!q) {
     const g = s.novas && s.geradas[s.i];
     if (g && g.erro) return topo + cab + `<p class="note">A IA não respondeu (${esc(g.erro)}).</p><div class="actions"><button type="button" id="provTentar">Tentar de novo</button><button type="button" id="provProx">Pular</button></div>`;
@@ -799,6 +801,10 @@ document.addEventListener("click", async e => {
   }
   if (t.id === "provImprimir" && q) { imprimirProvaReal(q); return; }
   if (t.id === "provFotosBtn") { $("provFotos").click(); return; }
+  if (t.dataset.provir !== undefined && sim) {
+    sim.i = Math.max(0, +t.dataset.provir); if (sim.novas) { gerarNova(sim.i); gerarNova(sim.i + 1); }
+    desenharEstudo("provas"); $("estudoConteudo").scrollTop = 0; return;
+  }
   if (t.id === "provProx") {
     if (sim.it.tipo === "peca") { const aba = "pecas"; sim = null; desenharEstudo(aba); return; }
     sim.i++; if (sim.novas) { gerarNova(sim.i); gerarNova(sim.i + 1); }
