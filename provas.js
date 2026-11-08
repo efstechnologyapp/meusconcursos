@@ -59,12 +59,13 @@ async function carregarRepo(forcar) {
 }
 
 // questões de uma prova: guardadas no aparelho; o que faltar é pedido ao servidor em lotes
-async function questoesGuardadas(it) { try { const g = await arq("ler", "prova:" + it.id); return g && g.modificado === it.modificado ? g : null; } catch (e) { return null; } }
+// (peças lidas antes da v112 tinham o enunciado resumido pela IA: são lidas de novo)
+async function questoesGuardadas(it) { try { const g = await arq("ler", "prova:" + it.id); return g && g.modificado === it.modificado && (it.tipo !== "peca" || g.v2) ? g : null; } catch (e) { return null; } }
 async function extrairLote(it, de, ate) {
   const r = await postLongo({ acao: "extrairProva", prova: it.id, gab: it.gab, tipo: it.tipo, de, ate, modificado: it.modificado });
   if (!r.ok) throw new Error(r.erro || "falha ao ler a prova");
   let g = (await questoesGuardadas(it)) || { modificado: it.modificado, total: 0, banca: "", questoes: [], feitos: [] };
-  g.total = Math.max(g.total, r.total || 0); g.banca = g.banca || r.banca;
+  g.total = Math.max(g.total, r.total || 0); g.banca = g.banca || r.banca; if (r.v2) g.v2 = true;
   for (const q of r.questoes) if (!g.questoes.some(x => x.numero === q.numero)) g.questoes.push(q);
   g.questoes.sort((a, b) => a.numero - b.numero); g.feitos.push(`${de}-${ate}`);
   if (!g.total && r.questoes.length < ate - de + 1) g.total = g.questoes.length;
@@ -105,6 +106,17 @@ async function lerDiscFila() {   // uma prova por vez, em segundo plano
   try { await garantirQuestoes(it); } catch (e) { console.warn("matérias da prova", e); }
   discLendo = ""; if (estudoAba === "provas" && !sim) desenharEstudo("provas");
   lerDiscFila();
+}
+// abre o PDF original da prova numa aba nova (a aba é aberta já no toque, senão o navegador bloqueia)
+async function abrirPdfOriginal(it) {
+  const w = window.open("", "_blank"); if (w) w.document.write("<p style='font:16px sans-serif;padding:20px'>Abrindo a prova original…</p>");
+  try {
+    const r = await postLongo({ acao: "arquivoProva", id: it.id }, 180000);
+    if (!r.ok) throw new Error(/desconhecida/i.test(r.erro || "") ? "atualize o Apps Script" : r.erro);
+    const bin = atob(r.base64), u8 = new Uint8Array(bin.length); for (let k = 0; k < bin.length; k++) u8[k] = bin.charCodeAt(k);
+    const url = URL.createObjectURL(new Blob([u8], { type: r.mime || "application/pdf" }));
+    if (w) w.location.href = url; else window.open(url, "_blank");
+  } catch (e) { if (w) w.close(); toast("Não consegui abrir a prova original: " + e.message); }
 }
 // prova subjetiva: a lista segue a numeração da prova (questão 4 é sempre a 4ª, mesmo que a 2 ainda não tenha sido lida)
 function listaQs(it, g) {
@@ -564,7 +576,7 @@ function htmlPecaAtiva() {
   const els = e && e.estrutura && e.estrutura.elementos || [];
   const r = s.resp[0];
   return topo + `${q.linhas ? `<div class="est-prog"><span class="chip">até ${q.linhas} linhas</span></div>` : ""}
-    <details class="est-det" open><summary>Enunciado</summary><p class="pre">${esc(q.enunciado)}</p></details>
+    <details class="est-det" open><summary>Enunciado</summary>${!s.novas && !q.inedita ? `<p class="note"><button type="button" class="link-x" id="provPdfOrig" style="color:var(--brand)">📄 Ver a prova original (PDF), exatamente como foi aplicada</button></p>` : ""}<p class="pre">${esc(q.enunciado)}</p></details>
     ${els.length ? `<details class="est-det"><summary>Roteiro da estrutura (revela qual é a peça)</summary><ol class="pec-roteiro">${els.map(x => `<li><b>${esc(x.nome)}</b>${x.fundamento ? ` <span class="note">${esc(x.fundamento)}</span>` : ""}</li>`).join("")}</ol></details>` : ""}
     ${htmlRespostaEscrita(q, r, "peca")}`;
 }
@@ -805,6 +817,7 @@ document.addEventListener("click", async e => {
   if (!sim) return;
   if (t.id === "provSair") { registrarObjetiva(); const aba = sim.it.tipo === "peca" ? "pecas" : "provas"; sim = null; desenharEstudo(aba); return; }
   const q = questaoAtual(), k = sim.it.tipo === "peca" ? 0 : sim.i;
+  if (t.id === "provPdfOrig" && sim) { abrirPdfOriginal(sim.it); return; }
   if (t.dataset.provlerq && sim) { lerQuestoesFaltantes(sim.it, +t.dataset.provlerq); return; }
   if (t.id === "provTentar") { delete sim.geradas[sim.i]; desenharEstudo(estudoAba); return; }
   if (t.dataset.provresp && q && !sim.resp[k]) {
