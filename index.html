@@ -329,6 +329,14 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .prov-disc{font-size:13px;color:var(--ink);line-height:1.4}.prov-disc b{color:var(--brand)}.prov-disc.lendo{color:var(--muted);font-style:italic}
 .prov-acoes{display:flex;gap:8px;flex-wrap:wrap}
 .pec-estr{display:flex;flex-direction:column;gap:10px}
+.mod-box{display:flex;flex-direction:column;gap:10px;border-top:1px dashed var(--line);padding-top:10px;font-size:14px;line-height:1.5}
+.mod-box p,.mod-box ol,.mod-box ul{margin:6px 0}.mod-box ol,.mod-box ul{padding-left:22px}
+.mod-h{margin:10px 0 4px;font-size:15px}
+.mod-peca p{text-align:justify}
+.mod-tab{overflow-x:auto}.mod-tab table{border-collapse:collapse;width:100%;font-size:13px}
+.mod-tab th,.mod-tab td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+.mod-tab th{background:var(--soft,rgba(0,0,0,.04))}
+.mod-dica{border-left:4px solid var(--brand);background:rgba(0,0,0,.03);border-radius:8px;padding:4px 12px}
 .pec-elem{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:10px;font-size:14px}
 .pec-elem ul{margin:4px 0 0;padding-left:18px}
 .pec-el-tit{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -797,6 +805,7 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 <script src="viagem.js"></script>
 <script src="agenda.js"></script>
 <script src="estudos.js"></script>
+<script src="pecas-modelo.js"></script>
 <script src="provas.js"></script>
 <script src="historico.js"></script>
 <script src="sincronia.js"></script>
@@ -1906,7 +1915,7 @@ iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO = 126;
+const APP_VERSAO = 127;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{

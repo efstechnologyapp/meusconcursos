@@ -486,7 +486,7 @@ function htmlPecas() {
   const pecas = (repo.itens || []).filter(i => i.tipo === "peca");
   const cargos = [...new Set([...CARGOS, ...pecas.map(i => i.cargo).filter(c => c !== "Geral")])];
   const tipos = [...new Set([...(f.cargo ? ESTRUTURAS_PADRAO[f.cargo] || [] : Object.values(ESTRUTURAS_PADRAO).flat()), ...Object.values(lerProv("tiposVistos", {})).filter(x => !f.cargo || cargoPadrao(x.cargo || "") === f.cargo).map(x => x.tipo)])];
-  let h = `${htmlImpressas("pecas")}${botaoHistorico("pecas")}<div class="est-opts"><button type="button" class="opt${f.aba === "estrutura" ? " on" : ""}" data-pecaaba="estrutura">Estrutura das peças</button><button type="button" class="opt${f.aba === "praticar" ? " on" : ""}" data-pecaaba="praticar">Praticar peças</button></div>
+  let h = `${htmlImpressas("pecas")}${botaoHistorico("pecas")}<div class="est-opts"><button type="button" class="opt${f.aba === "estrutura" ? " on" : ""}" data-pecaaba="estrutura">Estrutura das peças</button><button type="button" class="opt${f.aba === "praticar" ? " on" : ""}" data-pecaaba="praticar">Praticar peças</button><button type="button" class="opt${f.aba === "modelos" ? " on" : ""}" data-pecaaba="modelos">Respostas-modelo</button></div>
     ${seletorCargo("pecaCargoSel", cargos, f.cargo)}`;
   if (f.aba === "estrutura") {
     const aberto = f.tipoAberto;
@@ -495,14 +495,25 @@ function htmlPecas() {
     if (aberto) h += htmlEstrutura(aberto);
     return h;
   }
+  if (f.aba === "modelos") return h + htmlListaModelos(f, pecas);
   const lista = pecas.filter(i => !f.cargo || i.cargo === f.cargo);
   h += htmlEnvio("peca");
   if (repo.erro) return h + `<p class="note">${esc(repo.erro)}</p>`;
   h += lista.length ? lista.map(i => `<div class="prov-item"><div class="prov-tit"><b>${esc(i.nome)}</b><span class="note">${esc(i.pastaCargo || i.cargo)}${i.gab ? " · espelho: " + esc(i.gabNome) : " · sem espelho separado"}${seloRespondida(i)}</span></div>
-      <div class="prov-acoes"><button type="button" class="primary" data-provsim="${esc(i.id)}">Fazer esta peça</button><button type="button" data-pecanova="${esc(i.id)}">Caso novo no estilo desta peça</button>${botaoSeparar(i)}</div>${htmlQualPeca(i)}</div>`).join("")
+      <div class="prov-acoes"><button type="button" class="primary" data-provsim="${esc(i.id)}">Fazer esta peça</button><button type="button" data-pecanova="${esc(i.id)}">Caso novo no estilo desta peça</button>${botaoSeparar(i)}${modeloDaPeca(i) ? `<button type="button" data-modabrir="${esc(i.id)}">${modAberto === i.id ? "Fechar resposta-modelo" : "📘 Resposta-modelo e dicas"}</button>` : ""}</div>${htmlQualPeca(i)}${modAberto === i.id && modeloDaPeca(i) ? htmlModelo(modeloDaPeca(i)) : ""}</div>`).join("")
     : `<p class="note">Nenhuma peça${f.cargo ? " de " + esc(f.cargo) : ""} na pasta. Coloque os PDFs em <b>Provas Jurídicas / Peças jurídicas / ${esc(f.cargo || "cargo")}</b>.</p>`;
   h += `<p class="note"><button type="button" class="link-x" id="provRecarregar" style="color:var(--brand)">Atualizar lista</button> · <button type="button" class="link-x" id="padrIniciar" style="color:var(--brand)">Padronizar nomes dos arquivos</button></p>`;
   return h;
+}
+// ---------- respostas-modelo (pecas-modelo.js) ----------
+let modAberto = "";
+function htmlListaModelos(f, pecas) {
+  const ms = PECAS_MODELO.filter(m => !f.cargo || cargoPadrao(f.cargo) === m.cargo);
+  if (!ms.length) return `<p class="note">Ainda não há respostas-modelo${f.cargo ? " de " + esc(f.cargo) : ""}. Por enquanto existem para as peças de Delegado de Polícia.</p>`;
+  return `<p class="note">Uma resposta-modelo comentada para cada peça já aplicada: o caso resumido, qual é a peça cabível e por quê, a peça completa, o checklist com cada quesito da banca e uma dica final. Para treinar antes de olhar, use "Fazer esta peça" em Praticar peças.</p>` +
+    ms.map(m => { const it = pecas.find(i => modeloDaPeca(i) === m); return `<div class="prov-item"><div class="prov-tit"><b>${esc(m.titulo)}</b><span class="note">${esc(m.cargo)}${it ? "" : " · a prova não está na sua pasta"}</span></div>
+      <div class="prov-acoes"><button type="button"${modAberto === m.id ? "" : ' class="primary"'} data-modabrir="${esc(m.id)}">${modAberto === m.id ? "Fechar" : "📘 Ver resposta-modelo"}</button>${it ? `<button type="button" data-provsim="${esc(it.id)}">Fazer esta peça</button>` : ""}</div>
+      ${modAberto === m.id ? htmlModelo(m) : ""}</div>`; }).join("");
 }
 // peça sem a identificação no nome: o usuário diz qual é (ex.: sentença cível) e o app renomeia a prova e o espelho no Drive
 let qualPeca = { aberto: "", salvando: "" };
@@ -527,8 +538,8 @@ async function salvarQualPeca(id) {
     const r = await postLongo({ acao: "renomear", lista }, 120000);
     if (!r.ok) throw new Error(r.erro);
     toast(`Pronto: agora é "${lista[0].nome}". Já pode enviar a outra peça do mesmo concurso.`);
-    qualPeca = { aberto: "", salvando: "" }; repo = null; carregarRepo(true); desenharEstudo("pecas");
-  } catch (e) { qualPeca.salvando = ""; toast("Não foi possível renomear: " + e.message); desenharEstudo("pecas"); }
+    qualPeca = { aberto: "", salvando: "" }; repo = null; carregarRepo(true); redesenharSe("pecas");
+  } catch (e) { qualPeca.salvando = ""; toast("Não foi possível renomear: " + e.message); redesenharSe("pecas"); }
 }
 function htmlEstrutura(tipo) {
   const e = pecaEstr[tipo];
@@ -578,7 +589,8 @@ function htmlPecaAtiva() {
   return topo + `${q.linhas ? `<div class="est-prog"><span class="chip">até ${q.linhas} linhas</span></div>` : ""}
     <details class="est-det" open><summary>Enunciado</summary>${!s.novas && !q.inedita ? `<p class="note"><button type="button" class="link-x" id="provPdfOrig" style="color:var(--brand)">📄 Ver a prova original (PDF), exatamente como foi aplicada</button></p>` : ""}<p class="pre">${esc(q.enunciado)}</p></details>
     ${els.length ? `<details class="est-det"><summary>Roteiro da estrutura (revela qual é a peça)</summary><ol class="pec-roteiro">${els.map(x => `<li><b>${esc(x.nome)}</b>${x.fundamento ? ` <span class="note">${esc(x.fundamento)}</span>` : ""}</li>`).join("")}</ol></details>` : ""}
-    ${htmlRespostaEscrita(q, r, "peca")}`;
+    ${htmlRespostaEscrita(q, r, "peca")}
+    ${!s.novas && modeloDaPeca(s.it) ? `<details class="est-det"${r ? " open" : ""}><summary>📘 Resposta-modelo e dicas${r ? "" : " (tente fazer a sua antes de abrir)"}</summary>${htmlModelo(modeloDaPeca(s.it))}</details>` : ""}`;
 }
 async function gerarPecaNova() {
   if (!sim || sim.geradas[0]) return;
@@ -695,7 +707,7 @@ function abrirCartao(chave) {
   const reg = lerProv("impressas", []).find(x => x.chave === chave), id = reg ? reg.id : chave.replace(/-obj$/, "");
   const it = repo && repo.itens.find(i => i.id === id); if (!it) { toast("Esta prova não está mais na pasta do Drive."); return; }
   cartao = { it, qs: [], resp: {}, chave, carregando: true }; desenharEstudo("provas");
-  questoesGuardadas(it).then(g => { if (!cartao) return; cartao.carregando = false; cartao.qs = (g && g.questoes || []).filter(q => q.enunciado); cartao.banca = g && g.banca; desenharEstudo("provas"); });
+  questoesGuardadas(it).then(g => { if (!cartao) return; cartao.carregando = false; cartao.qs = (g && g.questoes || []).filter(q => q.enunciado); cartao.banca = g && g.banca; redesenharSe("provas"); });
 }
 const letrasDe = q => (q.alternativas || []).length && q.tipo !== "ce" ? q.alternativas.map(a => a.letra) : ["C", "E"];
 function htmlCartao() {
@@ -795,6 +807,8 @@ document.addEventListener("click", async e => {
   if (t.dataset.pecarefazer) { delete pecaEstr[t.dataset.pecarefazer]; carregarEstrutura(t.dataset.pecarefazer, true); desenharEstudo("pecas"); return; }
   if (t.dataset.copiaresq) { const s = pecaEstr[t.dataset.copiaresq]; try { await navigator.clipboard.writeText(s.estrutura.esqueleto); toast("Esqueleto copiado."); } catch (err) {} return; }
   if (t.dataset.provsep) { separarProvaGabarito(t.dataset.provsep); return; }
+  if (t.dataset.modabrir) { modAberto = modAberto === t.dataset.modabrir ? "" : t.dataset.modabrir; desenharEstudo("pecas"); return; }
+  if (t.dataset.modcopiar) { const m = PECAS_MODELO.find(x => x.id === t.dataset.modcopiar); try { await navigator.clipboard.writeText(textoPecaModelo(m)); toast("Peça copiada."); } catch (err) { toast("Não foi possível copiar."); } return; }
   if (t.id === "envEnviar") { enviarParaDrive(); return; }
   if (t.id === "padrIniciar") { iniciarPadronizacao(estudoAba); return; }
   if (t.id === "padrSair") { const a = padr && padr.area; padr = null; desenharEstudo(a || estudoAba); return; }
@@ -831,7 +845,7 @@ document.addEventListener("click", async e => {
       const r = await gemini(`Questão de concurso (${sim.banca || ""}, ${q.disciplina || ""}):\n${q.texto_base || ""}\n${q.enunciado}\n${(q.alternativas || []).map(a => a.letra + ") " + a.texto).join("\n")}\nGabarito oficial: ${q.gabarito}\n\nExplique de forma objetiva por que o gabarito oficial está correto e, se houver alternativas, por que as demais estão erradas, citando a lei e a jurisprudência pertinentes. Responda em JSON: {"explicacao": string}`);
       sim.resp[k].explicacao = r.explicacao || "";
     } catch (err) { toast("A IA não respondeu agora (" + err.message + ")."); }
-    sim.resp[k].explicando = false; desenharEstudo("provas"); return;
+    sim.resp[k].explicando = false; redesenharSe("provas"); return;
   }
   if (t.id === "provEspelho" && q) { sim.resp[k] = { texto: ($("provTexto") || {}).value || "" }; desenharEstudo(estudoAba); return; }
   if (t.id === "provCorrigir" && q) {
