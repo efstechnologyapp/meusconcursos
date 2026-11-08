@@ -325,7 +325,47 @@ function sequenciaCiclo(ms) {
   return seq;
 }
 const roteiroDe = al => al && plano()["rot:" + al.chave];
-const cobertosDe = al => new Set(plano()["cob:" + al.chave] || []);
+// tópicos já estudados: os do próprio plano + os equivalentes estudados no plano de OUTRO concurso
+// (ex.: "Inquérito policial" estudado no plano da PC-BA conta também no plano do TJRS)
+const cobertosDe = al => { const own = new Set(plano()["cob:" + al.chave] || []); comunsDe(al).forEach(k => own.add(k)); return own; };
+
+// ---------- matéria em comum entre os planos ----------
+// cada tópico estudado na teoria fica registrado em "est:<plano>|<matéria.tópico>" = { m: matéria, t: texto do tópico } (sincronizado);
+// os outros planos procuram ali tópicos equivalentes: mesma matéria e nome do tópico parecido
+const PALAVRAS_FRACAS = new Set(["direito", "direitos", "lei", "leis", "sobre", "como", "entre", "para", "pelo", "pela", "pelos", "pelas", "noções", "nocoes", "geral", "gerais", "aspectos", "parte", "especial", "disposições", "disposicoes", "outros", "outras", "demais", "teoria"]);
+const chaveMatPlano = m => m.lei || semAcentoEst(m.nome).replace(/\b(direito|de|do|da|dos|das|e)\b/g, " ").replace(/\s+/g, " ").trim();
+const tokensTopico = t => [...new Set(semAcentoEst(t).replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter(w => w.length >= 4 && !PALAVRAS_FRACAS.has(w)).map(w => w.replace(/(oes|aes|ais|eis|s)$/, "")))];
+function topicosEquivalentes(a, b) {
+  const A = tokensTopico(a), B = tokensTopico(b); if (!A.length || !B.length) return false;
+  const inter = A.filter(w => B.includes(w)).length, menor = Math.min(A.length, B.length);
+  return inter / (A.length + B.length - inter) >= .5 || (menor >= 2 && inter === menor);   // parecidos, ou um contém o outro
+}
+function registrarEstudado(al, mi, ti, feito) {
+  const cont = conteudoPlano(al), m = cont && cont.materias[mi], x = m && topicosDe(m)[ti]; if (!x) return;
+  gravarPlano(`est:${al.chave}|${mi}.${ti}`, feito ? { m: chaveMatPlano(m), t: x.t } : undefined);
+  // os outros planos com matéria equivalente refazem o roteiro (o tópico sai da teoria deles e vai para a revisão)
+  (typeof itens !== "undefined" ? itens : []).forEach(o => { const b = alvoPlano(o.id), cb = b && b.chave !== al.chave && conteudoPlano(b); if (!cb) return;
+    if (cb.materias.some(z => chaveMatPlano(z) === chaveMatPlano(m) && topicosDe(z).some(y => topicosEquivalentes(y.t, x.t)))) gravarPlano("sujo:" + b.chave, 1); });
+}
+function comunsDe(al) {
+  const cont = conteudoPlano(al); if (!cont) return [];
+  const p = plano(), est = Object.entries(p).filter(([k]) => k.startsWith("est:") && !k.startsWith("est:" + al.chave + "|")).map(([, v]) => v).filter(Boolean);
+  if (!est.length) return [];
+  const out = [];
+  cont.materias.forEach((m, mi) => {
+    const cm = chaveMatPlano(m), daqui = est.filter(e => e.m === cm); if (!daqui.length) return;
+    topicosDe(m).forEach((x, ti) => { if (daqui.some(e => topicosEquivalentes(e.t, x.t))) out.push(`${mi}.${ti}`); });
+  });
+  return out;
+}
+// (planos feitos antes desta versão: registra os tópicos que já estavam estudados)
+function semearEstudados() {
+  const p = plano(); if (p.estSemeado) return;
+  (typeof itens !== "undefined" ? itens : []).forEach(o => { const al = alvoPlano(o.id), cont = al && conteudoPlano(al); if (!cont) return;
+    (p["cob:" + al.chave] || []).forEach(k => { const [mi, ti] = k.split(".").map(Number), m = cont.materias[mi], x = m && topicosDe(m)[ti]; if (x && !p[`est:${al.chave}|${k}`]) p[`est:${al.chave}|${k}`] = { m: chaveMatPlano(m), t: x.t }; }); });
+  p.estSemeado = 1; gravarEst("plano", p);
+  (typeof itens !== "undefined" ? itens : []).forEach(o => { const al = alvoPlano(o.id); if (al && conteudoPlano(al) && comunsDe(al).some(k => !(p["cob:" + al.chave] || []).includes(k))) gravarPlano("sujo:" + al.chave, 1); });
+}
 // (re)faz o roteiro a partir de hoje com o que ainda falta; guarda um aviso quando é replanejamento
 function refazerRoteiro(al, motivo) {
   const cont = conteudoPlano(al); if (!cont || !cont.materias.length) return null;
@@ -352,6 +392,7 @@ function refazerRoteiro(al, motivo) {
   novo.verif = hojeISO();
   if (antigo && motivo === "atraso") novo.aviso = { dia: hojeISO(), de: antigo.metodo, para: novo.metodo, fora: novo.fora, atrasados: atrasadosDe(antigo).length };
   if (antigo && motivo === "mudou") novo.aviso = { dia: hojeISO(), de: antigo.metodo, para: novo.metodo, fora: novo.fora, mudou: true };
+  if (antigo && motivo === "comum") novo.aviso = { dia: hojeISO(), de: antigo.metodo, para: novo.metodo, fora: novo.fora, comuns: comunsDe(al).length };
   novo.minFeitos = antigo ? (antigo.minFeitos != null ? antigo.minFeitos : (antigo.horasFeitas || 0) * 60) : 0;
   const p = plano(); p["rot:" + al.chave] = novo;
   Object.keys(p).forEach(k => { if (k.startsWith("dia:") || k.startsWith("pos:")) delete p[k]; });   // restos da versão antiga do plano
@@ -370,6 +411,8 @@ function conferirRoteiro(al) {
   let r = roteiroDe(al);
   if (!r) return conteudoPlano(al) ? refazerRoteiro(al, "novo") : null;
   if (r.prova !== al.f.data) return refazerRoteiro(al, "mudou");   // a data da prova mudou
+  semearEstudados();
+  if (plano()["sujo:" + al.chave]) { gravarPlano("sujo:" + al.chave, undefined); return refazerRoteiro(al, "comum"); }   // estudou matéria em comum noutro plano
   if (r.verif === hojeISO()) return r;
   // atraso pequeno fica para a revisão da semana (ou o usuário traz para hoje); só refaz se passar de um dia inteiro de estudo
   const atr = atrasadosDe(r).reduce((a, b) => a + (b.dur || 60), 0), porDia = Math.max(180, minutosDoDia(hoje()));   // em minutos
@@ -386,6 +429,7 @@ function marcarBlocoRoteiro(al, i, feito, minutos) {
   r.minReal = r.minReal || {}; if (feito) r.minReal[i] = minutos; else delete r.minReal[i];
   if (b.f === 1) b.t.forEach(t => feito ? cob.add(`${b.m}.${t}`) : cob.delete(`${b.m}.${t}`));   // tópico estudado na teoria = coberto
   gravarPlano("rot:" + al.chave, r); gravarPlano("cob:" + al.chave, [...cob]);
+  if (b.f === 1 && b.m >= 0) b.t.forEach(t => registrarEstudado(al, b.m, t, feito));
 }
 // o que cada código de atividade significa e qual função do app abre
 const ATIV = {
@@ -451,7 +495,7 @@ function cabecalhoPlano(D) {
 function avisoRoteiro(r) {
   const a = r.aviso; if (!a || a.dia !== hojeISO()) return "";
   const mud = a.de !== a.para ? ` O método passou de <b>${esc(METODOS[a.de].nome)}</b> para <b>${esc(METODOS[a.para].nome)}</b>.` : "";
-  return `<div class="pl-aviso">🔄 ${a.mudou ? "Roteiro refeito com as mudanças." : `Roteiro refeito a partir de hoje: ${a.atrasados} bloco(s) tinham ficado para trás.`}${mud}${a.fora ? ` ${a.fora} tópico(s) de menor incidência ficaram de fora.` : ""}</div>`;
+  return `<div class="pl-aviso">🔄 ${a.comuns != null ? `Matéria em comum: ${a.comuns} tópico(s) já estudados no plano de outro concurso contam como estudados aqui (saem da teoria e vão para a revisão).` : a.mudou ? "Roteiro refeito com as mudanças." : `Roteiro refeito a partir de hoje: ${a.atrasados} bloco(s) tinham ficado para trás.`}${mud}${a.fora ? ` ${a.fora} tópico(s) de menor incidência ficaram de fora.` : ""}</div>`;
 }
 function htmlBlocosHoje(D) {
   if (D.al.dias <= 0) return `<p class="pl-msg">Hoje é dia de prova. Boa prova! 🍀</p>${htmlChecklistProva(D.al, false)}${D.blocos.length ? `<ul class="pl-lista">${D.blocos.map(b => htmlItemBloco(D.al, b)).join("")}</ul>` : ""}`;
@@ -514,7 +558,7 @@ function htmlPlanoModal(aba) {
   return `<div class="dlg-head"><div style="flex:1;min-width:0"><h2>Plano de estudos${D.al ? " · " + esc(siglaOuNome(D.al.x)) : ""}</h2><p class="sub">O plano diz <b>o que</b> estudar a cada dia; o botão <b>Abrir ›</b> leva à ferramenta certa do Estudar</p></div><button type="button" class="close" data-close aria-label="Fechar">×</button></div>${abas}<div class="est-corpo">${corpo}</div>`;
 }
 function htmlRoteiro(D) {
-  const r = D.r, M = METODOS[r.metodo], ms = D.ms, cob = cobertosDe(D.al), hojeD = hojeISO();
+  const r = D.r, M = METODOS[r.metodo], ms = D.ms, cob = cobertosDe(D.al), hojeD = hojeISO(), deOutro = new Set(comunsDe(D.al).filter(k => !(plano()["cob:" + D.al.chave] || []).includes(k)));
   // fases: período e horas
   const porDia = {}; r.blocos.forEach(b => { const x = porDia[b.d] = porDia[b.d] || {}; x[b.f] = (x[b.f] || 0) + (b.dur || 60); });
   const faseDia = Object.entries(porDia).map(([d, x]) => [d, +Object.entries(x).sort((a, b) => b[1] - a[1])[0][0], Object.values(x).reduce((a, b) => a + b, 0)]).sort((a, b) => a[0].localeCompare(b[0]));
@@ -533,7 +577,7 @@ function htmlRoteiro(D) {
       return `<div class="pl-mat"><div class="pl-mat-topo"><b>${esc(m.nome)}</b><span class="note">peso ${m.peso} · ${feitos} de ${tops.length} tópicos estudados</span></div>
         <div class="pl-barra"><span style="width:${Math.round(feitos / Math.max(1, tops.length) * 100)}%"></span></div>
         <details><summary>ver os tópicos</summary><ol class="pl-tops">${tops.map((x, ti) => { const k = `${mi}.${ti}`, st = cob.has(k) ? "ok" : planejado.has(k) ? "plan" : "fora";
-          return `<li class="${st}"><span>${esc(x.t)}</span><small>${"●".repeat(x.r)}${st === "ok" ? " · estudado" : st === "plan" ? " · " + dm(planejado.get(k)) : " · fora do roteiro"}</small></li>`; }).join("")}</ol></details></div>`;
+          return `<li class="${st}"><span>${esc(x.t)}</span><small>${"●".repeat(x.r)}${st === "ok" ? (deOutro.has(k) ? " · estudado em outro concurso" : " · estudado") : st === "plan" ? " · " + dm(planejado.get(k)) : " · fora do roteiro"}</small></li>`; }).join("")}</ol></details></div>`;
     }).join("")}</div>
     <p class="note">● incidência em prova (●●● alta). Tópicos fora do roteiro voltam se sobrar tempo: adiante blocos ou aumente seus horários.</p>`;
 }
