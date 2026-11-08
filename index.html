@@ -600,6 +600,15 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .pl-check li span{display:flex;flex-direction:column}.pl-check small{color:var(--muted);font-size:12px}.pl-check li.ok b{text-decoration:line-through;opacity:.6}
 .pl-lembrete{display:flex;gap:10px;align-items:flex-start;margin:12px 0;text-align:left}.pl-lembrete span{display:flex;flex-direction:column}.pl-lembrete small{color:var(--muted);font-size:12px}
 .pc-qual{margin:6px 0 0}.pc-qual-form{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}.pc-qual-form input{flex:1;min-width:180px}
+.ag-topo{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:12px 0 6px}.ag-sel{display:flex;gap:6px;flex-wrap:wrap}.ag-sel button{border-radius:999px;padding:6px 12px;font-size:13px}.ag-sel button.on{background:var(--brand,#14213d);color:#fff;border-color:transparent}
+.ag-leg{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:6px 0 12px}.ag-leg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.ag-dia{border:1px solid var(--line);border-radius:14px;margin:0 0 12px;overflow:hidden}.ag-dia.hoje{border-color:#d4af37;box-shadow:inset 0 0 0 1px #d4af37}
+.ag-dia header{display:flex;justify-content:space-between;align-items:baseline;gap:8px;background:#f7f8fb;padding:9px 14px}.ag-dia.hoje header{background:#fffaf0}.ag-dia h3{margin:0;font-size:15px;text-transform:capitalize}.ag-dia header>span{font-size:12.5px;color:var(--muted)}
+.ag-dia.vazio header{background:transparent}.ag-dia.vazio h3{color:var(--muted);font-weight:500}.ag-prova{font-size:12px;text-transform:none;color:#8a6d1d}
+.ag-dia ul{list-style:none;margin:0;padding:4px 14px 8px}.ag-dia li{display:flex;gap:12px;align-items:stretch;padding:9px 0;border-bottom:1px dashed var(--line)}.ag-dia li:last-child{border-bottom:0}.ag-dia li.ok{opacity:.55}
+.ag-hr{width:46px;flex:none;display:flex;flex-direction:column;font-size:13px}.ag-hr span{color:var(--muted);font-size:12px}.ag-barra{width:4px;border-radius:3px;flex:none}.ag-tx{flex:1;min-width:0}
+.ag-l1{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.ag-l1 b{font-size:14.5px}.ag-tag{font-size:11px;border:1px solid;border-radius:999px;padding:1px 8px;font-weight:600;background:transparent!important}.ag-feito{font-size:12px;color:#2e7d4f;font-weight:600}.ag-pausa{display:block;font-size:12px;color:#8a6d1d;margin-top:2px}.ag-sub{display:block;font-size:13px;color:var(--muted);margin-top:2px}
+.t-t{background:#14213d;color:#14213d;border-color:#14213d55}.t-r{background:#2e7d4f;color:#2e7d4f;border-color:#2e7d4f55}.t-peca{background:#b5462b;color:#b5462b;border-color:#b5462b55}.t-rs{background:#8a6d1d;color:#8a6d1d;border-color:#8a6d1d55}
 .pl-ajmsg{margin:10px 0 0;padding:10px 12px;border-radius:10px;background:#f1faf4;border:1px solid #9fd3b0;font-size:14px;display:flex;gap:8px;align-items:center}.pl-ajmsg.erro{background:#fff4f2;border-color:#f0b4a8}.pl-ajmsg.lendo{background:#fffaf0;border-color:#d4af37}
 .pl-semedital{color:#8a5a00;flex-basis:100%}
 /* botões de ícone das fases com o nome embaixo */
@@ -1896,7 +1905,7 @@ iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO = 124;
+const APP_VERSAO = 125;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{

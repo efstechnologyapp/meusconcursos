@@ -377,6 +377,7 @@ function refazerRoteiro(al, motivo) {
   const marco = antigo && motivo !== "novo" && antigo.prova === al.f.data ? antigo.marco3 : null;
   const recentes = antigo ? antigo.blocos.filter((b, i) => antigo.feitos.includes(i) && b.f === 1 && (b.a === "T" || b.a === "P") && semanaDe(b.d) === semanaDe(hojeISO())).flatMap(b => b.t.map(t => `${b.m}.${t}`)) : [];
   const novo = gerarRoteiro(al, cont, cobertosDe(al), hojeISO(), usado, marco, antigo && antigo.metodo, recentes);
+  if (feitosHoje.some(x => x.b.a === "RS")) novo.blocos = novo.blocos.filter(b => !(b.a === "RS" && b.d === hojeISO()));   // a revisão da semana de hoje já foi feita
   if (feitosHoje.length) {
     const minReal = {}; Object.entries(novo.minReal || {}).forEach(([k, v]) => minReal[+k + feitosHoje.length] = v);
     feitosHoje.forEach((x, k) => { if (antigo.minReal && antigo.minReal[x.i]) minReal[k] = antigo.minReal[x.i]; });
@@ -549,11 +550,12 @@ function botaoPlanoHTML(x) {
 // janela do plano, com as abas
 function htmlPlanoModal(aba) {
   const D = dadosPlano();
-  const abas = `<div class="est-abas">${[["plano-hoje", "Hoje"], ["plano-ciclo", "Roteiro"], ["plano-ajustes", "Ajustes"]].map(([k, n]) => `<button type="button" class="${aba === k ? "on" : ""}" data-estaba="${k}">${n}</button>`).join("")}</div>`;
+  const abas = `<div class="est-abas">${[["plano-hoje", "Hoje"], ["plano-agenda", "Agenda"], ["plano-ciclo", "Roteiro"], ["plano-ajustes", "Ajustes"]].map(([k, n]) => `<button type="button" class="${aba === k ? "on" : ""}" data-estaba="${k}">${n}</button>`).join("")}</div>`;
   let corpo = "";
   if (aba === "plano-ajustes") corpo = htmlAjustesPlano(D);
   else if (!D.r) corpo = htmlSemPlano(D);
   else if (aba === "plano-ciclo") corpo = cabecalhoPlano(D) + htmlRoteiro(D);
+  else if (aba === "plano-agenda") corpo = htmlAgenda(D);
   else corpo = cabecalhoPlano(D) + htmlBlocosHoje(D);
   return `<div class="dlg-head"><div style="flex:1;min-width:0"><h2>Plano de estudos${D.al ? " · " + esc(siglaOuNome(D.al.x)) : ""}</h2><p class="sub">O plano diz <b>o que</b> estudar a cada dia; o botão <b>Abrir ›</b> leva à ferramenta certa do Estudar</p></div><button type="button" class="close" data-close aria-label="Fechar">×</button></div>${abas}<div class="est-corpo">${corpo}</div>`;
 }
@@ -628,6 +630,12 @@ function redesenharPlano() {
 document.addEventListener("click", e => {
   const c = e.target.closest("[data-plmontarcid],[data-placessar]");
   if (c) { if (c.dataset.placessar) abrirPlano("plano-hoje", c.dataset.placessar); else { const a = alvoPlano(c.dataset.plmontarcid); if (a) lerConteudoDoEdital(a); } return; }
+  const ag = e.target.closest("[data-plagdias],[data-plagcid]");
+  if (ag) {
+    if (ag.dataset.plagdias) planoUi.agDias = +ag.dataset.plagdias;
+    if (ag.dataset.plagcid) planoUi.cid = ag.dataset.plagcid;
+    desenharEstudo("plano-agenda"); if (ag.dataset.plagcid) $("estudoConteudo").scrollTop = 0; return;
+  }
   const h = e.target.closest("[data-hjcomecar],[data-hjabrir],[data-plchk],[data-platalho]");
   if (h) {
     const k = h.dataset;
@@ -842,4 +850,53 @@ function htmlChecklistProva(al, fechado) {
   const its = itensChecklist(al), ok = new Set(plano()["chk:" + al.chave] || []), n = its.filter(i => ok.has(i[0])).length;
   return `<details class="pl-check"${fechado ? "" : " open"}><summary>✅ Checklist da prova <span class="note">${n} de ${its.length}</span></summary>
     <ul>${its.map(([k, t, d]) => `<li class="${ok.has(k) ? "ok" : ""}"><label><input type="checkbox" data-plchk="${k}"${ok.has(k) ? " checked" : ""}><span><b>${esc(t)}</b>${d ? `<small>${esc(d)}</small>` : ""}</span></label></li>`).join("")}</ul></details>`;
+}
+
+
+// ---------- Agenda: o que estudar em cada dia, com horário sugerido ----------
+// Os horários saem do perfil (janelas de estudo de cada dia); um bloco que não cabe numa janela continua na seguinte.
+// São só sugestão: o estudo começa quando o usuário aperta ▶ na aba Hoje.
+const relogioAg = m => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+function horariosDosBlocos(d, bs) {
+  const h = plano().hojeMin, per = periodosHoje(parseData(d)).map(([a, b]) => [a, b]);
+  if (h && h.d === d) { const ini = per.length ? per[0][0] : 8 * 60; per.splice(0, per.length, [ini, ini + h.min]); }
+  if (!per.length) per.push([8 * 60, 23 * 60]);
+  let pi = 0, cur = per[0][0];
+  return bs.map(b => {
+    let resta = b.dur || 60; while (pi < per.length - 1 && cur >= per[pi][1]) { pi++; cur = per[pi][0]; }
+    const ini = cur, pausas = [];
+    while (resta > 0) { const cabe = per[pi][1] - cur; if (resta <= cabe || pi === per.length - 1) { cur += resta; resta = 0; } else { resta -= cabe; pausas.push([per[pi][1], per[pi + 1][0]]); pi++; cur = per[pi][0]; } }
+    return [ini, cur, pausas];
+  });
+}
+const tipoAgenda = (b, m) => b.a === "RS" || b.a === "L" || b.a === "L2" ? "rs" : m && m.tipo === "peca" ? "peca" : b.f === 1 && (b.a === "T" || b.a === "P") ? "t" : "r";
+const ROT_AG = { t: "Teoria", r: "Revisão e questões", peca: "Peça", rs: "Revisão" };
+function htmlAgenda(D) {
+  if (!D.r) return htmlSemPlano(D);
+  const r = D.r, ms = D.ms, n = planoUi.agDias || 7, hojeD = hojeISO(), fim = addDias(hojeD, n);
+  const outros = concursosComPlano();
+  const dias = [];
+  for (let d = hojeD; d < fim && d <= r.prova; d = addDias(d, 1)) {
+    const bs = r.blocos.map((b, i) => ({ b, i })).filter(x => x.b.d === d);
+    const prova = D.al.datas.includes(d);
+    if (!bs.length && !prova) { dias.push({ d, vazio: true }); continue; }
+    dias.push({ d, bs, prova, horas: horariosDosBlocos(d, bs.map(x => x.b)) });
+  }
+  const nomeDia = d => { const t = parseData(d).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" }).replace(".", ""); return d === hojeD ? "Hoje · " + t : d === addDias(hojeD, 1) ? "Amanhã · " + t : t; };
+  const cartao = x => {
+    if (x.vazio) return `<section class="ag-dia vazio"><header><h3>${esc(nomeDia(x.d))}</h3><span>sem estudo marcado</span></header></section>`;
+    const tot = x.bs.reduce((a, y) => a + (y.b.dur || 60), 0);
+    return `<section class="ag-dia${x.d === hojeD ? " hoje" : ""}"><header><h3>${esc(nomeDia(x.d))}${x.prova ? ` <span class="ag-prova">🍀 dia de prova</span>` : ""}</h3><span>${x.bs.length ? `${durTxt(tot)} · ${x.bs.length} bloco${x.bs.length > 1 ? "s" : ""}` : ""}</span></header>
+      ${x.bs.length ? `<ul>${x.bs.map((y, k) => { const t = blocoParaTela(ms, y.b, y.i, r), tp = tipoAgenda(y.b, y.b.m >= 0 ? ms[y.b.m] : null), [a, b, pz] = x.horas[k];
+        return `<li class="${t.feito ? "ok" : ""}"><div class="ag-hr"><b>${relogioAg(a)}</b><span>${relogioAg(b)}</span></div><span class="ag-barra t-${tp}"></span>
+          <div class="ag-tx"><div class="ag-l1"><b>${esc(t.m.nome)}</b><span class="ag-tag t-${tp}">${ROT_AG[tp]}</span>${t.feito ? `<span class="ag-feito">✓ feito</span>` : ""}</div>
+          <span class="ag-sub">${esc(t.txt)}${t.topicos.length ? ` — ${esc(t.topicos.join(" · "))}` : ""}</span>${pz.length ? `<span class="ag-pausa">com pausa: ${pz.map(([p1, p2]) => `${relogioAg(p1)}–${relogioAg(p2)}`).join(", ")}</span>` : ""}</div></li>`; }).join("")}</ul>` : ""}</section>`;
+  };
+  return `${cabecalhoPlano(D)}
+    <div class="ag-topo"><div class="ag-sel">${[[7, "Próximos 7 dias"], [30, "Próximos 30 dias"]].map(([k, t]) => `<button type="button" class="${n === k ? "on" : ""}" data-plagdias="${k}">${t}</button>`).join("")}</div>
+      ${outros.length > 1 ? `<div class="ag-sel">${outros.map(o => `<button type="button" class="${o.x.id === D.al.x.id ? "on" : ""}" data-plagcid="${esc(o.x.id)}">${esc(siglaOuNome(o.x))}</button>`).join("")}</div>` : ""}</div>
+    <p class="note">Os horários são uma sugestão a partir do seu perfil (${esc(resumoHorarios())}). Cada bloco começa quando você aperta ▶ na aba Hoje; se atrasar, o resto do dia anda junto.</p>
+    <div class="ag-leg"><span><i class="t-t"></i>Teoria</span><span><i class="t-r"></i>Revisão e questões</span><span><i class="t-peca"></i>Peça</span><span><i class="t-rs"></i>Revisão da semana / leve</span></div>
+    ${dias.map(cartao).join("")}
+    ${n === 7 && addDias(hojeD, 7) <= r.prova ? `<div class="actions" style="justify-content:center"><button type="button" class="mini" data-plagdias="30">Ver os próximos 30 dias ›</button></div>` : ""}`;
 }
