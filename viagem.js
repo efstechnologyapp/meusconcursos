@@ -152,6 +152,7 @@ async function geoEndereco(h0) {
   // [consulta, é aproximada?] — do mais preciso ao mais genérico
   const tentativas = [
     h.logradouro && h.numero && [{ street: `${h.numero} ${h.logradouro}`, city: cid, country: "Brasil" }, false],
+    h0.logradouro && /,/.test(h0.logradouro) && [{ q: h0.logradouro.replace(/\b\d{5}-?\d{3}\b/, "") + ", Brasil" }, false],
     h.logradouro && h.numero && [{ q: [`${h.logradouro}, ${h.numero}`, h.bairro, cid, uf, "Brasil"].filter(Boolean).join(", ") }, false],
     h.logradouro && [{ street: h.logradouro, city: cid, country: "Brasil" }, true],
     h.cep && [{ postalcode: h.cep, country: "Brasil" }, true],
@@ -167,6 +168,14 @@ async function geoEndereco(h0) {
 // tira rótulos que vêm grudados de prints ("Rua X Número:") e faixas de numeração do ViaCEP ("até 539/540")
 function limparEndereco(h) {
   if (!h) return h;
+  // endereço inteiro numa linha só (ex.: copiado do Airbnb: "Rua Macapá, 282 - Ondina, Salvador - BA, 40170-150"): separa as partes
+  if (h.logradouro && /,/.test(h.logradouro) && (!h.cidade || !h.numero)) {
+    let t = h.logradouro;
+    const cep = t.match(/\b(\d{5})-?(\d{3})\b/); if (cep) { if (!h.cep) h.cep = cep[1] + "-" + cep[2]; t = t.replace(cep[0], ""); }
+    const cu = t.match(/,\s*([^,\-–]+?)\s*[-–\/]\s*([A-Z]{2})\b/); if (cu) { if (!h.cidade) h.cidade = cu[1].trim(); if (!h.uf) h.uf = cu[2]; t = t.slice(0, cu.index); }
+    const nb = t.match(/^(.*?),\s*(\d{1,6}[A-Za-z]?)\s*(?:[-–,]\s*(.+))?$/); if (nb) { h.logradouro = nb[1].trim(); if (!h.numero) h.numero = nb[2]; if (nb[3] && !h.bairro) h.bairro = nb[3].trim(); }
+    else h.logradouro = t.replace(/[\s,–-]+$/, "").trim();
+  }
   if (h.logradouro) {
     const m = h.logradouro.match(/\s*[,–-]?\s*(?:n[uú]mero|n[º°o]\.?)\s*:?\s*(\d{1,6})?\s*$/i);
     if (m) { if (m[1] && !h.numero) h.numero = m[1]; h.logradouro = h.logradouro.slice(0, m.index).trim(); }
@@ -687,8 +696,15 @@ function linhasTrajeto(tj, tipo) {
   if (tj.localizador) out.push("Localizador: <b>" + esc(tj.localizador) + "</b>");
   return out;
 }
-function imprimirFases(id, idx) {
-  const x = itens.find(i => i.id === id); if (!x) return;
+async function imprimirFases(id, idx) {
+  const x0 = itens.find(i => i.id === id); if (!x0) return;
+  const bl0 = blocosDeViagem(x0).find(b => b.fases.includes(idx[0]));
+  const falta = bl0 && trechosDeslocamento(x0, bl0.uid).some(t => { const r = ((x0.viagens || {})[bl0.uid] || {}).rotas || {}; return !(r[t.id] && r[t.id].chave === t.chave); });
+  if (falta) {   // distâncias ainda não calculadas (ex.: o concurso não foi aberto neste aparelho): calcula antes, por até 12 s
+    toast("Calculando as distâncias (aeroporto, hospedagem e local) para a impressão…");
+    await Promise.race([atualizarDeslocamentos(x0).catch(() => {}), new Promise(ok => setTimeout(ok, 12000))]);
+  }
+  const x = itens.find(i => i.id === id) || x0;
   const fases = idx.map(i => x.fases[i]).filter(Boolean); if (!fases.length) return;
   const bl = blocosDeViagem(x).find(b => b.fases.includes(idx[0]));
   const v = bl ? ((x.viagens || {})[bl.uid] || {}) : {};
@@ -737,13 +753,16 @@ function imprimirFases(id, idx) {
     let txt = `<b>${esc(t.de)} → ${esc(t.para)}:</b> ${fmtKm(r.km)} km · ~${fmtTempo(r.min)} de carro (sem trânsito)`;
     if (t.id === "hospLocal") fases.filter(f => f.data && (f.portoes || f.horario)).forEach(f => { const lim = f.portoes || f.horario, s2 = hhmmMenos(lim, r.min + 30); if (s2) txt += `<br>${esc(fmtCurta(f.data))} – ${esc(f.nome)}: sair até <b>${s2}</b> (${f.portoes ? "portões fecham" : "prova começa"} ${lim})`; });
     return `<p>${txt}</p>`;
-  }).filter(Boolean).join("") : "";
+  }).filter(Boolean).join("") + trechosDeslocamento(x, bl.uid).filter(t => { const r = (v.rotas || {})[t.id]; return !r || r.chave !== t.chave || r.erro; })
+    .map(t => `<p><b>${esc(t.de)} → ${esc(t.para)}:</b> não consegui calcular a distância (confira o endereço no app).</p>`).join("") : "";
 
-  const tv = textoVagas(x.vagas);
+  const tv = textoVagas(x.vagas), cand = nomeDoCandidato();
   $("impressao").innerHTML = `
     <div class="imp-cab">${x.logo ? `<img src="${x.logo}" alt="">` : ""}<div><h1>${esc(x.nome)}</h1>
+      ${cand ? `<p class="imp-cand">Candidato(a): <b>${esc(cand)}</b></p>` : ""}
       <p>${esc([x.cargo, x.banca].filter(Boolean).join(" · "))}</p>
       <p>${esc([x.inscricao && "Inscrição nº " + x.inscricao, tv && tv.tot].filter(Boolean).join(" · "))}</p></div></div>
+    ${htmlVagasImpressao(x.vagas, kv)}
     <div class="imp-fase">${esc(titulo)}</div>
     <div class="imp-sec"><h3>Prova</h3>${provas}</div>
     <div class="imp-sec"><h3>Local de prova</h3>${local}</div>
@@ -753,7 +772,9 @@ function imprimirFases(id, idx) {
     ${x.instrucoes ? `<div class="imp-sec"><h3>Instruções gerais</h3><p>${esc(x.instrucoes).replace(/\n/g, "<br>")}</p></div>` : ""}
     <p class="imp-rod">Gerado pelo app Meus Concursos em ${esc(new Date().toLocaleString("pt-BR"))}.</p>`;
   const tituloAntigo = document.title;
-  document.title = `${x.nome} – ${titulo}`.replace(/[\\/:*?"<>|]/g, "-");   // nome sugerido ao salvar em PDF
+  // nome sugerido ao salvar em PDF: "Meus Concursos - Fillipe - TJRS - Juiz de Direito Substituto"
+  const orgao = x.sigla || (String(x.nome || "").length > 28 ? siglaDoOrgao(x.nome) : x.nome);
+  document.title = ["Meus Concursos", cand.split(/\s+/)[0], orgao, x.cargo].filter(Boolean).join(" - ").replace(/[\\/:*?"<>|]/g, "-");
   setTimeout(() => { window.print(); setTimeout(() => { document.title = tituloAntigo; }, 1000); }, 50);
 }
 document.addEventListener("click", e => {
@@ -761,3 +782,21 @@ document.addEventListener("click", e => {
   const id = $("verConteudo").dataset.id;
   if (id) imprimirFases(id, b.dataset.imprimir.split(",").map(Number));
 });
+
+// nome de quem está usando o app (o do perfil editado ou o da conta Google)
+function nomeDoCandidato() {
+  const pf = (typeof perfil !== "undefined" && perfil) || {}, u = (typeof usuarioAtual !== "undefined" && usuarioAtual) || {};
+  return String(pf.nome || u.nome || "").trim();
+}
+// quadro de vagas na impressão: total, cadastro de reserva e cada cota (o que estiver no cadastro do concurso)
+function htmlVagasImpressao(v, kv) {
+  if (!v || !(temVagas(v) || v.cr)) return `<div class="imp-sec"><h3>Vagas</h3><p>Ainda não informadas no cadastro do concurso.</p></div>`;
+  const nomes = { ampla: "Ampla concorrência", pcd: "Pessoas com deficiência", negros: "Negros (pretos e pardos)", indigenas: "Indígenas", quilombolas: "Quilombolas" };
+  const cotas = VAGAS_CAMPOS.filter(([k]) => k !== "ampla" && v[k]);
+  const linhas = [["Total", esc(v.total ? `${v.total} vaga${+v.total === 1 ? "" : "s"}` : "só cadastro de reserva")],
+    ["Cadastro de reserva", v.cr || VAGAS_CAMPOS.some(([k]) => /CR/i.test(String(v[k] || ""))) ? "Sim" : "Não informado"],
+    ...(v.ampla ? [[nomes.ampla, esc(v.ampla)]] : []),
+    ...cotas.map(([k]) => [nomes[k], esc(v[k])]),
+    ...(cotas.length ? [] : [["Cotas", "não informadas no cadastro (confira o quadro de vagas no edital)"]])];
+  return `<div class="imp-sec"><h3>Vagas</h3>${kv(linhas)}</div>`;
+}

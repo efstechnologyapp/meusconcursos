@@ -178,6 +178,7 @@ fieldset{border:none;padding:0;margin:0;display:contents}
   @page{margin:16mm 14mm}
 }
 .imp-cab{display:flex;gap:14px;align-items:center;border-bottom:2px solid #14213d;padding-bottom:10px;margin-bottom:12px}
+.imp-cand{font-size:12pt;margin:2px 0}
 .imp-cab img{width:64px;height:64px;object-fit:contain}
 .imp-cab h1{font-family:var(--f-display);font-size:18pt;margin:0;line-height:1.15}
 .imp-cab p{margin:2px 0 0;color:#444}
@@ -1895,7 +1896,7 @@ iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO = 118;
+const APP_VERSAO = 121;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{
