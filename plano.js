@@ -94,7 +94,7 @@ Responda só com JSON: {"materias":[{"nome":"","peso":3,"tipo":"teoria","lei":""
     if (!ms.length) { console.warn("resposta da IA", r); throw new Error("a IA respondeu sem a lista de matérias" + (texto || pdfParte ? "" : " (não consegui ler o texto do edital)")); }
     gravarPlano("cont:" + al.chave, { quando: hojeISO(), materias: ms, doEdital: !!(texto || pdfParte) });
     gravarPlano("cob:" + al.chave, []); gravarPlano("rot:" + al.chave, undefined); refazerRoteiro(al, "novo");
-    if (typeof toast === "function") toast(`Plano de estudos de ${al.titulo} pronto.`);
+    avisarAjuste(`Plano de estudos de ${al.titulo} refeito pelo edital: ${ms.length} matérias, roteiro a partir de hoje.`);
   } catch (e) { planoUi.erro[al.chave] = "Não consegui montar as matérias: " + (e.message || e) + "."; if (typeof toast === "function") toast("Não consegui montar o plano. Tente de novo."); }
   delete planoUi.lendo[al.chave]; redesenharPlano();
 }
@@ -543,9 +543,11 @@ function htmlAjustesPlano(D) {
     <label class="chk pl-lembrete"><input type="checkbox" id="plLembrete"${plano().lembrete ? " checked" : ""}> <span><b>Avisar no celular na hora de estudar</b><small>O app marca seus horários de estudo no seu Google Agenda, com alarme na hora de começar, até a data da prova.</small></span></label>
     ${D.al ? `<h4 class="pl-h">Matérias de ${esc(D.al.titulo)}</h4>
     ${ms.length ? `<p class="note">O peso (1 a 5) define quanto tempo a matéria ganha em todo o plano (teoria, revisão e reta final). Ao mudar, o roteiro é refeito a partir de hoje.</p>
-      <div class="pl-mats">${ms.map((m, i) => `<div class="pl-mat pl-edit"><b>${esc(m.nome)}</b><span class="note">${topicosDe(m).length} tópicos</span><select data-plpeso="${i}">${[1, 2, 3, 4, 5].map(n => `<option${n === m.peso ? " selected" : ""}>${n}</option>`).join("")}</select><button type="button" class="mini" data-pltirar="${i}" title="Tirar do plano">×</button></div>`).join("")}</div>` : `<p class="note">Ainda sem matérias.</p>`}
+      <div class="pl-mats">${ms.map((m, i) => `<div class="pl-mat pl-edit"><b>${esc(m.nome)}</b><span class="note">${topicosDe(m).length} tópicos</span><select data-plpeso="${i}">${[1, 2, 3, 4, 5].map(n => `<option${n === m.peso ? " selected" : ""}>${n}</option>`).join("")}</select><button type="button" class="mini" data-pltirar="${i}" data-plnome="${esc(m.nome)}" title="Tirar do plano">×</button></div>`).join("")}</div>` : `<p class="note">Ainda sem matérias.</p>`}
     <div class="sim-grid" style="margin-top:10px"><label>Incluir matéria<input id="plNovaMat" placeholder="ex.: Direito Eleitoral"></label><label>Tipo<select id="plNovaTipo"><option value="teoria">teoria</option><option value="peca">peça / sentença</option></select></label></div>
-    <div class="actions" style="justify-content:flex-start"><button type="button" class="mini" data-plincluir="1">Incluir</button>${ms.length ? `<button type="button" class="mini" data-plrefazer="1">Refazer o roteiro a partir de hoje</button>` : ""}<button type="button" class="mini" data-plmontar="1">${ms.length ? "Ler o edital de novo (recomeça o plano)" : "Montar pelo edital"}</button></div>` : ""}`;
+    <div class="actions" style="justify-content:flex-start"><button type="button" class="mini" data-plincluir="1">Incluir</button>${ms.length ? `<button type="button" class="mini" data-plrefazer="1">Refazer o roteiro a partir de hoje</button>` : ""}<button type="button" class="mini" data-plmontar="1"${planoUi.lendo[D.al.chave] ? " disabled" : ""}>${ms.length ? "Ler o edital de novo (recomeça o plano)" : "Montar pelo edital"}</button></div>
+    ${planoUi.lendo[D.al.chave] ? `<p class="pl-ajmsg lendo" role="status"><span class="pl-gira"></span> A IA está lendo o edital de novo… (até 3 minutos). Pode continuar usando o app.</p>`
+      : planoUi.avisoAj && Date.now() - planoUi.avisoAj.t < 20000 ? `<p class="pl-ajmsg${planoUi.avisoAj.erro ? " erro" : ""}" role="status">${planoUi.avisoAj.erro ? "⚠️" : "✓"} ${esc(planoUi.avisoAj.txt)}</p>` : planoUi.erro[D.al.chave] ? `<p class="pl-ajmsg erro" role="status">⚠️ ${esc(planoUi.erro[D.al.chave])}</p>` : ""}` : ""}`;
 }
 
 // ---------- abrir a função certa do app ----------
@@ -568,6 +570,8 @@ function abrirPlano(aba, cid) {
   estudoAba = ""; desenharEstudo(aba || "plano-hoje");
   const d = $("dlgEstudo"); if (!d.open) d.showModal(); $("estudoConteudo").scrollTop = 0;
 }
+// confirmação visível na própria tela de Ajustes (o aviso flutuante sozinho passava despercebido)
+function avisarAjuste(txt, erro) { planoUi.avisoAj = { txt, erro: !!erro, t: Date.now() }; if (!erro && typeof toast === "function") toast(txt); }
 function redesenharPlano() {
   try {
     const d = $("dlgEstudo");
@@ -596,8 +600,8 @@ document.addEventListener("click", e => {
   if (d.pliniciar !== undefined && al) { iniciarTimer(al, +d.pliniciar); return; }
   if (d.plabrir !== undefined) { abrirBlocoPlano(d.plabrir); return; }
   if (d.plaba) { abrirPlano(d.plaba); return; }
-  if (d.plmontar && al) { lerConteudoDoEdital(al); return; }
-  if (d.plrefazer && al) { refazerRoteiro(al, "mudou"); toast("Roteiro refeito a partir de hoje."); redesenharPlano(); return; }
+  if (d.plmontar && al) { planoUi.avisoAj = null; lerConteudoDoEdital(al); return; }
+  if (d.plrefazer && al) { refazerRoteiro(al, "mudou"); avisarAjuste("Roteiro refeito a partir de hoje: veja os blocos nas abas Hoje e Roteiro."); redesenharPlano(); return; }
   if (d.plpuxar && al) {   // blocos atrasados vêm para hoje
     const r = roteiroDe(al); if (!r) return; atrasadosDe(r).forEach(b => r.blocos[b.i].d = hojeISO());
     r.verif = hojeISO(); gravarPlano("rot:" + al.chave, r); toast("Os blocos atrasados estão na lista de hoje."); redesenharPlano(); return;
@@ -612,7 +616,9 @@ document.addEventListener("click", e => {
       const k = +d.pltirar; c.materias.splice(k, 1);
       // os tópicos já estudados das outras matérias continuam marcados (os índices andam uma casa)
       gravarPlano("cob:" + al.chave, [...cobertosDe(al)].map(x => x.split(".").map(Number)).filter(([m]) => m !== k).map(([m, t]) => `${m > k ? m - 1 : m}.${t}`));
-    } else { const nome = ($("plNovaMat") || {}).value.trim(); if (!nome) { toast("Escreva o nome da matéria."); return; } c.materias.push({ nome, peso: 3, tipo: $("plNovaTipo").value, lei: MATERIAS_LEI.find(m => semAcentoEst(nome).includes(semAcentoEst(m))) || "", topicos: [] }); }
+      avisarAjuste(`“${d.plnome || "A matéria"}” saiu do plano e o roteiro foi refeito a partir de hoje.`);
+    } else { const nome = ($("plNovaMat") || {}).value.trim(); if (!nome) { avisarAjuste("Escreva o nome da matéria antes de tocar em Incluir.", true); redesenharPlano(); return; } c.materias.push({ nome, peso: 3, tipo: $("plNovaTipo").value, lei: MATERIAS_LEI.find(m => semAcentoEst(nome).includes(semAcentoEst(m))) || "", topicos: [] });
+      avisarAjuste(`“${nome}” foi incluída no plano (peso 3) e o roteiro foi refeito a partir de hoje.`); }
     gravarPlano("cont:" + al.chave, c); refazerRoteiro(al, "mudou"); redesenharPlano(); return;
   }
 });
@@ -638,7 +644,8 @@ document.addEventListener("change", e => {
   }
   const s = e.target.closest("[data-plpeso]"); if (!s) return;
   const al = alvoPlano(), c = al && conteudoPlano(al); if (!c) return;
-  c.materias[+s.dataset.plpeso].peso = +s.value; gravarPlano("cont:" + al.chave, c); refazerRoteiro(al, "mudou"); redesenharPlano();
+  c.materias[+s.dataset.plpeso].peso = +s.value; gravarPlano("cont:" + al.chave, c); refazerRoteiro(al, "mudou");
+  avisarAjuste(`Peso de “${c.materias[+s.dataset.plpeso].nome}” agora é ${s.value}; o roteiro foi refeito a partir de hoje.`); redesenharPlano();
 });
 
 // ---------- cronômetro do bloco ----------
