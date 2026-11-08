@@ -88,7 +88,29 @@ function eventosDasFases() {
       out.push(ev);
     }
   }
+  return out.concat(eventosDeEstudo());
+}
+// lembretes de estudo (Plano de estudos › Ajustes): um evento por dia com estudo, de hoje até a prova mais distante dos planos,
+// no início do primeiro horário do dia, com alarme na hora
+function eventosDeEstudo() {
+  if (typeof plano !== "function" || !plano().lembrete || typeof concursosComPlano !== "function") return [];
+  const l = concursosComPlano(); if (!l.length) return [];
+  const ate = l.map(o => o.al.f.data).sort().pop(), out = [];
+  for (let d = hojeISO(), n = 0; d < ate && n < 120; d = somarDias(d, 1), n++) {
+    const per = periodosHoje(parseData(d)), min = minutosDoDia(parseData(d)); if (!per.length || !min) continue;
+    const ini = per[0][0], fim = Math.min(ini + min, 23 * 60 + 59), hm = m => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+    const ev = { summary: "📚 Hora de estudar – Meus Concursos", location: "", description: `Meta do dia: ${durTxt(min)}.\nAbra o app: a faixa "Hoje" mostra o primeiro bloco (▶ Começar).\nCriado pelo app Meus Concursos.`,
+      start: { dateTime: `${d}T${hm(ini)}:00-03:00`, timeZone: "America/Sao_Paulo" }, end: { dateTime: `${d}T${hm(fim)}:00-03:00`, timeZone: "America/Sao_Paulo" },
+      lembretes: [{ method: "popup", minutes: 0 }] };
+    ev.sig = JSON.stringify([ev.summary, ev.description, ev.start, ev.end, corAgenda(), "e1"]); ev.chave = `estudo:${d}`;
+    out.push(ev);
+  }
   return out;
+}
+const ehProva = e => !/:boleto$/.test(e.chave) && !/^estudo:/.test(e.chave);
+function textoAgendaEmDia(desejados, mud) {
+  const nE = desejados.filter(e => /^estudo:/.test(e.chave)).length;
+  return `Agenda em dia: ${desejados.filter(ehProva).length} prova(s) com data${desejados.some(e => /:boleto$/.test(e.chave)) ? " e o(s) vencimento(s) de boleto" : ""}${nE ? ` e ${nE} dia(s) de estudo` : ""} no seu Google Agenda${mud ? " (" + mud + " agora)" : ""}.`;
 }
 function hashTexto(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return String(h); }
 
@@ -107,7 +129,7 @@ async function sincronizarAgenda(forcar) {
   const desejados = eventosDasFases();
   const assinatura = hashTexto(desejados.map(e => e.chave + e.sig).join("|"));
   let ultima = ""; try { ultima = localStorage.getItem(chaveAssinaturaAgenda()) || ""; } catch (e) {}
-  if (!forcar && assinatura === ultima) { statusAgenda(`Agenda em dia: ${desejados.filter(e => !/:boleto$/.test(e.chave)).length} prova(s) com data${desejados.some(e => /:boleto$/.test(e.chave)) ? " e o(s) vencimento(s) de boleto" : ""} no seu Google Agenda.`); return; }
+  if (!forcar && assinatura === ultima) { statusAgenda(textoAgendaEmDia(desejados)); return; }
   const token = tokenAgenda();
   if (!token) { statusAgenda("Há mudanças para gravar no Google Agenda.", true); return; }
   agendaRodando = true; statusAgenda("Atualizando o Google Agenda…");
@@ -129,10 +151,11 @@ async function sincronizarAgenda(forcar) {
       if (!at) { await apiAgenda(token, "POST", API_AGENDA, corpo); criados++; }
       else if (at.extendedProperties.private.sig !== hashTexto(ev.sig)) { await apiAgenda(token, "PUT", `${API_AGENDA}/${at.id}`, corpo); atualizados++; }
     }
-    for (const e of Object.values(existentes)) { await apiAgenda(token, "DELETE", `${API_AGENDA}/${e.id}`); removidos++; }
+    for (const [c, e] of Object.entries(existentes)) { if (/^estudo:/.test(c) && c.slice(7) < hojeISO()) continue;   // dias de estudo que já passaram ficam na agenda
+      await apiAgenda(token, "DELETE", `${API_AGENDA}/${e.id}`); removidos++; }
     try { localStorage.setItem(chaveAssinaturaAgenda(), assinatura); } catch (e) {}
     const mud = [criados && `${criados} criado(s)`, atualizados && `${atualizados} atualizado(s)`, removidos && `${removidos} removido(s)`].filter(Boolean).join(", ");
-    statusAgenda(`Agenda em dia: ${desejados.filter(e => !/:boleto$/.test(e.chave)).length} prova(s) com data${desejados.some(e => /:boleto$/.test(e.chave)) ? " e o(s) vencimento(s) de boleto" : ""} no seu Google Agenda${mud ? " (" + mud + " agora)" : ""}.`);
+    statusAgenda(textoAgendaEmDia(desejados, mud));
   } catch (e) {
     if (e.token) statusAgenda("O acesso ao Google Agenda expirou.", true);
     else if (e.permissao) statusAgenda("O Google recusou: " + e.message + " Verifique se a API do Google Agenda está ativada no projeto (veja CONFIGURAR-LOGIN.md).", true);

@@ -51,7 +51,7 @@ function renderEstudoPagina() {
     { area: "pecas", titulo: "Peças práticas", texto: "Estrutura de cada peça, casos originais e inéditos, resposta digitada ou manuscrita com correção pelo espelho e avaliação da caligrafia.",
       stats: nPecas == null ? "Abrindo a pasta no Drive…" : `${nPecas} peça(s)${nPecas ? ` · ${respondidas(["peca"])} respondida(s)` : ""}`, pend: pend("pecas") }
   ];
-  const html = `<header class="pe-topo"><div><button type="button" class="mini" id="peVoltar">‹ Meus concursos</button><h1 style="margin-top:10px">Estudar</h1><p class="sub">Escolha como quer estudar hoje.</p></div></header>
+  const html = `<header class="pe-topo"><div><button type="button" class="mini" id="peVoltar">‹ Meus concursos</button><h1 style="margin-top:10px">Estudar</h1><p class="sub">Aqui ficam as ferramentas de estudo. Para saber <b>o que</b> estudar hoje, siga o <button type="button" class="linkbt" data-hjabrir="">🗓️ Plano de estudos</button>.</p></div></header>
     <div class="pe-cards">${cartoes.map(c => `<button type="button" class="pe-card" data-pearea="${c.area}">${c.pend ? `<span class="badge-pend" title="prova impressa aguardando correção">${c.pend}</span>` : ""}
       <span class="pe-ic" aria-hidden="true">${ICONES_ESTUDO[c.area]}</span><h3>${c.titulo}</h3><p>${c.texto}</p>
       ${c.pend ? `<p class="pe-pend">${c.pend} prova(s) impressa(s) aguardando correção</p>` : ""}<p class="pe-stats">${esc(c.stats)}</p></button>`).join("")}</div>

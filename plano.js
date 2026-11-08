@@ -153,18 +153,20 @@ function intercalar(listas) {
   return out;
 }
 // horários (em minutos) de um dia
-function minutosDoDia(d) { return periodosHoje(d).reduce((a, [x, y]) => a + (y - x), 0); }
+// "hoje só tenho X": o usuário troca o tempo de hoje sem mexer no perfil (vale só para o dia)
+function minutosDoDia(d) { const h = plano().hojeMin; if (h && h.d === hojeISOde(d)) return h.min; return minutosDoPerfil(d); }
+function minutosDoPerfil(d) { return periodosHoje(d).reduce((a, [x, y]) => a + (y - x), 0); }
 function horariosDoDia(d) { const s = []; periodosHoje(d).forEach(([a, b]) => { for (let t = a; t + 60 <= b; t += 60) s.push(t); }); return s; }
 function addDias(iso, n) { const d = parseData(iso); d.setDate(d.getDate() + n); return hojeISOde(d); }
 
 // ---------- roteiro ----------
-function gerarRoteiro(al, cont, cobertos, inicio) {
+function gerarRoteiro(al, cont, cobertos, inicio, usadoHoje) {
   const ms = cont.materias, prova = al.f.data, vesp = addDias(prova, -1);
   // minutos de estudo de cada dia (pelos horários do perfil), de hoje até a antevéspera; na véspera, só um bloco leve
   // (os horários servem só para medir quanto tempo há em cada dia: o estudo começa quando o usuário aperta "Iniciar")
   const caps = []; let dias = 0, capV = 0;
   for (let d = inicio; d < prova; d = addDias(d, 1)) {
-    const min = minutosDoDia(parseData(d)); if (min) dias++;
+    const min = Math.max(0, minutosDoDia(parseData(d)) - (d === inicio ? usadoHoje || 0 : 0)); if (min) dias++;   // hoje: desconta o que já foi estudado
     if (d === vesp) { capV = min; continue; }
     if (min) caps.push({ d, min });
   }
@@ -233,7 +235,23 @@ const cobertosDe = al => new Set(plano()["cob:" + al.chave] || []);
 // (re)faz o roteiro a partir de hoje com o que ainda falta; guarda um aviso quando é replanejamento
 function refazerRoteiro(al, motivo) {
   const cont = conteudoPlano(al); if (!cont || !cont.materias.length) return null;
-  const antigo = roteiroDe(al), novo = gerarRoteiro(al, cont, cobertosDe(al), hojeISO());
+  const antigo = roteiroDe(al);
+  // blocos já concluídos hoje continuam no roteiro novo (e o tempo deles sai da cota de hoje)
+  const feitosHoje = antigo ? antigo.blocos.map((b, i) => ({ b, i })).filter(x => x.b.d === hojeISO() && antigo.feitos.includes(x.i)) : [];
+  const usado = feitosHoje.reduce((a, x) => a + ((antigo.minReal && antigo.minReal[x.i]) || x.b.dur || 60), 0);
+  const novo = gerarRoteiro(al, cont, cobertosDe(al), hojeISO(), usado);
+  if (feitosHoje.length) {
+    const minReal = {}; Object.entries(novo.minReal || {}).forEach(([k, v]) => minReal[+k + feitosHoje.length] = v);
+    feitosHoje.forEach((x, k) => { if (antigo.minReal && antigo.minReal[x.i]) minReal[k] = antigo.minReal[x.i]; });
+    novo.blocos = [...feitosHoje.map(x => x.b), ...novo.blocos]; novo.feitos = feitosHoje.map((x, k) => k); novo.minReal = minReal;
+  }
+  // bloco com o cronômetro rodando: entra no roteiro novo logo depois dos feitos, e o cronômetro passa a apontar para ele
+  const T = plano().timer;
+  if (T && antigo && T.chave === al.chave && antigo.blocos[T.i]) {
+    const pos = feitosHoje.length; novo.blocos.splice(pos, 0, { ...antigo.blocos[T.i], d: hojeISO() });
+    const mr = {}; Object.entries(novo.minReal || {}).forEach(([k, v]) => mr[+k >= pos ? +k + 1 : +k] = v); novo.minReal = mr;
+    novo.feitos = novo.feitos.map(i => i >= pos ? i + 1 : i); gravarPlano("timer", { ...T, i: pos });
+  }
   novo.verif = hojeISO();
   if (antigo && motivo === "atraso") novo.aviso = { dia: hojeISO(), de: antigo.metodo, para: novo.metodo, fora: novo.fora, atrasados: atrasadosDe(antigo).length };
   if (antigo && motivo === "mudou") novo.aviso = { dia: hojeISO(), de: antigo.metodo, para: novo.metodo, fora: novo.fora, mudou: true };
@@ -245,6 +263,7 @@ function refazerRoteiro(al, motivo) {
 }
 // replaneja todos os planos (ex.: depois de mudar os horários no perfil)
 function refazerTodosRoteiros() {
+  if (typeof agendarAgenda === "function") agendarAgenda();   // lembretes de estudo no Google Agenda acompanham os horários
   const p = plano();
   (typeof itens !== "undefined" ? itens : []).forEach(x => { const al = alvoPlano(x.id); if (al && p["cont:" + al.chave]) refazerRoteiro(al, "mudou"); });
 }
@@ -332,15 +351,18 @@ function avisoRoteiro(r) {
   return `<div class="pl-aviso">🔄 ${a.mudou ? "Roteiro refeito com as mudanças." : `Roteiro refeito a partir de hoje: ${a.atrasados} bloco(s) tinham ficado para trás.`}${mud}${a.fora ? ` ${a.fora} tópico(s) de menor incidência ficaram de fora.` : ""}</div>`;
 }
 function htmlBlocosHoje(D) {
-  if (D.al.dias <= 0) return `<p class="pl-msg">Hoje é dia de prova. Boa prova! 🍀</p>`;
+  if (D.al.dias <= 0) return `<p class="pl-msg">Hoje é dia de prova. Boa prova! 🍀</p>${htmlChecklistProva(D.al, false)}`;
   const r = D.r, feitos = D.blocos.filter(b => b.feito).length;
   const prog = lerEst("prog", {}), revisar = (typeof julgados !== "undefined" && Array.isArray(julgados) ? julgados : []).filter(j => prog[j.id] && prog[j.id].prox <= hojeISO()).length;
   const prox = r.blocos.map((b, i) => ({ b, i })).find(x => x.b.d > hojeISO() && !r.feitos.includes(x.i));
   return `${avisoRoteiro(r)}${D.atrasados.length ? `<div class="pl-aviso atraso">⏳ ${D.atrasados.length} bloco(s) de dias anteriores ainda não foram feitos. Se passar de um dia de estudo, o roteiro é refeito sozinho amanhã — ou <button type="button" class="linkbt" data-plrefazer="1">refazer agora</button>.</div>` : ""}
-    ${D.blocos.length ? `<p class="note pl-cont">Cota de hoje: <b>${durTxt(D.blocos.reduce((a, b) => a + b.dur, 0))}</b> em ${D.blocos.length} bloco(s) · ${feitos} feito(s)${D.fase === 4 ? " · véspera: estude pouco e descanse" : ""}. Cada bloco começa quando você apertar ▶ e termina sozinho.</p>
+    ${htmlChecklistProva(D.al, D.al.dias > 3)}
+    ${htmlTempoDeHoje()}
+    ${D.blocos.length ? `<p class="note pl-cont">Meta de hoje: <b>${durTxt(D.blocos.reduce((a, b) => a + b.dur, 0))}</b> em ${D.blocos.length} bloco(s) · ${feitos} feito(s)${D.fase === 4 ? " · véspera: estude pouco e descanse" : ""}. Cada bloco começa quando você apertar ▶ e termina sozinho.</p>
     <ul class="pl-lista">${D.blocos.map(b => htmlItemBloco(D.al, b)).join("")}
       ${revisar ? `<li class="pl-extra"><span class="pl-dur">+</span><div class="pl-txt"><b>Revisão espaçada</b><span>${revisar} julgado(s) para revisar hoje (10–15 min)</span></div><button type="button" class="mini" data-plabrir="revisar">Abrir ›</button></li>` : ""}</ul>`
-    : `<p class="note">Hoje não há tempo de estudo no seu perfil (ajuste em ☰ › Editar perfil). Se quiser estudar mesmo assim, puxe um bloco.</p>`}
+    : `<p class="note">Hoje não há tempo de estudo marcado. Se quiser estudar mesmo assim, escolha acima quanto tempo você tem hoje.</p>`}
+    ${htmlAtalhosPlano(D)}
     ${prox && feitos === D.blocos.length ? `<div class="actions" style="justify-content:flex-start"><button type="button" class="mini" data-pladiantar="${prox.i}">+ Estudar mais um bloco (${esc(blocoParaTela(D.ms, prox.b, prox.i, r).m.nome)}, ${durTxt(prox.b.dur || 60)})</button></div>` : ""}`;
 }
 // um item da lista de hoje: ▶ Iniciar, ⏱ rodando ou ✓ feito
@@ -364,7 +386,8 @@ function htmlSemPlano(D) {
 }
 // botão embaixo do card de cada concurso em andamento: "Montar" → (montando…) → "Acessar plano de estudos"
 function botaoPlanoHTML(x) {
-  const al = alvoPlano(x.id); if (!al) return "";
+  const al = alvoPlano(x.id);
+  if (!al) return andamento(x).ativo ? `<div class="pl-cardbt"><span class="note">🗓️ Para montar o plano de estudos, cadastre a <b>data da prova</b> (abra o concurso › Editar).</span></div>` : "";
   if (planoUi.lendo[al.chave]) return `<div class="pl-cardbt"><button type="button" class="pl-bt montando" disabled><span class="pl-gira"></span>Montando o plano de estudos…</button><span class="note">a IA está lendo o edital (até 3 min)</span></div>`;
   const cont = conteudoPlano(al);
   if (cont && cont.materias && cont.materias.length) {
@@ -373,7 +396,8 @@ function botaoPlanoHTML(x) {
     return `<div class="pl-cardbt"><button type="button" class="pl-bt pronto" data-placessar="${esc(x.id)}">🗓️ Acessar plano de estudos</button>${info ? `<span class="note">${esc(info)}</span>` : ""}</div>`;
   }
   const erro = planoUi.erro[al.chave];
-  return `<div class="pl-cardbt"><button type="button" class="pl-bt" data-plmontarcid="${esc(x.id)}">✨ ${erro ? "Tentar montar de novo" : "Montar plano de estudos"}</button>${erro ? `<span class="note pl-erro">${esc(erro)}</span>` : ""}</div>`;
+  const semEdital = !x.edital_arquivo ? `<span class="note pl-semedital">⚠️ Sem edital anexado: a IA vai adivinhar o conteúdo pelo cargo. Para um plano fiel, junte o PDF do edital (abra o concurso › Editar).</span>` : "";
+  return `<div class="pl-cardbt"><button type="button" class="pl-bt" data-plmontarcid="${esc(x.id)}">✨ ${erro ? "Tentar montar de novo" : "Montar plano de estudos"}</button>${erro ? `<span class="note pl-erro">${esc(erro)}</span>` : semEdital}</div>`;
 }
 // janela do plano, com as abas
 function htmlPlanoModal(aba) {
@@ -384,7 +408,7 @@ function htmlPlanoModal(aba) {
   else if (!D.r) corpo = htmlSemPlano(D);
   else if (aba === "plano-ciclo") corpo = cabecalhoPlano(D) + htmlRoteiro(D);
   else corpo = cabecalhoPlano(D) + htmlBlocosHoje(D);
-  return `<div class="dlg-head"><div style="flex:1;min-width:0"><h2>Plano de estudos${D.al ? " · " + esc(siglaOuNome(D.al.x)) : ""}</h2><p class="sub">Todo o conteúdo programático, no método que cabe no seu tempo até a prova</p></div><button type="button" class="close" data-close aria-label="Fechar">×</button></div>${abas}<div class="est-corpo">${corpo}</div>`;
+  return `<div class="dlg-head"><div style="flex:1;min-width:0"><h2>Plano de estudos${D.al ? " · " + esc(siglaOuNome(D.al.x)) : ""}</h2><p class="sub">O plano diz <b>o que</b> estudar a cada dia; o botão <b>Abrir ›</b> leva à ferramenta certa do Estudar</p></div><button type="button" class="close" data-close aria-label="Fechar">×</button></div>${abas}<div class="est-corpo">${corpo}</div>`;
 }
 function htmlRoteiro(D) {
   const r = D.r, M = METODOS[r.metodo], ms = D.ms, cob = cobertosDe(D.al), hojeD = hojeISO();
@@ -411,6 +435,7 @@ function htmlRoteiro(D) {
 function htmlAjustesPlano(D) {
   const ms = D.cont ? D.cont.materias : [];
   return `<div class="pl-horas"><div><b>Seus horários de estudo</b><span class="note">${resumoHorarios()}</span></div><button type="button" class="mini" data-abrirperfil="horarios">Editar no meu perfil</button></div>
+    <label class="chk pl-lembrete"><input type="checkbox" id="plLembrete"${plano().lembrete ? " checked" : ""}> <span><b>Avisar no celular na hora de estudar</b><small>O app marca seus horários de estudo no seu Google Agenda, com alarme na hora de começar, até a data da prova.</small></span></label>
     ${D.al ? `<h4 class="pl-h">Matérias de ${esc(D.al.titulo)}</h4>
     ${ms.length ? `<p class="note">O peso (1 a 5) define quanto tempo a matéria ganha na revisão e na reta final. Ao mudar, o roteiro é refeito a partir de hoje.</p>
       <div class="pl-mats">${ms.map((m, i) => `<div class="pl-mat pl-edit"><b>${esc(m.nome)}</b><span class="note">${topicosDe(m).length} tópicos</span><select data-plpeso="${i}">${[1, 2, 3, 4, 5].map(n => `<option${n === m.peso ? " selected" : ""}>${n}</option>`).join("")}</select><button type="button" class="mini" data-pltirar="${i}" title="Tirar do plano">×</button></div>`).join("")}</div>` : `<p class="note">Ainda sem matérias.</p>`}
@@ -449,6 +474,16 @@ function redesenharPlano() {
 document.addEventListener("click", e => {
   const c = e.target.closest("[data-plmontarcid],[data-placessar]");
   if (c) { if (c.dataset.placessar) abrirPlano("plano-hoje", c.dataset.placessar); else { const a = alvoPlano(c.dataset.plmontarcid); if (a) lerConteudoDoEdital(a); } return; }
+  const h = e.target.closest("[data-hjcomecar],[data-hjabrir],[data-plchk],[data-platalho]");
+  if (h) {
+    const k = h.dataset;
+    if (k.hjcomecar) { const [cid, i] = k.hjcomecar.split("|"); abrirPlano("plano-hoje", cid); const a = alvoPlano(cid); if (a && !timerAtual()) iniciarTimer(a, +i); return; }
+    if (k.hjabrir !== undefined) { if (k.hjabrir) abrirPlano("plano-hoje", k.hjabrir); else abrirPlanoMaisProximo(); return; }
+    if (k.platalho === "erros") { abrirAreaEstudo("info"); setTimeout(() => desenharEstudo("erros"), 0); return; }
+    if (k.platalho === "simulado") { abrirAreaEstudo("provas"); return; }
+    if (k.platalho === "leierros") { abrirAreaEstudo("lei"); setTimeout(() => desenharEstudo("lei-praticar"), 0); return; }
+    return;
+  }
   const t = e.target.closest("[data-plfeito],[data-pliniciar],[data-plabrir],[data-plmontar],[data-plaba],[data-pladiantar],[data-plrefazer],[data-pltirar],[data-plincluir]"); if (!t) return;
   const d = t.dataset, al = alvoPlano();
   if (d.plfeito !== undefined) { if (al) marcarBlocoRoteiro(al, +d.plfeito, d.valor === "1"); redesenharPlano(); return; }
@@ -472,6 +507,25 @@ document.addEventListener("click", e => {
   }
 });
 document.addEventListener("change", e => {
+  if (e.target.matches("[data-plchk]")) {   // checklist da prova (sincronizado)
+    const al = alvoPlano(), k = "chk:" + (al && al.chave); if (!al) return;
+    const l = new Set(plano()[k] || []); e.target.checked ? l.add(e.target.dataset.plchk) : l.delete(e.target.dataset.plchk);
+    gravarPlano(k, [...l]); redesenharPlano(); return;
+  }
+  if (e.target.matches("[data-plhojemin]")) {
+    const v = +e.target.value; gravarPlano("hojeMin", v ? { d: hojeISO(), min: v } : undefined);
+    refazerTodosRoteiros(); toast(v ? `Combinado: hoje o plano usa ${durTxt(v)}.` : "Hoje volta a valer o horário do seu perfil."); redesenharPlano(); return;
+  }
+  if (e.target.id === "plLembrete") {
+    gravarPlano("lembrete", e.target.checked || undefined);
+    if (e.target.checked && typeof agendaLigada === "function" && !agendaLigada()) {   // liga o Google Agenda junto (pede o acesso agora, no toque)
+      try { localStorage.setItem(chaveAgenda(), "1"); } catch (err) {}
+      if ($("chkAgenda")) $("chkAgenda").checked = true;
+      pedirAcessoAgenda(() => sincronizarAgenda(true));
+    } else if (typeof agendaLigada === "function" && agendaLigada()) { if (!tokenAgenda()) pedirAcessoAgenda(() => sincronizarAgenda(true)); else sincronizarAgenda(true); }
+    toast(e.target.checked ? "Pronto: seus horários de estudo vão para o Google Agenda, com alarme." : "Lembretes de estudo desligados (somem do Google Agenda).");
+    return;
+  }
   const s = e.target.closest("[data-plpeso]"); if (!s) return;
   const al = alvoPlano(), c = al && conteudoPlano(al); if (!c) return;
   c.materias[+s.dataset.plpeso].peso = +s.value; gravarPlano("cont:" + al.chave, c); refazerRoteiro(al, "mudou"); redesenharPlano();
@@ -551,3 +605,80 @@ setInterval(() => {
   document.querySelectorAll("[data-tmrest]").forEach(x => x.textContent = "⏱ " + relogio(restanteMs(T)));
   mostrarBarraPorCima(el);
 }, 1000);
+
+
+// ---------- novidades da v105: faixa "Hoje", tempo de hoje, atalhos, checklist da prova ----------
+// plano do concurso com a prova mais próxima que já tem plano montado
+function concursosComPlano() {
+  return (typeof itens !== "undefined" ? itens : []).map(x => ({ x, al: alvoPlano(x.id) })).filter(o => o.al && conteudoPlano(o.al)).sort((a, b) => a.al.f.data.localeCompare(b.al.f.data));
+}
+function abrirPlanoMaisProximo() {
+  const l = concursosComPlano();
+  if (l.length) abrirPlano("plano-hoje", l[0].x.id);
+  else { if (location.hash) location.hash = ""; toast("Monte o plano no botão abaixo do card do concurso."); }
+}
+// faixa no alto da tela inicial: o que fazer agora
+function htmlFaixaHoje() {
+  try {
+    const T = timerAtual();
+    if (T) return `<div class="hj-faixa ativo"><span class="hj-ic">⏱</span><div class="hj-txt"><b>Estudando agora: ${esc(T.nome)}</b><span>${esc(T.ativ)} · <span data-tmrest="1">⏱ ${relogio(restanteMs(T))}</span></span></div><button type="button" class="primary" data-hjabrir="${esc(T.cid)}">Ver</button></div>`;
+    const l = concursosComPlano();
+    if (!l.length) return (typeof itens !== "undefined" && itens.some(x => andamento(x).ativo && alvoPlano(x.id)))
+      ? `<div class="hj-faixa"><span class="hj-ic">🧭</span><div class="hj-txt"><b>Primeiro passo: monte seu plano de estudos</b><span>Toque em <b>✨ Montar plano de estudos</b>, embaixo do concurso. O app diz o que estudar em cada dia até a prova.</span></div></div>` : "";
+    let feitoTudo = null;
+    for (const { x } of l) {
+      const D = dadosPlano(x.id); if (!D.r) continue;
+      const sig = esc(siglaOuNome(x)), dias = D.al.dias, chk = dias <= 3 ? " · confira o checklist da prova" : "";
+      if (dias <= 0) return `<div class="hj-faixa"><span class="hj-ic">🍀</span><div class="hj-txt"><b>Hoje é dia de prova: ${sig}</b><span>Boa prova! Confira o checklist antes de sair.</span></div><button type="button" class="primary" data-hjabrir="${esc(x.id)}">Checklist</button></div>`;
+      const pend = D.blocos.filter(b => !b.feito), feitos = D.blocos.length - pend.length;
+      if (pend.length) {
+        const b = pend[0];
+        return `<div class="hj-faixa"><span class="hj-ic">📚</span><div class="hj-txt"><b>Hoje: ${esc(b.m.nome)} (${durTxt(b.dur)})${pend.length > 1 ? ` e mais ${pend.length - 1} bloco${pend.length > 2 ? "s" : ""}` : ""}</b><span>${sig} · ${feitos} de ${D.blocos.length} feito(s) · prova em ${dias} dia${dias === 1 ? "" : "s"}${chk}</span></div><button type="button" class="primary" data-hjcomecar="${esc(x.id)}|${b.i}">▶ Começar</button></div>`;
+      }
+      if (D.blocos.length && !feitoTudo) feitoTudo = { x, D, chk };
+    }
+    if (feitoTudo) return `<div class="hj-faixa ok"><span class="hj-ic">✅</span><div class="hj-txt"><b>Meta de hoje cumprida!</b><span>${esc(siglaOuNome(feitoTudo.x))} · se quiser, adiante um bloco de amanhã${feitoTudo.chk}</span></div><button type="button" class="mini" data-hjabrir="${esc(feitoTudo.x.id)}">Ver plano</button></div>`;
+    return `<div class="hj-faixa"><span class="hj-ic">☕</span><div class="hj-txt"><b>Hoje não há estudo marcado</b><span>Quer estudar mesmo assim? Abra o plano e diga quanto tempo tem hoje.</span></div><button type="button" class="mini" data-hjabrir="">Abrir plano</button></div>`;
+  } catch (e) { console.warn("faixa hoje", e); return ""; }
+}
+// "Hoje tenho:" — muda só o dia de hoje
+function htmlTempoDeHoje() {
+  const h = plano().hojeMin, atual = h && h.d === hojeISO() ? h.min : 0, normal = minutosDoPerfil(hoje());
+  const ops = [30, 60, 90, 120, 180, 240, 300, 360, 480];
+  if (atual && !ops.includes(atual)) ops.push(atual);
+  return `<div class="pl-hojetempo"><label>Hoje tenho <select data-plhojemin="1"><option value="0"${atual ? "" : " selected"}>o tempo de sempre (${normal ? durTxt(normal) : "sem estudo"})</option>${ops.sort((a, b) => a - b).map(m => `<option value="${m}"${m === atual ? " selected" : ""}>${durTxt(m)}</option>`).join("")}</select></label><span class="note">o plano se ajusta só para hoje</span></div>`;
+}
+// atalhos da fase de revisão e da reta final
+function htmlAtalhosPlano(D) {
+  if (!D.r || (D.fase < 2 && D.al.dias > 21)) return "";
+  const nErros = (() => { try { const p = lerEst("prog", {}); return Object.values(p).filter(x => x && x.erros && x.caixa <= 1).length; } catch (e) { return 0; } })();
+  return `<div class="pl-atalhos"><span class="pl-et">Atalhos ${D.fase >= 3 ? "da reta final" : "de revisão"}</span>
+    <button type="button" class="mini" data-platalho="erros">❌ Revisar o que errei${nErros ? ` (${nErros})` : ""}</button>
+    <button type="button" class="mini" data-platalho="leierros">⚖️ Treinar lei seca</button>
+    <button type="button" class="mini" data-platalho="simulado">⏱ Simulado de prova anterior</button></div>`;
+}
+// checklist da prova (aparece aberto nos 3 últimos dias; antes, fechado)
+function itensChecklist(al) {
+  const x = al.x, f = al.f, bl = typeof blocosDeViagem === "function" ? blocosDeViagem(x).find(b => b.fases.includes(al.i)) : null, v = bl ? ((x.viagens || {})[bl.uid] || {}) : {};
+  const local = (v.local && typeof resumoLocal === "function" && resumoLocal(v.local).split("\n")[0]) || f.local || (bl && x.fases[bl.raizI] && x.fases[bl.raizI].local) || "";
+  const tp = v.transporte || {}, transp = tp.tipo && typeof resumoTransporte === "function" ? resumoTransporte(tp).split("\n")[0] : "";
+  const h = v.hospedagem || {}, hosp = h.nome || h.logradouro || h.codigo || h.plataforma ? [h.nome, h.checkin_data && "check-in " + dm(h.checkin_data)].filter(Boolean).join(" · ") || "reservada" : "";
+  const cons = x.consulta && x.consulta.fases ? al.fases.map(z => x.consulta.fases[z.uid]).find(c => c && c.permitido === true) : null;
+  return [
+    ["doc", "Documento oficial com foto (original)", ""],
+    ["insc", "Cartão de confirmação / comprovante de inscrição", x.inscricao ? "inscrição nº " + x.inscricao : ""],
+    ["caneta", "Caneta de tubo transparente (cor de tinta conforme o edital)", ""],
+    ["local", "Local de prova conferido", local || "ainda não cadastrado — veja no site da banca"],
+    ["hora", "Horário de chegada", f.portoes ? `portões fecham às ${f.portoes} (Brasília)` : f.horario ? `prova às ${f.horario} (Brasília): chegue 1 h antes` : "confira no cartão de confirmação"],
+    ["transp", "Transporte até o local", transp || "ainda não definido"],
+    (hosp || tp.tipo === "aviao") && ["hosp", "Hospedagem", hosp || "pendente"],
+    cons && ["consulta", "Material de consulta permitido separado", [cons.permitidos, cons.vedados && "vedado: " + cons.vedados].filter(Boolean).join(" · ")],
+    ["lanche", "Água e lanche em embalagem transparente", ""],
+    ["dormir", "Dormir cedo na véspera", ""]
+  ].filter(Boolean);
+}
+function htmlChecklistProva(al, fechado) {
+  const its = itensChecklist(al), ok = new Set(plano()["chk:" + al.chave] || []), n = its.filter(i => ok.has(i[0])).length;
+  return `<details class="pl-check"${fechado ? "" : " open"}><summary>✅ Checklist da prova <span class="note">${n} de ${its.length}</span></summary>
+    <ul>${its.map(([k, t, d]) => `<li class="${ok.has(k) ? "ok" : ""}"><label><input type="checkbox" data-plchk="${k}"${ok.has(k) ? " checked" : ""}><span><b>${esc(t)}</b>${d ? `<small>${esc(d)}</small>` : ""}</span></label></li>`).join("")}</ul></details>`;
+}

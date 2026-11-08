@@ -192,7 +192,7 @@ function htmlMinhasLeis() {
   const idx = lerEst("leisBaixadas", {});
   if (!leiUi.editaisLidos) { leiUi.editaisLidos = true; setTimeout(async () => { await sincronizarLeis(); await procurarLeisNosEditais(); buscarEmentasIA(); }, 0); }   // inclui na lista as leis citadas nos editais
   const fm = lerEst("leiMat", ""), cat = leiCatalogo(), cobradas = leisPorConcurso();
-  let h = `<div class="est-chips lei-mats"><button type="button" class="chip-sel${!fm ? " on" : ""}" data-leimat="">Todas</button>${MATERIAS_LEI.filter(m => m !== "Outras" || materiasUsadas(cat).includes(m)).map(m => `<button type="button" class="chip-sel${fm === m ? " on" : ""}" data-leimat="${esc(m)}">${esc(m)} <span class="ct">${cat.filter(l => materiaDe(l) === m).length}</span></button>`).join("")}</div>
+  let h = `<div class="est-chips lei-mats"><button type="button" class="chip-sel${!fm ? " on" : ""}" data-leimat="">Todas</button>${MATERIAS_LEI.filter(m => leiUi.todasMats || m === fm || cat.some(l => materiaDe(l) === m)).map(m => `<button type="button" class="chip-sel${fm === m ? " on" : ""}" data-leimat="${esc(m)}">${esc(m)} <span class="ct">${cat.filter(l => materiaDe(l) === m).length}</span></button>`).join("")}${MATERIAS_LEI.some(m => !cat.some(l => materiaDe(l) === m)) ? `<button type="button" class="chip-sel" data-leitodasmats="1">${leiUi.todasMats ? "‹ só as que têm leis" : "+ ver todas as matérias"}</button>` : ""}</div>
     <p class="note">Baixe as leis que você vai estudar. O app pega o texto vigente no site do Planalto, tira o que está revogado (riscado no site) e separa os artigos. Fica guardado neste aparelho e na nuvem do app.</p>`;
   h += cat.filter(l => !fm || materiaDe(l) === fm).map(l => {
     const b = idx[l.id], ok = !!leis[l.id] || !!b, d = b && new Date(b.quando);
@@ -464,6 +464,7 @@ document.addEventListener("click", e => {
   }
   if (d.leipraticar) { const j = artigoPorId(d.leipraticar); if (!j) return; registrarSessaoInfo(); const md = lerLeiPrat().modo; estudo = { modo: md === "ce" ? "ce" : "me", lista: [j], i: 0, qs: {}, resp: {}, notas: [], gerador: geradorLei([j], md, lerLeiPrat().banca), lei: true }; prepararQuestao(0); desenharEstudo("lei-praticar"); return; }
   const c = lerLeiPrat();
+  if (d.leitodasmats) { leiUi.todasMats = !leiUi.todasMats; desenharEstudo("lei-leis"); return; }
   if (d.leimat !== undefined && t.closest(".lei-mats")) { gravarEst("leiMat", d.leimat); desenharEstudo("lei-leis"); return; }
   if (d.leiplmat) { const ls = leisProntas().filter(l => materiaDe(l) === d.leiplmat).map(l => l.id), atual = c.leis.filter(id => leis[id]); const todas = ls.every(id => atual.includes(id)); c.leis = todas ? atual.filter(id => !ls.includes(id)) : [...new Set([...atual, ...ls])]; if (!c.leis.length) c.leis = [ls[0]]; c.cap = ""; gravarEst("leiPrat", c); desenharEstudo("lei-praticar"); return; }
   if (d.leipl) { const prontas = leisProntas(), atual = c.leis.filter(id => leis[id]).length ? c.leis.filter(id => leis[id]) : [prontas[0].id]; c.leis = atual.includes(d.leipl) ? atual.filter(x => x !== d.leipl) : [...atual, d.leipl]; if (!c.leis.length) c.leis = [d.leipl]; c.cap = ""; gravarEst("leiPrat", c); desenharEstudo("lei-praticar"); return; }

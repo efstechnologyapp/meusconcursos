@@ -114,9 +114,9 @@ function htmlBotoesViagem(x, uid) {
   const temT = !!(v.transporte && v.transporte.tipo), temH = !!(v.hospedagem && resumoHospedagem(v.hospedagem));
   const temL = !!(v.local && resumoLocal(v.local)) || !!localDaRaiz(x, uid);
   return `<span class="viagem-btns">
-    <button type="button" class="ic-btn${temL ? " on" : ""}" data-viagem="local" data-uid="${esc(uid)}" title="Local de prova" aria-label="Local de prova">${SVG_LOCAL}</button>
-    <button type="button" class="ic-btn${temT ? " on" : ""}" data-viagem="transporte" data-uid="${esc(uid)}" title="Transporte" aria-label="Transporte">${v.transporte && v.transporte.tipo === "carro" ? SVG_CARRO : SVG_AVIAO}</button>
-    <button type="button" class="ic-btn${temH ? " on" : ""}" data-viagem="hospedagem" data-uid="${esc(uid)}" title="Hospedagem" aria-label="Hospedagem">${SVG_HOTEL}</button></span>`;
+    <button type="button" class="ic-btn${temL ? " on" : ""}" data-viagem="local" data-uid="${esc(uid)}" data-rot="Local" title="Local de prova" aria-label="Local de prova">${SVG_LOCAL}</button>
+    <button type="button" class="ic-btn${temT ? " on" : ""}" data-viagem="transporte" data-uid="${esc(uid)}" data-rot="Transporte" title="Transporte" aria-label="Transporte">${v.transporte && v.transporte.tipo === "carro" ? SVG_CARRO : SVG_AVIAO}</button>
+    <button type="button" class="ic-btn${temH ? " on" : ""}" data-viagem="hospedagem" data-uid="${esc(uid)}" data-rot="Hospedagem" title="Hospedagem" aria-label="Hospedagem">${SVG_HOTEL}</button></span>`;
 }
 function htmlResumoViagem(x, uid) {
   const v = (x.viagens || {})[uid] || {};

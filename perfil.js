@@ -49,6 +49,7 @@ function desenharPerfil(r, aviso) {
       <button type="button" class="pf-bt${est ? "" : " on"}" data-pfnav="home"><span class="pf-ic">🗂️</span>Meus concursos</button>
       <button type="button" class="pf-bt${est ? " on" : ""}" data-pfnav="estudo"><span class="pf-ic">📚</span>Estudar</button>
       <button type="button" class="pf-bt" data-pfnav="plano"><span class="pf-ic">🗓️</span>Plano de estudos</button>
+      <button type="button" class="pf-bt" data-pfconfig="1"><span class="pf-ic">⚙️</span>Backup e Google Agenda</button>
       <div class="pf-caixa"><span class="pf-ponto"></span><div><b>Horários de estudo</b><span>${esc(typeof resumoHorarios === "function" ? resumoHorarios() : "")}</span></div></div>
       <button type="button" class="pf-bt pf-bt-sair" data-pfsair="1"><span class="pf-ic">↩</span>Sair</button>
       <p class="pf-versao">versão ${esc(versao)} — Meus Concursos<br><i>Estude · Pratique · Passe</i></p>
@@ -68,8 +69,15 @@ function desenharPerfil(r, aviso) {
       </section>
     </div>
     <div class="pf-rodape">${aviso ? `<span class="pf-aviso">${aviso}</span>` : ""}<button type="button" class="primary" data-pfsalvar="1">Salvar</button></div>`;
-  $("perfilPainel").classList.toggle("largo", pfVista !== "menu");   // a edição dos horários precisa de mais espaço
-  $("perfilPainel").innerHTML = topo + (pfVista === "menu" ? menu : editar);
+  const config = `<div class="pf-corpo">
+      <button type="button" class="pf-voltar" data-pfvoltar="1">‹ Voltar</button>
+      <section class="pf-secao"><h3>Backup e Google Agenda</h3><div id="pfConfigSlot"></div></section></div>`;
+  $("perfilPainel").classList.toggle("largo", pfVista === "editar");
+  guardarAjustesApp();   // a edição dos horários precisa de mais espaço
+  const painel = $("perfilPainel"), aviso_ = $("toast") && painel.contains($("toast")) ? $("toast") : null;
+  painel.innerHTML = topo + (pfVista === "menu" ? menu : pfVista === "config" ? config : editar);
+  if (pfVista === "config") { const a = $("ajustesApp"); if (a) { $("pfConfigSlot").appendChild(a); a.hidden = false; } }
+  if (aviso_) painel.appendChild(aviso_);   // o aviso (toast) que estava aqui dentro não pode sumir junto
 }
 // barra lateral: "menu" (perfil, navegação e sair) ou "editar" (horários de estudo)
 let pfVista = "menu";
@@ -80,7 +88,9 @@ function abrirPerfil(vista) {
   desenharPerfil(rascunhoDoPerfil());
   if (!d.open) d.showModal();   // dialog modal: fica por cima de qualquer outra janela aberta (ex.: o Plano de estudos)
 }
-function fecharPerfil() { const d = $("perfilPainel"); if (d && d.open) { d.classList.add("saindo"); setTimeout(() => { d.classList.remove("saindo"); d.close(); }, 180); } }
+function fecharPerfil() { const d = $("perfilPainel"); if (d && d.open) { d.classList.add("saindo"); setTimeout(() => { d.classList.remove("saindo"); d.close(); guardarAjustesApp(); }, 180); } }
+// backup e Google Agenda: os mesmos elementos da tela inicial (com seus botões já ligados) são levados para dentro da barra lateral
+function guardarAjustesApp() { const a = $("ajustesApp"), casa = $("ajustesAppCasa"); if (a && casa && a.parentNode !== casa) { a.hidden = true; casa.appendChild(a); } }
 function salvarPerfil() {
   const r = rascunhoDaTela(), txt = l => l.filter(([a, b]) => deHora(a) != null && deHora(b) != null && deHora(b) > deHora(a)).map(([a, b]) => `${a}-${b}`).join(", ");
   const ruim = GRUPOS_HORA.some(([g]) => (r[g] || []).some(([a, b]) => !(deHora(b) > deHora(a))));
@@ -107,17 +117,13 @@ document.addEventListener("click", e => {
   const k = t.dataset;
   if (k.pffechar) { fecharPerfil(); return; }
   if (k.pfeditar) { pfVista = "editar"; desenharPerfil(rascunhoDoPerfil()); return; }
+  if (k.pfconfig) { pfVista = "config"; desenharPerfil(rascunhoDoPerfil()); return; }
   if (k.pfvoltar) { pfVista = "menu"; desenharPerfil(rascunhoDoPerfil()); return; }
   if (k.pfnav) {
     fecharPerfil();
     if (k.pfnav === "home") { const d = $("dlgEstudo"); if (d && d.open) d.close(); if (location.hash) location.hash = ""; }
     else if (k.pfnav === "estudo") { if (location.hash !== "#estudar") location.hash = "#estudar"; }
-    else setTimeout(() => {
-      // abre o plano do concurso com a prova mais próxima que já tem plano montado
-      const comPlano = itens.filter(x => { const al = alvoPlano(x.id); return al && conteudoPlano(al); }).sort((a, b) => alvoPlano(a.id).f.data.localeCompare(alvoPlano(b.id).f.data));
-      if (comPlano.length) abrirPlano("plano-hoje", comPlano[0].id);
-      else { if (location.hash) location.hash = ""; toast("Monte o plano no botão abaixo do card do concurso."); }
-    }, 200);
+    else setTimeout(abrirPlanoMaisProximo, 200);   // plano do concurso com a prova mais próxima
     return;
   }
   if (k.pfsalvar) { salvarPerfil(); return; }

@@ -581,7 +581,26 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .pl-iniciar{border:0;background:#14213d;color:#ffd23f;font-weight:700;font-size:13px;border-radius:999px;padding:7px 14px;cursor:pointer;white-space:nowrap}
 .pl-iniciar:disabled{opacity:.35;cursor:not-allowed}
 .pl-feito{color:#2e7d4f;font-weight:700;font-size:13px;white-space:nowrap}.pl-desfaz{font-size:11px;color:var(--muted)}
-.pl-manual{font-size:11px;color:var(--muted);align-self:flex-start;margin-top:2px}
+.pl-manual{font-size:13px;color:var(--ink);align-self:flex-start;margin-top:6px;text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:6px 12px;min-height:34px;background:var(--surface)}
+.pl-manual::before{content:"✓ "}
+/* faixa "Hoje" na tela inicial */
+.hj-faixa{display:flex;align-items:center;gap:12px;border:1px solid #d4af37;background:#fffaf0;border-radius:14px;padding:12px 14px;margin:0 0 14px}
+.hj-faixa.ok{border-color:#9fd3b0;background:#f1faf4}.hj-faixa.ativo{border-color:#14213d;box-shadow:inset 0 0 0 1px #14213d}
+.hj-ic{font-size:24px;flex:none}.hj-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.hj-txt b{font-size:15px}.hj-txt>span{font-size:13px;color:var(--muted)}
+.hj-faixa>button{flex:none;white-space:nowrap}
+@media (max-width:560px){.hj-faixa{flex-wrap:wrap}.hj-faixa>button{width:100%;padding:12px;font-size:16px}}
+.pl-hojetempo{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0 0;font-size:14px}.pl-hojetempo select{margin-left:6px;font-size:14px;padding:6px 8px}
+.pl-atalhos{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:14px 0 0;padding-top:12px;border-top:1px dashed var(--line)}.pl-atalhos .pl-et{width:100%}
+.pl-check{border:1px solid #9fd3b0;background:#f6fcf8;border-radius:12px;padding:8px 12px;margin:10px 0}
+.pl-check summary{cursor:pointer;font-weight:600}.pl-check ul{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.pl-check label{display:flex;gap:10px;align-items:flex-start;cursor:pointer}.pl-check input{width:20px;height:20px;flex:none;margin-top:1px}
+.pl-check li span{display:flex;flex-direction:column}.pl-check small{color:var(--muted);font-size:12px}.pl-check li.ok b{text-decoration:line-through;opacity:.6}
+.pl-lembrete{display:flex;gap:10px;align-items:flex-start;margin:12px 0;text-align:left}.pl-lembrete span{display:flex;flex-direction:column}.pl-lembrete small{color:var(--muted);font-size:12px}
+.pl-semedital{color:#8a5a00;flex-basis:100%}
+/* botões de ícone das fases com o nome embaixo */
+.viagem-btns .ic-btn{width:auto;height:auto;min-width:58px;border-radius:12px;padding:6px 8px;display:inline-flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;line-height:1.1}
+.viagem-btns .ic-btn::after{content:attr(data-rot)}
+#pfConfigSlot .tools{border-top:0;padding-top:0;justify-content:flex-start}#pfConfigSlot .agenda-box{align-items:flex-start;text-align:left;margin-top:14px}#pfConfigSlot>div>p.note{text-align:left!important;margin-top:12px!important}
 .pl-rodando{font:700 14px var(--f-mono,monospace);color:#14213d;background:#ffd23f;border-radius:999px;padding:6px 12px;white-space:nowrap}
 .pl-lista li.ativo{border-color:#d4af37;box-shadow:inset 0 0 0 1px #d4af37;background:#fffaf0}
 .tm-barra{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);top:auto;right:auto;margin:0;width:min(640px,calc(100vw - 24px));display:flex;align-items:center;gap:12px;padding:12px 14px;border:0;border-radius:16px;background:#14213d;color:#fff;box-shadow:0 12px 40px rgba(10,16,32,.35);overflow:hidden;z-index:9999;inset:auto auto 16px 50%}
@@ -640,12 +659,14 @@ fieldset{border:none;padding:0;margin:0;display:contents}
     <div class="topo-acoes"><button id="btnEstudo" type="button">Estudar</button><button class="primary" id="btnNovo" type="button">+ Novo concurso</button></div>
   </header>
 
+  <div id="faixaHoje"></div>
   <div id="alertas"></div>
   <p class="section-label" id="lblProx" hidden>Em andamento</p>
   <div class="list" id="proximos"></div>
   <p class="section-label" id="lblPass" hidden>Encerrados</p>
   <div class="list past-list" id="passados"></div>
   <p class="note" id="aviso" hidden></p>
+  <div id="ajustesAppCasa"><div id="ajustesApp" hidden>
   <div class="tools">
     <button type="button" id="btnExportar">Fazer backup (baixar arquivo)</button>
     <button type="button" id="btnImportar">Restaurar backup</button>
@@ -656,8 +677,9 @@ fieldset{border:none;padding:0;margin:0;display:contents}
     <div class="agenda-cores" id="agendaCores" hidden></div>
     <p class="note" id="agendaStatus"></p>
   </div>
-  </div>
   <p class="note" style="text-align:center;margin:0">Seus concursos e anexos são sincronizados com a sua conta e aparecem em qualquer aparelho em que você entrar. O backup em arquivo é opcional.</p>
+  </div></div>
+  </div>
   <p class="note" id="versaoApp" style="text-align:center;margin:0;font-size:11px"></p>
 </div>
 
@@ -884,7 +906,8 @@ function contagem(n){
   return {t:"realizada",c:"past"};
 }
 // com uma janela (dialog) aberta, o aviso entra nela; senão ficaria escondido atrás da janela
-function toast(msg){ const t=$("toast"); const d=[...document.querySelectorAll("dialog[open]")].pop(); (d||document.body).appendChild(t); t.textContent=msg; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,Math.max(2600,msg.length*60)); }
+function toast(msg){ let t=$("toast"); if(!t){ t=document.createElement("div"); t.id="toast"; t.className="toast"; t.setAttribute("role","status"); t.hidden=true; }   // (se uma janela redesenhada apagou o aviso, recria)
+  const d=[...document.querySelectorAll("dialog[open]")].pop(); (d||document.body).appendChild(t); t.textContent=msg; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,Math.max(2600,msg.length*60)); }
 
 // Situação do concurso a partir das fases
 function andamento(x){
@@ -932,7 +955,7 @@ function cardHTML(x){
       : `${grupoProx.map(k=>x.fases[k].nome).join(" + ")}${f.horario?" · "+f.horario+(f.fim?"–"+f.fim:""):""}`) : (a.ativo && a.proxSemData ? `${a.proxSemData.f.nome} · data a definir${a.proxSemData.f.previsao?" (previsão: "+a.proxSemData.f.previsao+")":""}` : "");
   const sub=[x.cargo,x.banca].filter(Boolean).join(" · ");
   const tv=textoVagas(x.vagas);
-  const passo = (a.ativo && a.total>1) ? `<span class="chip">fase ${(f?a.prox.i:a.proxSemData?a.proxSemData.i:0)+1} de ${a.total}</span>` : "";
+  const passo = (a.ativo && a.total>1) ? `<span class="chip">${(f?a.prox.i:a.proxSemData?a.proxSemData.i:0)+1}ª de ${a.total} fases</span>` : "";
   // transporte e hospedagem: só da viagem da próxima fase (com data marcada)
   let chipsViagem="";
   if(a.ativo && f){
@@ -968,6 +991,7 @@ function render(){
     `<div class="empty">Nenhum concurso em andamento.<br>Clique em <b>+ Novo concurso</b> para cadastrar o primeiro.</div>`;
   $("passados").innerHTML = fim.map(cardHTML).join("");
   $("lblProx").hidden=false; $("lblPass").hidden=!fim.length;
+  if($("faixaHoje")) $("faixaHoje").innerHTML = typeof htmlFaixaHoje==="function" ? htmlFaixaHoje() : "";
   // aviso de boleto: na véspera e no dia do vencimento (a notificação no celular vem do Google Agenda)
   const avisos=ativos.filter(x=>x.status===STATUS[1]&&x.boleto_venc&&[0,1].includes(diasAte(x.boleto_venc)));
   $("alertas").innerHTML=avisos.map(x=>{ const d=diasAte(x.boleto_venc); return `<div class="alerta-boleto${d===0?" hoje":""}" role="alert"><span class="ab-ic" aria-hidden="true">!</span><span>O boleto de <b>${esc(x.nome)}</b> vence <b>${d===0?"hoje":"amanhã"}</b> (${fmtCurta(x.boleto_venc)}).${x.boleto_valor?" Valor: "+esc(x.boleto_valor)+".":""}</span><button type="button" class="mini" data-verboleto="${esc(x.id)}">Ver boleto</button></div>`; }).join("");
@@ -983,7 +1007,7 @@ function abrirVer(id){
   const linha=(k,v)=>v?`<dt>${k}</dt><dd>${esc(v)}</dd>`:"";
   const a=andamento(x);
   const raizesViagem=new Set(blocosDeViagem(x).map(b=>b.uid));
-  const botoes=(f,g)=>`<span class="viagem-btns"><button type="button" class="ic-btn" data-imprimir="${g.join(",")}" title="Imprimir / gerar PDF desta fase" aria-label="Imprimir esta fase">${SVG_IMPRESSORA}</button></span>`+(raizesViagem.has(f.uid)?htmlBotoesViagem(x,f.uid):"");
+  const botoes=(f,g)=>`<span class="viagem-btns"><button type="button" class="ic-btn" data-imprimir="${g.join(",")}" data-rot="Imprimir" title="Imprimir / gerar PDF desta fase" aria-label="Imprimir esta fase">${SVG_IMPRESSORA}</button></span>`+(raizesViagem.has(f.uid)?htmlBotoesViagem(x,f.uid):"");
   const resumoV=f=>raizesViagem.has(f.uid)?htmlResumoViagem(x,f.uid):"";
   const blocosLocal=blocosDeLocal(x.fases||[]);
   const horasTxt=f=>[f.horario&&(f.fim?`das ${f.horario} às ${f.fim}`:"às "+f.horario), f.portoes&&("portões fecham "+f.portoes)].filter(Boolean).join(" · ");
@@ -1643,7 +1667,7 @@ function marcarAlteracao(){
 function mostrarSinc(estado, extra){
   const el=$("sincStatus"); if(!el) return;
   const hora=new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
-  const t={ ok:`Sincronizado às ${hora}`, rodando:"Sincronizando…", pendente:"Alterações a enviar…",
+  const t={ ok:`Sincronizado às ${hora}`, rodando:"Sincronizando…", pendente:"Salvando…",
             offline:"Sem conexão — as alterações serão enviadas quando a internet voltar", erro:"Não foi possível sincronizar"+(extra?": "+extra:"") };
   el.textContent=t[estado]||""; el.dataset.estado=estado;
 }
@@ -1861,7 +1885,7 @@ iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO = 103;
+const APP_VERSAO = 105;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{
