@@ -106,6 +106,29 @@ async function lerDiscFila() {   // uma prova por vez, em segundo plano
   discLendo = ""; if (estudoAba === "provas" && !sim) desenharEstudo("provas");
   lerDiscFila();
 }
+// prova subjetiva: a lista segue a numeração da prova (questão 4 é sempre a 4ª, mesmo que a 2 ainda não tenha sido lida)
+function listaQs(it, g) {
+  if (it.tipo !== "subjetiva") return g.questoes.filter(q => q.enunciado);
+  const n = Math.max(g.total || 0, ...g.questoes.map(q => +q.numero || 0));
+  return Array.from({ length: n }, (_, k) => g.questoes.find(q => +q.numero === k + 1 && q.enunciado) || null);
+}
+// a IA às vezes pula questões quando lê a prova inteira de uma vez: as que faltaram são lidas uma a uma
+async function lerQuestoesFaltantes(it, so) {
+  if (!sim || sim.it.id !== it.id) return;
+  sim.lendoQ = sim.lendoQ || {}; sim.falhouQ = sim.falhouQ || {};
+  const faltam = so ? [so] : sim.qs.map((q, k) => q ? 0 : k + 1).filter(Boolean);
+  for (const n of faltam) {
+    if (!sim || sim.it.id !== it.id) return;
+    sim.lendoQ[n] = true; delete sim.falhouQ[n]; if (estudoAba === "provas") desenharEstudo("provas");
+    let g = null;
+    try { g = await extrairLote(it, n, n); } catch (e) { console.warn("questão", n, e); }
+    if (!sim || sim.it.id !== it.id) return;
+    delete sim.lendoQ[n];
+    if (g) { sim.qs = listaQs(it, g); sim.total = sim.qs.length; registrarDisc(it, g); }
+    if (!sim.qs[n - 1]) sim.falhouQ[n] = true;
+    if (estudoAba === "provas") desenharEstudo("provas");
+  }
+}
 async function completarProva(it) {   // em segundo plano, lote por lote
   let g = await questoesGuardadas(it);
   while (g && g.total && g.questoes.length < g.total) {
@@ -331,7 +354,8 @@ async function iniciarSimulado(id, novas, ret) {
   desenharEstudo(it.tipo === "peca" ? "pecas" : "provas");
   try {
     const g = await garantirQuestoes(it, t => { sim.carregando = t; desenharEstudo(estudoAba); });
-    sim.carregando = ""; sim.qs = g.questoes.filter(q => q.enunciado); sim.total = g.total || sim.qs.length; sim.banca = g.banca;
+    sim.carregando = ""; sim.qs = listaQs(it, g); sim.total = it.tipo === "subjetiva" ? sim.qs.length : g.total || sim.qs.length; sim.banca = g.banca;
+    if (it.tipo === "subjetiva" && sim.qs.some(q => !q)) lerQuestoesFaltantes(it);
     if (novas) sim.modelos = embaralhar(sim.qs.slice()).slice(0, 10);
     desenharEstudo(estudoAba);
     if (it.tipo === "objetiva") completarProva(it);
@@ -371,6 +395,11 @@ function htmlSimulado() {
     const g = s.novas && s.geradas[s.i];
     if (g && g.erro) return topo + cab + `<p class="note">A IA não respondeu (${esc(g.erro)}).</p><div class="actions"><button type="button" id="provTentar">Tentar de novo</button><button type="button" id="provProx">Pular</button></div>`;
     if (s.novas) gerarNova(s.i);
+    if (!s.novas && s.it.tipo === "subjetiva") {
+      const n = s.i + 1;
+      if ((s.falhouQ || {})[n]) return topo + cab + `<p class="note">A IA não conseguiu ler a questão ${n} desta prova.</p><div class="actions" style="justify-content:flex-start"><button type="button" class="primary" data-provlerq="${n}">Tentar ler de novo</button><button type="button" data-provir="${s.i + 1}">Pular</button></div>`;
+      return topo + cab + `<p class="note est-gerando">${(s.lendoQ || {})[n] ? `A IA está lendo a questão ${n} da prova… (até 1 minuto)` : "Esta questão ainda não foi lida: aguarde, a IA vai lê-la em seguida…"}</p>`;
+    }
     return topo + cab + `<p class="note est-gerando">${s.novas ? "Criando questão inédita com a IA Gemini…" : "Carregando as próximas questões da prova…"}</p>`;
   }
   const r = s.resp[s.i];
@@ -776,6 +805,7 @@ document.addEventListener("click", async e => {
   if (!sim) return;
   if (t.id === "provSair") { registrarObjetiva(); const aba = sim.it.tipo === "peca" ? "pecas" : "provas"; sim = null; desenharEstudo(aba); return; }
   const q = questaoAtual(), k = sim.it.tipo === "peca" ? 0 : sim.i;
+  if (t.dataset.provlerq && sim) { lerQuestoesFaltantes(sim.it, +t.dataset.provlerq); return; }
   if (t.id === "provTentar") { delete sim.geradas[sim.i]; desenharEstudo(estudoAba); return; }
   if (t.dataset.provresp && q && !sim.resp[k]) {
     const gab = String(q.gabarito || "").toUpperCase(), conta = gab && gab !== "ANULADA";
