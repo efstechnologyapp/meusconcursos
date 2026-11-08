@@ -49,7 +49,8 @@ const marcasLei = () => lerEst("leiMarc", {});   // artigoId -> { rev: data, dif
 // ---------- limpeza do texto do Planalto ----------
 const RE_NOTA = /\s*\((?:\s*(?:Reda[çc][ãa]o dada|Inclu[íi]d[oa]|Acrescid[oa]|Acrescentad[oa]|Revogad[oa]|Vide|Vig[êe]ncia|Renumerad[oa]|Regulamento|Regulamenta[çc][ãa]o|Produ[çc][ãa]o de efeito|Alterad[oa]|Suprimid[oa]|Express[ãa]o|Promulga[çc][ãa]o|Retificad[oa]|Mantid[oa]|Restabelecid[oa]|Convers[ãa]o|Em vigor|Declara[çc][ãa]o|Execu[çc][ãa]o suspensa|Revoga[çc][ãa]o)[^()]*(?:\([^()]*\)[^()]*)*)\)/gi;
 // "Art. 1º" das leis e "Artigo 1" / "Artigo I" das convenções/tratados anexos a decretos (ex.: Convenção de Viena, Decreto 7.030/2009)
-const RE_ART = /^(Artigo|ARTIGO|Art\.?)\s*(\d+(?:\.\d+)*|[IVXLC]+(?![A-Za-zÀ-ú]))\s*(?:º|°|o\b|ª)?(?:\s*[-–]\s*([A-Z]{1,2}))?\s*[.\-–]?/;
+const ORDINAIS = { "único": 1, "unico": 1, primeiro: 1, segundo: 2, terceiro: 3, quarto: 4, quinto: 5, sexto: 6, "sétimo": 7, setimo: 7, oitavo: 8, nono: 9, "décimo": 10, decimo: 10 };
+const RE_ART = /^(Artigo|ARTIGO|Art\.?)\s*(\d+(?:\.\d+)*|[IVXLC]+(?![A-Za-zÀ-ú])|(?:[ÚUú]nico|[Uu]nico|[Pp]rimeiro|[Ss]egundo|[Tt]erceiro|[Qq]uarto|[Qq]uinto|[Ss]exto|[Ss][ée]timo|[Oo]itavo|[Nn]ono|[Dd][ée]cimo)(?![A-Za-zÀ-ú]))\s*(?:º|°|o\b|ª)?(?:\s*[-–]\s*([A-Z]{1,2}))?\s*[.\-–]?/;
 const RE_TIT = /^(PARTE|LIVRO|T[ÍI]TULO|CAP[ÍI]TULO|SE[ÇC][ÃA]O|Se[çc][ãa]o|SUBSE[ÇC][ÃA]O|Subse[çc][ãa]o|DISPOSI[ÇC][ÕO]ES|ATO DAS DISPOSI)\b/;
 function textoLimpo(t) { return String(t || "").replace(/ /g, " ").replace(/[ \t]+/g, " ").replace(/\s*\n\s*/g, "\n").trim(); }
 function artigosDoHtml(html) {
@@ -71,7 +72,8 @@ function artigosDoHtml(html) {
     const m = l.match(RE_ART);
     if (m) {
       comecou = true;
-      const artigo = /^artigo$/i.test(m[1]), n = m[2], letra = m[3];
+      const extenso = /^[a-zà-ú]/i.test(m[2]) && !/^[IVXLC]+$/.test(m[2]);
+      const artigo = /^artigo$/i.test(m[1]) || extenso, n = extenso ? m[2].charAt(0).toUpperCase() + m[2].slice(1).toLowerCase() : m[2], letra = m[3];
       const rot = artigo ? `Artigo ${n}${letra ? "-" + letra : ""}` : `Art. ${n}${+n.replace(/\./g, "") < 10 && !letra ? "º" : ""}${letra ? "-" + letra : ""}`;
       const corpo = l.slice(m[0].length).trim();
       const pt = !artigo && (+n.replace(/\./g, "") >= 10 || letra) ? "." : "";   // o Planalto escreve "Art. 1º" e "Art. 10."
