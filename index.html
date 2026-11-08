@@ -593,7 +593,7 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .pl-atalhos{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:14px 0 0;padding-top:12px;border-top:1px dashed var(--line)}.pl-atalhos .pl-et{width:100%}
 .pl-check{border:1px solid #9fd3b0;background:#f6fcf8;border-radius:12px;padding:8px 12px;margin:10px 0}
 .pl-check summary{cursor:pointer;font-weight:600}.pl-check ul{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
-.pl-check label{display:flex;gap:10px;align-items:flex-start;cursor:pointer}.pl-check input{width:20px;height:20px;flex:none;margin-top:1px}
+.pl-check label{display:flex;flex-direction:row;gap:10px;align-items:flex-start;cursor:pointer;margin:0}.pl-check input{width:20px;height:20px;flex:none;margin-top:1px}
 .pl-check li span{display:flex;flex-direction:column}.pl-check small{color:var(--muted);font-size:12px}.pl-check li.ok b{text-decoration:line-through;opacity:.6}
 .pl-lembrete{display:flex;gap:10px;align-items:flex-start;margin:12px 0;text-align:left}.pl-lembrete span{display:flex;flex-direction:column}.pl-lembrete small{color:var(--muted);font-size:12px}
 .pl-semedital{color:#8a5a00;flex-basis:100%}
@@ -1885,7 +1885,7 @@ iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO = 105;
+const APP_VERSAO = 106;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{
