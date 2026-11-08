@@ -756,13 +756,12 @@ async function imprimirFases(id, idx) {
   }).filter(Boolean).join("") + trechosDeslocamento(x, bl.uid).filter(t => { const r = (v.rotas || {})[t.id]; return !r || r.chave !== t.chave || r.erro; })
     .map(t => `<p><b>${esc(t.de)} → ${esc(t.para)}:</b> não consegui calcular a distância (confira o endereço no app).</p>`).join("") : "";
 
-  const tv = textoVagas(x.vagas), cand = nomeDoCandidato();
+  const cand = nomeDoCandidato();
   $("impressao").innerHTML = `
     <div class="imp-cab">${x.logo ? `<img src="${x.logo}" alt="">` : ""}<div><h1>${esc(x.nome)}</h1>
       ${cand ? `<p class="imp-cand">Candidato(a): <b>${esc(cand)}</b></p>` : ""}
       <p>${esc([x.cargo, x.banca].filter(Boolean).join(" · "))}</p>
-      <p>${esc([x.inscricao && "Inscrição nº " + x.inscricao, tv && tv.tot].filter(Boolean).join(" · "))}</p></div></div>
-    ${htmlVagasImpressao(x.vagas, kv)}
+      <p>${esc([x.inscricao && "Inscrição nº " + x.inscricao, vagasNaLinha(x.vagas)].filter(Boolean).join(" · "))}</p></div></div>
     <div class="imp-fase">${esc(titulo)}</div>
     <div class="imp-sec"><h3>Prova</h3>${provas}</div>
     <div class="imp-sec"><h3>Local de prova</h3>${local}</div>
@@ -788,15 +787,12 @@ function nomeDoCandidato() {
   const pf = (typeof perfil !== "undefined" && perfil) || {}, u = (typeof usuarioAtual !== "undefined" && usuarioAtual) || {};
   return String(pf.nome || u.nome || "").trim();
 }
-// quadro de vagas na impressão: total, cadastro de reserva e cada cota (o que estiver no cadastro do concurso)
-function htmlVagasImpressao(v, kv) {
-  if (!v || !(temVagas(v) || v.cr)) return `<div class="imp-sec"><h3>Vagas</h3><p>Ainda não informadas no cadastro do concurso.</p></div>`;
-  const nomes = { ampla: "Ampla concorrência", pcd: "Pessoas com deficiência", negros: "Negros (pretos e pardos)", indigenas: "Indígenas", quilombolas: "Quilombolas" };
-  const cotas = VAGAS_CAMPOS.filter(([k]) => k !== "ampla" && v[k]);
-  const linhas = [["Total", esc(v.total ? `${v.total} vaga${+v.total === 1 ? "" : "s"}` : "só cadastro de reserva")],
-    ["Cadastro de reserva", v.cr || VAGAS_CAMPOS.some(([k]) => /CR/i.test(String(v[k] || ""))) ? "Sim" : "Não informado"],
-    ...(v.ampla ? [[nomes.ampla, esc(v.ampla)]] : []),
-    ...cotas.map(([k]) => [nomes[k], esc(v[k])]),
-    ...(cotas.length ? [] : [["Cotas", "não informadas no cadastro (confira o quadro de vagas no edital)"]])];
-  return `<div class="imp-sec"><h3>Vagas</h3>${kv(linhas)}</div>`;
+// vagas numa linha só, para o cabeçalho: "100 vagas (65 ampla, 5 PcD, 30 pretos e pardos) + CR"
+function vagasNaLinha(v) {
+  if (!v || !(temVagas(v) || v.cr)) return "";
+  const rot = { ampla: "ampla", pcd: "PcD", negros: "pretos e pardos", indigenas: "indígenas", quilombolas: "quilombolas" };
+  const det = VAGAS_CAMPOS.filter(([k]) => v[k]).map(([k]) => `${String(v[k]).replace(/\s*\+\s*CR/i, "")} ${rot[k]}`);
+  const cr = v.cr || VAGAS_CAMPOS.some(([k]) => /CR/i.test(String(v[k] || "")));
+  const tot = v.total ? `${v.total} vaga${+v.total === 1 ? "" : "s"}` : "Cadastro de reserva";
+  return `${tot}${det.length ? ` (${det.join(", ")})` : ""}${cr && v.total ? " + CR" : ""}`;
 }
