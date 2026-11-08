@@ -596,6 +596,7 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .pl-check label{display:flex;flex-direction:row;gap:10px;align-items:flex-start;cursor:pointer;margin:0}.pl-check input{width:20px;height:20px;flex:none;margin-top:1px}
 .pl-check li span{display:flex;flex-direction:column}.pl-check small{color:var(--muted);font-size:12px}.pl-check li.ok b{text-decoration:line-through;opacity:.6}
 .pl-lembrete{display:flex;gap:10px;align-items:flex-start;margin:12px 0;text-align:left}.pl-lembrete span{display:flex;flex-direction:column}.pl-lembrete small{color:var(--muted);font-size:12px}
+.pc-qual{margin:6px 0 0}.pc-qual-form{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}.pc-qual-form input{flex:1;min-width:180px}
 .pl-semedital{color:#8a5a00;flex-basis:100%}
 /* botões de ícone das fases com o nome embaixo */
 .viagem-btns .ic-btn{width:auto;height:auto;min-width:58px;border-radius:12px;padding:6px 8px;display:inline-flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;line-height:1.1}
@@ -1885,7 +1886,7 @@ iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO = 106;
+const APP_VERSAO = 107;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{

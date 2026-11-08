@@ -99,7 +99,7 @@ function htmlEnvio(tipoPadrao) {
       <label>Órgão (sigla)<input id="envOrgao" placeholder="ex.: PCBA" autocapitalize="characters"></label>
       <label>Ano<input id="envAno" inputmode="numeric" maxlength="4" placeholder="ex.: 2022"></label>
       <label>Banca<input id="envBanca" placeholder="ex.: IBFC" list="dlBancas"><datalist id="dlBancas">${["Cebraspe", "FGV", "Vunesp", "FCC", "IBFC", "Consulplan", "Instituto AOCP", "Fumarc", "Nucepe", "Ibade", "Idecan", "Instituto Acesso"].map(b => `<option value="${b}">`).join("")}</datalist></label>
-      <label>Parte <span class="note">(opcional)</span><input id="envParte" placeholder="ex.: conhecimentos gerais"></label>
+      <label><span id="envParteRot">${rotParte(tipoPadrao)}</span><input id="envParte" placeholder="${tipoPadrao === "peca" ? "ex.: sentença cível" : "ex.: conhecimentos gerais"}" list="dlQualPeca"><datalist id="dlQualPeca">${QUAIS_PECAS.map(x => `<option value="${x}">`).join("")}</datalist></label>
       <p class="note env-l2" id="envPrev">${previaEnvio(tipoPadrao)}</p>
       <label class="env-l2">Arquivo da prova<input id="envProva" type="file" accept="application/pdf,.pdf,.doc,.docx,image/*"></label>
       <label class="env-l2">Gabarito / espelho / padrão de resposta <span class="note">(opcional)</span><input id="envGab" type="file" accept="application/pdf,.pdf,.doc,.docx,image/*"></label>
@@ -108,6 +108,9 @@ function htmlEnvio(tipoPadrao) {
     <div class="actions" style="justify-content:flex-start"><button type="button" class="primary" id="envEnviar" ${envio.enviando ? "disabled" : ""}>${envio.enviando ? "Enviando…" : "Enviar para o Drive"}</button><span class="note" id="envMsg">${esc(envio.msg)}</span></div>
   </details>`;
 }
+// peças: o nome diz qual é a peça (ex.: "sentença cível" e "sentença criminal" do mesmo concurso não se confundem nem se substituem)
+const QUAIS_PECAS = ["sentença cível", "sentença criminal", "parecer", "petição inicial", "contestação", "denúncia", "alegações finais", "recurso", "relatório final de inquérito", "representação"];
+const rotParte = tipo => tipo === "peca" ? `Qual peça <span class="note">(ex.: sentença cível)</span>` : `Parte <span class="note">(opcional)</span>`;
 // nome no padrão "PCBA/2022 - IBFC - prova objetiva (conhecimentos gerais)"
 function nomesEnvio(tipo) {
   const v = id => (($(id) || {}).value || "").trim();
@@ -118,13 +121,15 @@ function nomesEnvio(tipo) {
 }
 function previaEnvio(tipo) { const n = $("envOrgao") && nomesEnvio(tipo); return n ? `Nome no Drive: <b>${esc(n.prova)}</b> e <b>${esc(n.gab)}</b>` : "Preencha órgão, ano e banca: o app monta o nome no padrão (ex.: PCBA/2022 - IBFC - prova objetiva)."; }
 document.addEventListener("input", e => { if (/^env(Orgao|Ano|Banca|Parte)$/.test(e.target.id)) { const p = $("envPrev"); if (p) p.innerHTML = previaEnvio($("envTipo").value); } });
-document.addEventListener("change", e => { if (e.target.id === "envTipo") { const p = $("envPrev"); if (p) p.innerHTML = previaEnvio(e.target.value); } });
+document.addEventListener("change", e => { if (e.target.id === "envTipo") { const p = $("envPrev"); if (p) p.innerHTML = previaEnvio(e.target.value); const r = $("envParteRot"); if (r) r.innerHTML = rotParte(e.target.value); if ($("envParte")) $("envParte").placeholder = e.target.value === "peca" ? "ex.: sentença cível" : "ex.: conhecimentos gerais"; } });
 const lerBase64 = f => new Promise((ok, falha) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1]); r.onerror = falha; r.readAsDataURL(f); });
 async function enviarParaDrive() {
   const tipo = $("envTipo").value, cargo = $("envCargo").value, nomes = nomesEnvio(tipo), fp = $("envProva").files[0], fg = $("envGab").files[0];
   const msg = t => { envio.msg = t; const el = $("envMsg"); if (el) el.textContent = t; };
   if (!nomes || !$("envAno").value.trim() || !$("envBanca").value.trim()) return msg("Informe órgão, ano e banca.");
   if (!fp) return msg("Escolha o arquivo da prova.");
+  const igual = ((repo && repo.itens) || []).find(i => i.tipo === tipo && cargoPadrao(i.pastaCargo || i.cargo) === cargoPadrao(cargo) && i.nome.toLowerCase() === nomes.prova.toLowerCase());
+  if (igual) { if ($("envParte")) $("envParte").focus(); return msg(tipo === "peca" ? `Já existe "${igual.nome}". Diga qual é esta peça (ex.: sentença criminal) para não substituir a outra.` : `Já existe "${igual.nome}". Se for outra parte da prova, preencha "Parte"; se for a mesma, ela será substituída — apague-a antes no Drive.`); }
   for (const f of [fp, fg].filter(Boolean)) if (f.size > 18 * 1024 * 1024) return msg(`"${f.name}" tem ${(f.size / 1048576).toFixed(1)} MB; o limite é de uns 15 MB.`);
   envio.enviando = true; envio.aberto = true; msg("Enviando a prova…"); desenharEstudo(estudoAba);
   try {
@@ -181,7 +186,8 @@ function ajustarNomes(itens) {
   const prontos = itens.filter(x => x.ident || x.erro);
   const ehGab = x => !x.it.gab && (x.it.soGab || (x.ident && x.ident.papel === "gabarito"));
   // prova dividida em partes (ex.: conhecimentos gerais × específicos): a parte vai no nome, igual na prova e no gabarito
-  const parte = x => x.ident && x.ident.parte ? ` (${x.ident.parte})` : "";
+  const natureza = x => { const d = x.it.tipo === "peca" && x.ident && String(x.ident.detalhe || "").toLowerCase(); const m = d && d.match(/senten[çc]a (c[íi]vel|criminal|penal|trabalhista)/); return m ? "sentença " + m[1].replace("civel", "cível").replace("penal", "criminal") : ""; };
+  const parte = x => x.ident && (x.ident.parte || natureza(x)) ? ` (${x.ident.parte || natureza(x)})` : "";
   const nome = (x, base, papel, n, pt) => `${base} - ${PAPEL[x.it.tipo][papel]}${pt}${n > 1 ? ` (${n})` : ""}`;
   const cont = {};
   prontos.filter(x => !ehGab(x)).forEach(x => {
@@ -421,10 +427,36 @@ function htmlPecas() {
   h += htmlEnvio("peca");
   if (repo.erro) return h + `<p class="note">${esc(repo.erro)}</p>`;
   h += lista.length ? lista.map(i => `<div class="prov-item"><div class="prov-tit"><b>${esc(i.nome)}</b><span class="note">${esc(i.pastaCargo || i.cargo)}${i.gab ? " · espelho: " + esc(i.gabNome) : " · sem espelho separado"}${seloRespondida(i)}</span></div>
-      <div class="prov-acoes"><button type="button" class="primary" data-provsim="${esc(i.id)}">Fazer esta peça</button><button type="button" data-pecanova="${esc(i.id)}">Caso novo no estilo desta peça</button>${botaoSeparar(i)}</div></div>`).join("")
+      <div class="prov-acoes"><button type="button" class="primary" data-provsim="${esc(i.id)}">Fazer esta peça</button><button type="button" data-pecanova="${esc(i.id)}">Caso novo no estilo desta peça</button>${botaoSeparar(i)}</div>${htmlQualPeca(i)}</div>`).join("")
     : `<p class="note">Nenhuma peça${f.cargo ? " de " + esc(f.cargo) : ""} na pasta. Coloque os PDFs em <b>Provas Jurídicas / Peças jurídicas / ${esc(f.cargo || "cargo")}</b>.</p>`;
   h += `<p class="note"><button type="button" class="link-x" id="provRecarregar" style="color:var(--brand)">Atualizar lista</button> · <button type="button" class="link-x" id="padrIniciar" style="color:var(--brand)">Padronizar nomes dos arquivos</button></p>`;
   return h;
+}
+// peça sem a identificação no nome: o usuário diz qual é (ex.: sentença cível) e o app renomeia a prova e o espelho no Drive
+let qualPeca = { aberto: "", salvando: "" };
+const partePeca = nome => (String(nome).match(/pe[çc]a pr[áa]tica\s*\(([^)]+)\)/i) || [])[1] || "";
+function htmlQualPeca(i) {
+  if (partePeca(i.nome)) return "";
+  if (qualPeca.aberto !== i.id) return `<p class="note pc-qual"><button type="button" class="link-x" data-qualpeca="${esc(i.id)}" style="color:var(--brand)">✎ Dizer qual é esta peça (ex.: sentença cível)</button></p>`;
+  return `<div class="pc-qual-form"><input id="qualPecaTxt" list="dlQualPeca2" placeholder="ex.: sentença cível" value=""><datalist id="dlQualPeca2">${QUAIS_PECAS.map(x => `<option value="${x}">`).join("")}</datalist>
+    <button type="button" class="primary" data-qualpecasalvar="${esc(i.id)}"${qualPeca.salvando ? " disabled" : ""}>${qualPeca.salvando ? "Renomeando…" : "Salvar no nome"}</button><button type="button" data-qualpeca="">Cancelar</button></div>`;
+}
+function nomeComQualPeca(nome, qual) {
+  const m = String(nome).match(/^(.*? - (?:padr[ãa]o de resposta )?pe[çc]a pr[áa]tica)(.*)$/i);
+  return m ? `${m[1]} (${qual})${m[2]}` : `${nome} (${qual})`;
+}
+async function salvarQualPeca(id) {
+  const it = repo && repo.itens.find(i => i.id === id), qual = (($("qualPecaTxt") || {}).value || "").trim().toLowerCase().replace(/[()\/]+/g, " ").trim();
+  if (!it || !qual) { toast("Escreva qual é a peça (ex.: sentença cível)."); return; }
+  const lista = [{ id: it.id, nome: nomeComQualPeca(it.nome, qual) }];
+  if (it.gab) lista.push({ id: it.gab, nome: nomeComQualPeca(String(it.gabNome).replace(/\.(pdf|docx?|jpe?g|png)$/i, ""), qual) });
+  qualPeca.salvando = id; desenharEstudo("pecas");
+  try {
+    const r = await postLongo({ acao: "renomear", lista }, 120000);
+    if (!r.ok) throw new Error(r.erro);
+    toast(`Pronto: agora é "${lista[0].nome}". Já pode enviar a outra peça do mesmo concurso.`);
+    qualPeca = { aberto: "", salvando: "" }; repo = null; carregarRepo(true); desenharEstudo("pecas");
+  } catch (e) { qualPeca.salvando = ""; toast("Não foi possível renomear: " + e.message); desenharEstudo("pecas"); }
 }
 function htmlEstrutura(tipo) {
   const e = pecaEstr[tipo];
@@ -707,6 +739,8 @@ document.addEventListener("click", async e => {
   if (t.dataset.imprremover) { gravarProv("impressas", lerProv("impressas", []).filter(x => x.chave !== t.dataset.imprremover)); salvarImpressasNuvem(); desenharEstudo(estudoAba); return; }
   if (t.dataset.provsim) { iniciarSimulado(t.dataset.provsim, false); return; }
   if (t.dataset.provnovas) { iniciarSimulado(t.dataset.provnovas, true); return; }
+  if (t.dataset.qualpeca !== undefined) { qualPeca.aberto = t.dataset.qualpeca; desenharEstudo("pecas"); if (qualPeca.aberto) setTimeout(() => $("qualPecaTxt") && $("qualPecaTxt").focus(), 0); return; }
+  if (t.dataset.qualpecasalvar) { salvarQualPeca(t.dataset.qualpecasalvar); return; }
   if (t.dataset.pecanova) { iniciarSimulado(t.dataset.pecanova, true); return; }
   if (!sim) return;
   if (t.id === "provSair") { registrarObjetiva(); const aba = sim.it.tipo === "peca" ? "pecas" : "provas"; sim = null; desenharEstudo(aba); return; }
