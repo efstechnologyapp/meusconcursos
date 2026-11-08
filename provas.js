@@ -73,9 +73,38 @@ async function extrairLote(it, de, ate) {
 }
 async function garantirQuestoes(it, aoProgredir) {
   let g = await questoesGuardadas(it);
-  if (it.tipo !== "objetiva") { if (!g) g = await extrairLote(it, 1, 30); return g; }
+  if (it.tipo !== "objetiva") { if (!g) g = await extrairLote(it, 1, 30); registrarDisc(it, g); return g; }
   if (!g) { aoProgredir && aoProgredir(`Lendo a prova com a IA (questões 1 a ${LOTE})…`); g = await extrairLote(it, 1, LOTE); }
   return g;
+}
+// ---------- matérias cobradas em cada prova subjetiva (no card, ao lado do título) ----------
+// guardadas em "prov-disc" (sincronizado): a IA lê cada prova uma vez só (o servidor também guarda a leitura)
+const discDe = () => lerProv("disc", {}) || {};
+function registrarDisc(it, g) {
+  if (!g || !(g.questoes || []).length) return;
+  const cont = {};
+  g.questoes.forEach(q => { const d = String(q.disciplina || "").trim().replace(/\s+/g, " ") || "Sem matéria indicada"; cont[d] = (cont[d] || 0) + 1; });
+  const m = discDe(); m[it.id] = { mod: it.modificado, n: g.questoes.length, d: Object.entries(cont).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "pt-BR")) };
+  gravarProv("disc", m);
+}
+let discFila = [], discLendo = "";
+function htmlDiscProva(i) {
+  const x = discDe()[i.id];
+  if (x && x.mod === i.modificado) {
+    const ds = x.d.map(([d, n]) => `${esc(d)}${n > 1 ? ` (${n})` : ""}`);
+    return `<span class="prov-disc"><b>${x.n} ${x.n === 1 ? "questão" : "questões"} · ${x.d.length} ${x.d.length === 1 ? "matéria" : "matérias"}:</b> ${ds.join(" · ")}</span>`;
+  }
+  if (!discFila.includes(i.id) && discLendo !== i.id) { discFila.push(i.id); setTimeout(lerDiscFila, 0); }
+  return `<span class="prov-disc lendo">${discLendo === i.id ? "lendo as matérias cobradas…" : "matérias: na fila para a IA ler…"}</span>`;
+}
+async function lerDiscFila() {   // uma prova por vez, em segundo plano
+  if (discLendo || !discFila.length) return;
+  const id = discFila.shift(), it = repo && (repo.itens || []).find(i => i.id === id);
+  if (!it) return lerDiscFila();
+  discLendo = id; if (estudoAba === "provas" && !sim) desenharEstudo("provas");
+  try { await garantirQuestoes(it); } catch (e) { console.warn("matérias da prova", e); }
+  discLendo = ""; if (estudoAba === "provas" && !sim) desenharEstudo("provas");
+  lerDiscFila();
 }
 async function completarProva(it) {   // em segundo plano, lote por lote
   let g = await questoesGuardadas(it);
@@ -289,7 +318,7 @@ function htmlProvas() {
     ${seletorCargo("provCargoSel", cargos, f.cargo)}
     ${lista.length ? lista.map(i => {
       const r = res[i.id];
-      return `<div class="prov-item"><div class="prov-tit"><b>${esc(i.nome)}</b><span class="note">${esc(i.pastaCargo || i.cargo)}${i.gab ? " · gabarito: " + esc(i.gabNome) : " · sem gabarito separado"}${seloRespondida(i) || (r ? ` · última vez: ${r.acertos}/${r.total} (${Math.round(r.acertos / Math.max(1, r.total) * 100)}%)` : "")}</span></div>
+      return `<div class="prov-item"><div class="prov-tit"><b>${esc(i.nome)}</b>${i.tipo === "subjetiva" ? htmlDiscProva(i) : ""}<span class="note">${esc(i.pastaCargo || i.cargo)}${i.gab ? " · gabarito: " + esc(i.gabNome) : " · sem gabarito separado"}${seloRespondida(i) || (r ? ` · última vez: ${r.acertos}/${r.total} (${Math.round(r.acertos / Math.max(1, r.total) * 100)}%)` : "")}</span></div>
         <div class="prov-acoes"><button type="button" class="primary" data-provsim="${esc(i.id)}">${i.tipo === "objetiva" ? "Simulado com as questões originais" : "Responder as questões originais"}</button><button type="button" data-provnovas="${esc(i.id)}">Questões novas no estilo desta prova</button>${i.tipo === "objetiva" ? `<button type="button" data-provimpr="${esc(i.id)}" ${imprimindo[i.id] ? "disabled" : ""}>${imprimindo[i.id] ? esc(imprimindo[i.id]) : "Imprimir prova + cartão-resposta"}</button>` : ""}${botaoSeparar(i)}</div></div>`;
     }).join("") : `<p class="note">Nenhuma prova ${f.tipo === "objetiva" ? "objetiva" : "subjetiva"}${f.cargo ? " de " + esc(f.cargo) : ""} na pasta. Coloque os PDFs em <b>Provas Jurídicas / ${f.tipo === "objetiva" ? "Provas objetivas" : "Provas subjetivas"} / ${esc(f.cargo || "cargo")}</b>.</p>`}
     <p class="note">Pasta no Drive: <b>${esc(repo.raiz || "Provas Jurídicas")}</b>. Prova e gabarito são reconhecidos pelo nome (ex.: "TJMG 2022 - prova.pdf" e "TJMG 2022 - gabarito.pdf"). <button type="button" class="link-x" id="provRecarregar" style="color:var(--brand)">Atualizar lista</button> · <button type="button" class="link-x" id="padrIniciar" style="color:var(--brand)">Padronizar nomes dos arquivos</button></p>`;
