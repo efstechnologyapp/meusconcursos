@@ -82,8 +82,8 @@ function desenharPerfil(r, aviso) {
           : pfGem.dono ? `<p class="pf-gem-ok">✓ Você usa a chave do app (dono). Se quiser, pode cadastrar outra abaixo.</p>` : `<p class="pf-gem-falta">⚠️ Você ainda não cadastrou a sua chave: sem ela, a IA não funciona para você.</p>`}
         <ol class="pf-passos"><li>Abra o <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> e entre com a sua conta Google.</li>
           <li>Toque em <b>Create API key</b> (Criar chave de API). Se pedir, aceite os termos e escolha/crie um projeto.</li>
-          <li>Copie a chave (começa com <b>AIza…</b>) e cole abaixo. É grátis e não precisa de cartão.</li></ol>
-        <label class="pf-gem-campo">Chave<input id="pfGemChave" type="password" autocomplete="off" placeholder="AIza…" spellcheck="false"></label>
+          <li>Toque no ícone de <b>copiar</b> ao lado da chave e cole abaixo. Ela começa com <b>AIza…</b> ou, nas contas novas, com <b>AQ.…</b>. É grátis e não precisa de cartão.</li></ol>
+        <label class="pf-gem-campo">Chave<input id="pfGemChave" type="password" autocomplete="off" placeholder="AIza… ou AQ.…" spellcheck="false"></label>
         ${pfGem.msg ? `<p class="${pfGem.erro ? "pf-gem-falta" : "pf-gem-ok"}" role="status">${esc(pfGem.msg)}</p>` : ""}
         <div class="pf-gem-bts"><button type="button" class="primary" data-pfgemsalvar="1"${pfGem.salvando ? " disabled" : ""}>${pfGem.salvando ? "Testando a chave…" : "Testar e salvar"}</button>
           ${pfGem.tem ? `<button type="button" data-pfgemapagar="1">Apagar minha chave</button>` : ""}</div>
