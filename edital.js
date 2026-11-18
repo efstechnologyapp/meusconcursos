@@ -371,6 +371,29 @@ function interpretarEdital(textoBruto, tipoForcado, estrutura) {
   if (ppq) r.pontosQuestao = parseFloat(ppq[1].replace(",", "."));
   r.duracoes = duracoesDasFases(plano, r.tipo);
   r.vagas = vagasDoEdital(textoBruto, r.cargo);
+  Object.assign(r, prazosDeInscricao(plano));
+  return r;
+}
+
+// ---------- Prazo das inscrições e do pagamento da taxa ----------
+// Numa retificação ("ONDE SE LÊ … LEIA-SE …"), só vale o texto novo (depois de cada LEIA-SE).
+function prazosDeInscricao(plano) {
+  let t = plano;
+  if (/leia-se/i.test(t)) {
+    const partes = t.split(/onde se l[eê]\s*:?/i);
+    t = partes.map((p, i) => { if (i === 0) return p; const k = p.search(/leia-se\s*:?/i); return k >= 0 ? p.slice(k) : ""; }).join(" ");
+  }
+  const HORA = String.raw`(?:[àa]s\s+\d{1,2}\s*h(?:\s*\d{2})?(?:min)?\s+d[eo]\s+)?`;
+  const DATA = String.raw`(?:o\s+)?(?:dia\s+)?(\d{1,2})(?:º|°)?(?:\s+de\s+([a-zç]+)\s+de\s+(\d{4})|\/(\d{1,2})\/(\d{4}))`;
+  const iso = m => { const d = +m[1], mes = m[2] ? mesNum(m[2]) : +m[4], a = +(m[3] || m[5]); return d && mes && a > 2000 ? `${a}-${String(mes).padStart(2, "0")}-${String(d).padStart(2, "0")}` : ""; };
+  const maior = (re, quer, evita) => { let melhor = ""; for (const m of t.matchAll(re)) { if ((quer && !quer.test(m[0])) || evita.test(m[0])) continue; const v = iso(m); if (v > melhor) melhor = v; } return melhor; };
+  const r = {};
+  // "As inscrições … estarão abertas no período de … até às 16h do dia 18 de novembro de 2026"
+  const insc = maior(new RegExp(String.raw`(?:inscri[cç][õo]es|inscritos)(?:(?!pagamento|boleto)[^.;]){0,220}?\bat[ée]\s+` + HORA + DATA, "gi"), /per[ií]odo|abertas|realizad|efetuad|recebid|inscritos/i, /homologa|definitiva|isen[cç]|resultado|recurso/i);
+  // "o pagamento … poderá ser efetuado até o primeiro dia útil …, ou seja, até o dia 19 de novembro de 2026"
+  const pag = maior(new RegExp(String.raw`pagamento[^;]{0,300}?\bat[ée]\s+` + HORA + DATA, "gi"), null, /isen[cç]|restitui|devolu/i);
+  if (insc) r.insc_fim = insc;
+  if (pag) r.pag_fim = pag;
   return r;
 }
 

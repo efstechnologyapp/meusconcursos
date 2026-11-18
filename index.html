@@ -338,6 +338,7 @@ fieldset{border:none;padding:0;margin:0;display:contents}
 .ac-lin .ac-quem{flex:1 1 180px;min-width:0;overflow-wrap:anywhere}.ac-lin small{display:block;color:var(--muted,#667)}
 .ac-lin button{padding:6px 10px;font-size:13px}
 .ac-novo{display:flex;gap:8px;margin:8px 0}.ac-novo input{flex:1;min-width:0}
+.prazos{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media(max-width:420px){.prazos{grid-template-columns:1fr}}
 .mod-peca p{text-align:justify;margin:0 0 10px}.mod-box details>p,.mod-box details>ol,.mod-box details>ul{margin:0 0 10px}
 .mod-tab{overflow-x:auto}.mod-tab table{border-collapse:collapse;width:100%;font-size:13px}
 .mod-tab th,.mod-tab td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
@@ -737,6 +738,10 @@ fieldset{border:none;padding:0;margin:0;display:contents}
       <label class="full">Link do edital (site)<input id="f_edital" name="edital" type="url" placeholder="https://"></label>
       <label class="full">Situação
         <select id="f_status" name="status"></select></label>
+      <div class="full prazos" id="prazosBox" hidden>
+        <label>Inscrições até<input id="f_insc_fim" name="insc_fim" type="date"></label>
+        <label>Pagamento da taxa até<input id="f_pag_fim" name="pag_fim" type="date"></label>
+      </div>
 
       <label class="full" id="inscricaoBox" hidden>Nº de inscrição<input id="f_inscricao" name="inscricao" inputmode="numeric" placeholder="Usado para achar você nas listas de resultado"></label>
 
@@ -836,7 +841,7 @@ function textoVagas(v){
 }
 function preencherVagasForm(v){ v=v||{}; $("vg_total").value=v.total||""; VAGAS_CAMPOS.forEach(([k])=>$("vg_"+k).value=v[k]||""); $("vg_cr").checked=!!v.cr; document.querySelectorAll(".vagas-form .auto").forEach(e=>e.classList.remove("auto")); }
 function lerVagasForm(){ const v={total:$("vg_total").value.trim(),cr:$("vg_cr").checked}; VAGAS_CAMPOS.forEach(([k])=>{ const t=$("vg_"+k).value.trim().replace(/^cr$/i,"CR"); if(t) v[k]=t; }); return temVagas(v)||v.cr? v : null; }
-const CAMPOS=["nome","cargo","banca","inscricao","status","edital","boleto_venc","boleto_valor","boleto_linha","cidade","instrucoes","obs"];
+const CAMPOS=["nome","cargo","banca","inscricao","status","edital","insc_fim","pag_fim","boleto_venc","boleto_valor","boleto_linha","cidade","instrucoes","obs"];
 const CARATER={EC:"Eliminatória e classificatória",E:"Eliminatória",C:"Classificatória"};
 const SITUACOES=["Aguardando","Aprovado","Reprovado","Não fiz"];
 const STATUS=[
@@ -978,12 +983,16 @@ function situacaoDoCartao(x,a){
   if(!f.horario) return `Fase ${n}: aguardando horário`;
   return `Fase ${n}: local divulgado`;
 }
+// último dia para pagar: o maior entre o vencimento do boleto e o prazo do edital (que pode ter sido prorrogado)
+function prazoPagamento(x){ return [x.boleto_venc,x.pag_fim].filter(v=>/^\d{4}-\d{2}-\d{2}$/.test(v||"")).sort().pop()||""; }
 function cardHTML(x){
   const a=andamento(x), f=a.prox&&a.prox.f;
   const d=f? parseData(f.data) : null;
   let c = a.eliminado ? {t:"encerrado",c:"past"} : contagem(f? diasAte(f.data) : null);
-  const vb = x.status===STATUS[1] && x.boleto_venc ? diasAte(x.boleto_venc) : null;
-  const chipBoleto = vb===null ? "" : `<span class="count ${vb<=2?"warn":""}">${vb<0?"boleto vencido":vb===0?"boleto vence hoje":vb===1?"boleto vence amanhã":"boleto vence em "+vb+(vb===1?" dia":" dias")}</span>`;
+  const vb = x.status===STATUS[1] && prazoPagamento(x) ? diasAte(prazoPagamento(x)) : null;
+  const vi = x.status===STATUS[0] && x.insc_fim ? diasAte(x.insc_fim) : null;
+  const chipBoleto = vb!==null ? `<span class="count ${vb<=2?"warn":""}">${vb<0?"prazo de pagamento encerrado":vb===0?"pague hoje":vb===1?"pague até amanhã":"pague em até "+vb+" dias"}</span>`
+    : vi!==null ? `<span class="count ${vi<=2?"warn":""}">${vi<0?"inscrições encerradas":vi===0?"inscrições encerram hoje":vi===1?"inscrições encerram amanhã":"inscrições: faltam "+vi+" dias"}</span>` : "";
   const grupoProx = f ? (gruposDeFases(x.fases).find(g=>g.includes(a.prox.i))||[a.prox.i]) : [];
   const turProx = emTurnos(grupoProx,x.fases);
   const faseTxt = f ? (turProx
@@ -1029,8 +1038,8 @@ function render(){
   $("lblProx").hidden=false; $("lblPass").hidden=!fim.length;
   if($("faixaHoje")) $("faixaHoje").innerHTML = (typeof htmlAvisoAcesso==="function" ? htmlAvisoAcesso() : "") + (typeof htmlAvisoGemini==="function" ? htmlAvisoGemini() : "") + (typeof htmlFaixaHoje==="function" ? htmlFaixaHoje() : "");
   // aviso de boleto: na véspera e no dia do vencimento (a notificação no celular vem do Google Agenda)
-  const avisos=ativos.filter(x=>x.status===STATUS[1]&&x.boleto_venc&&[0,1].includes(diasAte(x.boleto_venc)));
-  $("alertas").innerHTML=avisos.map(x=>{ const d=diasAte(x.boleto_venc); return `<div class="alerta-boleto${d===0?" hoje":""}" role="alert"><span class="ab-ic" aria-hidden="true">!</span><span>O boleto de <b>${esc(x.nome)}</b> vence <b>${d===0?"hoje":"amanhã"}</b> (${fmtCurta(x.boleto_venc)}).${x.boleto_valor?" Valor: "+esc(x.boleto_valor)+".":""}</span><button type="button" class="mini" data-verboleto="${esc(x.id)}">Ver boleto</button></div>`; }).join("");
+  const avisos=ativos.filter(x=>x.status===STATUS[1]&&prazoPagamento(x)&&[0,1].includes(diasAte(prazoPagamento(x))));
+  $("alertas").innerHTML=avisos.map(x=>{ const d=diasAte(prazoPagamento(x)); return `<div class="alerta-boleto${d===0?" hoje":""}" role="alert"><span class="ab-ic" aria-hidden="true">!</span><span>O prazo para pagar a inscrição de <b>${esc(x.nome)}</b> termina <b>${d===0?"hoje":"amanhã"}</b> (${fmtCurta(prazoPagamento(x))}).${x.boleto_valor?" Valor: "+esc(x.boleto_valor)+".":""}</span><button type="button" class="mini" data-verboleto="${esc(x.id)}">Ver boleto</button></div>`; }).join("");
   const comData=ativos.map(x=>({x,a:andamento(x)})).filter(o=>o.a.prox);
   $("resumo").textContent = comData.length
     ? `Próxima prova: ${comData[0].x.nome} (${comData[0].a.prox.f.nome}), ${contagem(diasAte(comData[0].a.prox.f.data)).t}.`
@@ -1087,7 +1096,7 @@ function abrirVer(id){
     <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="count ${c.c}">${c.t}</span><span class="chip">${esc(MODELOS[x.tipo].rotulo)}</span></div>
     ${temVagas(x.vagas)||(x.vagas&&x.vagas.cr)?`<div class="vagas-box"><div class="vb-tot"><span class="vb-n">${esc(x.vagas.total||"CR")}</span><span>${x.vagas.total?(+x.vagas.total===1?"vaga":"vagas"):"cadastro de reserva"}${x.vagas.total&&x.vagas.cr?"<br>+ cadastro de reserva":""}</span></div>
       <div class="vb-cats">${VAGAS_CAMPOS.filter(([k])=>x.vagas[k]).map(([k,n])=>`<div class="vb-c"><span class="vb-v">${esc(x.vagas[k])}</span><span class="vb-r">${n==="Ampla"?"Ampla concorrência":n==="PcD"?"Pessoas com deficiência":n}</span></div>`).join("")}</div></div>`:""}
-    <div class="block"><h4>Situação</h4><p class="pre">${esc(x.status)}</p></div>
+    <div class="block"><h4>Situação</h4><p class="pre">${esc(x.status)}</p>${STATUS.indexOf(x.status)<=1&&(x.insc_fim||x.pag_fim)?`<dl class="kv">${STATUS.indexOf(x.status)===0?linha("Inscrições até",x.insc_fim?fmtData(x.insc_fim):""):""}${linha("Pagamento até",x.pag_fim?fmtData(x.pag_fim)+(x.boleto_venc&&x.pag_fim>x.boleto_venc?" (prazo prorrogado; se o boleto vencido não for aceito, gere outro no site da banca)":""):"")}</dl>`:""}</div>
     ${x.status===STATUS[1] && (x.boleto_linha||x.boleto_venc||x.boleto_arquivo) ? `<div class="block"><h4>Boleto</h4>
       <dl class="kv">${linha("Vencimento",x.boleto_venc?fmtData(x.boleto_venc):"")}${linha("Valor",x.boleto_valor)}</dl>
       ${x.boleto_linha?`<div class="copiar"><div class="cod" id="verLinha">${esc(x.boleto_linha)}</div><button type="button" id="btnCopiarVer">Copiar</button></div>`:""}
@@ -1438,6 +1447,7 @@ $("f_status").innerHTML = STATUS.map(t=>`<option>${t}</option>`).join("");
 function mostrarBoleto(){
   const i=STATUS.indexOf($("f_status").value);
   $("boletoBox").hidden = i!==1;
+  $("prazosBox").hidden = i>1;     // prazos de inscrição e pagamento só interessam antes de pagar
   $("inscricaoBox").hidden = i<3;     // nº de inscrição a partir de "Inscrição homologada"
 }
 $("f_status").addEventListener("change", mostrarBoleto);
@@ -1531,6 +1541,14 @@ async function aplicarComplementar(f, st, btn){
         }
       }
     }
+    // retificação de prazos: inscrições e pagamento da taxa
+    [["insc_fim","Inscrições até"],["pag_fim","Pagamento da taxa até"]].forEach(([k,rot])=>{
+      const el=$("f_"+k), novo=r[k]; if(!novo || novo===el.value) return;
+      if(el.value && !/retifica|leia-se|prorroga/i.test(texto)) return;   // sem retificação, não troca o que já existe
+      alteracoes.push(`${rot}: ${el.value?fmtCurta(el.value):"sem data"} → ${fmtCurta(novo)}`); el.value=novo; el.classList.add("auto");
+    });
+    if($("f_pag_fim").value && $("f_boleto_venc").value && $("f_pag_fim").value>$("f_boleto_venc").value && STATUS.indexOf($("f_status").value)===1)
+      alteracoes.push(`O boleto anexado vence em ${fmtCurta($("f_boleto_venc").value)}, mas o prazo de pagamento agora vai até ${fmtCurta($("f_pag_fim").value)}; se o banco recusar o boleto vencido, gere um novo no site da banca.`);
     MODELOS[tipoAtual].fases.forEach((mf,i)=>{
       const alvo=fasesForm.find(x=>x.nome===mf.nome); if(!alvo) return;
       const idx=fasesForm.indexOf(alvo), d=(r.fasesDatas||[])[i]||{}, c=(r.composicao||[])[i]||{};
@@ -1562,7 +1580,7 @@ async function aplicarComplementar(f, st, btn){
     destaques.forEach(([i,c])=>{ const el=campoDaFase(i,c); if(el) el.classList.add("auto"); });
     st.textContent = alteracoes.length
       ? `Atualizei: ${alteracoes.slice(0,4).join(" | ")}${alteracoes.length>4?" …":""}. O que mudou está destacado em amarelo; confira e clique em Salvar.`
-      : "Juntei o edital, mas não encontrei mudanças para o seu concurso (datas, horários, inscrição ou resultado).";
+      : "Juntei o edital, mas não encontrei mudanças para o seu concurso (prazos, datas, horários, inscrição ou resultado).";
   }catch(err){
     st.textContent = err && err.message==="sem-internet" ? "Para ler o PDF é preciso internet na primeira vez." : "Não consegui abrir esse PDF.";
   }finally{ btn.disabled=false; }
@@ -1830,7 +1848,7 @@ $("arqBackup").onchange=async e=>{
 };
 
 // ---------- Edital em PDF ----------
-const NOMES_CAMPO={nome:"concurso",cargo:"cargo",banca:"banca",cidade:"cidade",instrucoes:"instruções"};
+const NOMES_CAMPO={nome:"concurso",cargo:"cargo",banca:"banca",cidade:"cidade",instrucoes:"instruções",insc_fim:"prazo das inscrições",pag_fim:"prazo de pagamento"};
 $("btnEdital").onclick=()=>$("arqEdital").click();
 $("arqEdital").onchange=async e=>{
   const f=e.target.files[0]; e.target.value=""; if(!f) return;
@@ -1927,7 +1945,7 @@ iniciarLogin();
 setInterval(render, 60*60*1000); // atualiza a contagem se o app ficar aberto
 
 // Atualização do app: sempre confere se há versão nova (sem usar o cache do navegador) e recarrega sozinho
-const APP_VERSAO = 130;
+const APP_VERSAO = 131;
 $("versaoApp").textContent="versão "+APP_VERSAO;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{

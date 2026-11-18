@@ -79,9 +79,10 @@ function eventosDasFases() {
       out.push(ev);
     });
     // boleto pendente: evento no dia do vencimento, com notificação na véspera (9h) e no dia (8h)
-    if (x.status === STATUS[1] && x.boleto_venc && /^\d{4}-\d{2}-\d{2}$/.test(x.boleto_venc) && diasAte(x.boleto_venc) >= 0) {
-      const ev = { summary: `Boleto vence hoje – ${x.nome}`, location: "", description: [x.boleto_valor && "Valor: " + x.boleto_valor, x.boleto_linha && "Código: " + x.boleto_linha, "Pague antes para não perder a inscrição.", "Criado pelo app Meus Concursos."].filter(Boolean).join("\n"),
-        start: { dateTime: `${x.boleto_venc}T09:00:00-03:00`, timeZone: "America/Sao_Paulo" }, end: { dateTime: `${x.boleto_venc}T09:30:00-03:00`, timeZone: "America/Sao_Paulo" },
+    const pz = typeof prazoPagamento === "function" ? prazoPagamento(x) : x.boleto_venc;
+    if (x.status === STATUS[1] && pz && /^\d{4}-\d{2}-\d{2}$/.test(pz) && diasAte(pz) >= 0) {
+      const ev = { summary: `Último dia para pagar a inscrição – ${x.nome}`, location: "", description: [x.boleto_valor && "Valor: " + x.boleto_valor, x.boleto_linha && "Código: " + x.boleto_linha, "Pague antes para não perder a inscrição.", "Criado pelo app Meus Concursos."].filter(Boolean).join("\n"),
+        start: { dateTime: `${pz}T09:00:00-03:00`, timeZone: "America/Sao_Paulo" }, end: { dateTime: `${pz}T09:30:00-03:00`, timeZone: "America/Sao_Paulo" },
         lembretes: [{ method: "popup", minutes: 1440 }, { method: "popup", minutes: 60 }] };
       ev.sig = JSON.stringify([ev.summary, ev.description, ev.start, ev.end, corAgenda(), "b1"]);
       ev.chave = `${x.id}:boleto`;
